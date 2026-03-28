@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^php -l registrar/schedules\\.php$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
