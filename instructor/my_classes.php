@@ -184,6 +184,16 @@ $nav_items = [
         .sidebar-compact .sidebar-nav-link i {
             font-size: 1.38rem;
         }
+
+        .summary-card {
+            transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+        }
+
+        .summary-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+            border-color: #d7dde6;
+        }
     </style>
 </head>
 <body class="font-sans text-slate-900">
@@ -234,7 +244,6 @@ $nav_items = [
                         </button>
 
                         <div class="hidden sm:flex items-center gap-2 text-sm">
-                            <i class="bi bi-x-lg text-slate-400"></i>
                             <i class="bi bi-layers text-emerald-500"></i>
                             <span class="text-slate-500">Instructor</span>
                             <span class="text-slate-300">/</span>
@@ -311,7 +320,7 @@ $nav_items = [
 
             <main class="px-4 sm:px-6 py-5 space-y-4">
                 <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <article class="rounded-3xl border border-slate-200 bg-white p-5">
+                    <article class="summary-card rounded-3xl border border-slate-200 bg-white p-5">
                         <div class="flex items-center gap-3">
                             <div class="h-11 w-11 rounded-2xl bg-emerald-50 text-emerald-600 inline-flex items-center justify-center text-xl"><i class="bi bi-book"></i></div>
                             <div>
@@ -321,7 +330,7 @@ $nav_items = [
                         </div>
                     </article>
 
-                    <article class="rounded-3xl border border-slate-200 bg-white p-5">
+                    <article class="summary-card rounded-3xl border border-slate-200 bg-white p-5">
                         <div class="flex items-center gap-3">
                             <div class="h-11 w-11 rounded-2xl bg-indigo-50 text-indigo-500 inline-flex items-center justify-center text-xl"><i class="bi bi-people"></i></div>
                             <div>
@@ -331,7 +340,7 @@ $nav_items = [
                         </div>
                     </article>
 
-                    <article class="rounded-3xl border border-slate-200 bg-white p-5">
+                    <article class="summary-card rounded-3xl border border-slate-200 bg-white p-5">
                         <div class="flex items-center gap-3">
                             <div class="h-11 w-11 rounded-2xl bg-amber-50 text-amber-500 inline-flex items-center justify-center text-xl"><i class="bi bi-mortarboard"></i></div>
                             <div>

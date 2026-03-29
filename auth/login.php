@@ -58,21 +58,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 debug_to_log("Setting session variables");
                 set_session_vars($user);
 
-                // Reset notification baseline at login so the bell starts with no unread.
-                // Use DB time to avoid PHP/MySQL timezone skew.
-                try {
-                    $_SESSION['notif_seen_at'] = (string)$conn->query('SELECT NOW()')->fetchColumn();
-                } catch (Throwable $e) {
-                    $_SESSION['notif_seen_at'] = date('Y-m-d H:i:s');
-                }
-                unset($_SESSION['notif_cleared_at']);
-
-                // Persist baseline per-user (do not share across accounts).
+                // Preserve per-user notification state on login.
+                // This keeps unread items (for example, newly assigned classes) visible
+                // until the user explicitly marks them as read or clears them.
                 try {
                     $uid = (int)($user['id'] ?? 0);
                     if ($uid > 0) {
-                        $stmt = $conn->prepare('INSERT INTO notification_state (user_id, notif_seen_at, notif_cleared_at) VALUES (?, NOW(), NULL) ON DUPLICATE KEY UPDATE notif_seen_at = NOW(), notif_cleared_at = NULL');
+                        $stmt = $conn->prepare('SELECT notif_seen_at, notif_cleared_at FROM notification_state WHERE user_id = ?');
                         $stmt->execute([$uid]);
+                        $notif_row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                        if ($notif_row) {
+                            $_SESSION['notif_seen_at'] = $notif_row['notif_seen_at'] ?? null;
+                            $_SESSION['notif_cleared_at'] = $notif_row['notif_cleared_at'] ?? null;
+                        } else {
+                            try {
+                                $_SESSION['notif_seen_at'] = (string)$conn->query('SELECT NOW()')->fetchColumn();
+                            } catch (Throwable $e) {
+                                $_SESSION['notif_seen_at'] = date('Y-m-d H:i:s');
+                            }
+                            unset($_SESSION['notif_cleared_at']);
+
+                            $stmt = $conn->prepare('INSERT INTO notification_state (user_id, notif_seen_at, notif_cleared_at) VALUES (?, ?, NULL)');
+                            $stmt->execute([$uid, $_SESSION['notif_seen_at']]);
+                        }
                     }
                 } catch (Throwable $e) {
                     // ignore

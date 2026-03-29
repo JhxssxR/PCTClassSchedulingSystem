@@ -22,7 +22,7 @@ try {
         FROM schedules s
         JOIN courses c ON s.course_id = c.id
         JOIN classrooms cl ON s.classroom_id = cl.id
-        WHERE s.id = ? AND s.instructor_id = ? AND s.status = 'active'
+            WHERE s.id = ? AND s.instructor_id = ?
     ");
     $stmt->execute([$schedule_id, $_SESSION['user_id']]);
     $schedule = $stmt->fetch(PDO::FETCH_ASSOC);

@@ -75,6 +75,31 @@ foreach ($all_schedules as $row) {
 $selected_day = 'Monday';
 $week_days = array_keys($schedule_by_day);
 
+$schedule_modal_map = [];
+foreach ($all_schedules as $row) {
+    $schedule_id = (int) ($row['id'] ?? 0);
+    if ($schedule_id <= 0 || isset($schedule_modal_map[$schedule_id])) {
+        continue;
+    }
+
+    $start_time = (string) ($row['start_time'] ?? '');
+    $time_range = $start_time !== ''
+        ? (ins_format_time($start_time) . ' - ' . ins_time_plus_two_hours($start_time))
+        : 'Time not set';
+
+    $schedule_modal_map[$schedule_id] = [
+        'id' => $schedule_id,
+        'course_name' => (string) ($row['course_name'] ?? ''),
+        'course_code' => (string) ($row['course_code'] ?? ''),
+        'day_of_week' => (string) ($row['day_of_week'] ?? ''),
+        'time_range' => $time_range,
+        'room_number' => (string) ($row['room_number'] ?? 'TBA'),
+        'room_type' => ins_type_label((string) ($row['room_type'] ?? 'lecture')),
+        'enrolled_students' => (int) ($row['enrolled_students'] ?? 0),
+        'max_students' => (int) ($row['max_students'] ?? 0),
+    ];
+}
+
 $week_start_ts = strtotime('monday this week');
 if ($week_start_ts === false) {
     $week_start_ts = time();
@@ -235,7 +260,6 @@ $nav_items = [
                         </button>
 
                         <div class="hidden sm:flex items-center gap-2 text-sm">
-                            <i class="bi bi-x-lg text-slate-400"></i>
                             <i class="bi bi-layers text-emerald-500"></i>
                             <span class="text-slate-500">Instructor</span>
                             <span class="text-slate-300">/</span>
@@ -325,7 +349,7 @@ $nav_items = [
                             <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">No classes scheduled for today.</div>
                         <?php else: ?>
                             <?php foreach ($today_schedule as $schedule): ?>
-                                <div class="py-3 grid grid-cols-[150px,1fr,auto] gap-3 items-center">
+                                <button type="button" class="js-open-schedule-modal w-full text-left py-3 grid grid-cols-[150px,1fr,auto] gap-3 items-center rounded-xl hover:bg-slate-50/70 transition" data-schedule-id="<?php echo (int) ($schedule['id'] ?? 0); ?>">
                                     <div class="text-slate-500 text-sm font-semibold">
                                         <?php echo htmlspecialchars(ins_format_time((string) $schedule['start_time'])); ?> - <?php echo htmlspecialchars(ins_time_plus_two_hours((string) $schedule['start_time'])); ?>
                                     </div>
@@ -342,7 +366,7 @@ $nav_items = [
                                     <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-violet-50 text-violet-600">
                                         <?php echo htmlspecialchars(ins_type_label((string) ($schedule['room_type'] ?? 'lecture'))); ?>
                                     </span>
-                                </div>
+                                </button>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
@@ -355,8 +379,8 @@ $nav_items = [
                             <div class="text-sm text-slate-400"><?php echo htmlspecialchars($week_range); ?></div>
                         </div>
                         <div class="flex items-center gap-2 text-slate-400">
-                            <button type="button" class="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50"><i class="bi bi-chevron-left"></i></button>
-                            <button type="button" class="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50"><i class="bi bi-chevron-right"></i></button>
+                            <button id="weeklyPrevBtn" type="button" class="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50" aria-label="Previous day"><i class="bi bi-chevron-left"></i></button>
+                            <button id="weeklyNextBtn" type="button" class="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50" aria-label="Next day"><i class="bi bi-chevron-right"></i></button>
                         </div>
                     </div>
 
@@ -378,7 +402,7 @@ $nav_items = [
                                 <?php else: ?>
                                     <div class="space-y-3">
                                         <?php foreach ($schedule_by_day[$day] as $schedule): ?>
-                                            <div class="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 grid grid-cols-[90px,1fr] gap-4 items-center">
+                                            <button type="button" class="js-open-schedule-modal block w-full text-left rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 grid grid-cols-[90px,1fr] gap-4 items-center hover:bg-slate-100/70 transition" data-schedule-id="<?php echo (int) ($schedule['id'] ?? 0); ?>">
                                                 <div class="rounded-2xl border border-slate-200 bg-white text-center py-2">
                                                     <div class="text-sm font-semibold text-emerald-500"><?php echo htmlspecialchars(date('g:i', strtotime((string) $schedule['start_time']))); ?></div>
                                                     <div class="text-xs text-slate-400 mt-2"><?php echo htmlspecialchars(ins_time_plus_two_hours((string) $schedule['start_time'])); ?></div>
@@ -391,7 +415,7 @@ $nav_items = [
                                                         <span class="rounded-full bg-blue-50 text-blue-600 px-2.5 py-0.5 text-xs font-semibold"><?php echo htmlspecialchars(ins_type_label((string) ($schedule['room_type'] ?? 'lecture'))); ?></span>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </button>
                                         <?php endforeach; ?>
                                     </div>
                                 <?php endif; ?>
@@ -416,10 +440,10 @@ $nav_items = [
                                         <div class="text-sm italic text-slate-300">No classes</div>
                                     <?php else: ?>
                                         <?php foreach ($schedule_by_day[$day] as $schedule): ?>
-                                            <div class="rounded-xl px-2.5 py-2 text-xs border <?php echo $is_today_col ? 'bg-emerald-100/70 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'; ?>">
+                                            <button type="button" class="js-open-schedule-modal block w-full text-left rounded-xl px-2.5 py-2 text-xs border hover:opacity-90 transition <?php echo $is_today_col ? 'bg-emerald-100/70 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'; ?>" data-schedule-id="<?php echo (int) ($schedule['id'] ?? 0); ?>">
                                                 <div class="font-semibold truncate"><?php echo htmlspecialchars((string) $schedule['course_name']); ?></div>
                                                 <div class="mt-0.5"><?php echo htmlspecialchars(date('g:i', strtotime((string) $schedule['start_time']))); ?></div>
-                                            </div>
+                                            </button>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
                                 </div>
@@ -428,6 +452,48 @@ $nav_items = [
                     </div>
                 </section>
             </main>
+        </div>
+    </div>
+
+    <div id="scheduleDetailModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/50" data-modal-close></div>
+        <div class="absolute inset-0 p-4 flex items-center justify-center">
+            <div class="w-full max-w-xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-semibold tracking-[0.18em] text-emerald-600">CLASS DETAILS</div>
+                        <h3 id="scheduleModalCourseName" class="mt-1 text-2xl font-semibold text-slate-900">Class</h3>
+                        <p id="scheduleModalCourseCode" class="text-sm text-slate-500"></p>
+                    </div>
+                    <button id="scheduleModalCloseBtn" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Close class details">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+
+                <div class="px-5 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">DAY</div>
+                        <div id="scheduleModalDay" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">TIME</div>
+                        <div id="scheduleModalTime" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">ROOM</div>
+                        <div id="scheduleModalRoom" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                        <div id="scheduleModalRoomType" class="text-xs text-slate-500 mt-1">-</div>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">ENROLLMENT</div>
+                        <div id="scheduleModalEnrollment" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                </div>
+
+                <div class="px-5 pb-5 flex justify-end">
+                    <button type="button" class="inline-flex items-center rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700" data-modal-close>Close</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -574,6 +640,15 @@ $nav_items = [
         (function () {
             const tabs = Array.from(document.querySelectorAll('.day-tab'));
             const panels = Array.from(document.querySelectorAll('.day-panel'));
+            const prevBtn = document.getElementById('weeklyPrevBtn');
+            const nextBtn = document.getElementById('weeklyNextBtn');
+
+            function getActiveDay() {
+                const activeTab = tabs.find(function (tab) {
+                    return tab.classList.contains('active');
+                });
+                return activeTab ? activeTab.getAttribute('data-day') : null;
+            }
 
             function setActive(day) {
                 tabs.forEach(function (tab) {
@@ -594,6 +669,114 @@ $nav_items = [
                     setActive(tab.getAttribute('data-day'));
                 });
             });
+
+            function shiftDay(offset) {
+                if (tabs.length === 0) {
+                    return;
+                }
+
+                const days = tabs.map(function (tab) {
+                    return tab.getAttribute('data-day');
+                });
+
+                const current = getActiveDay() || days[0];
+                const index = days.indexOf(current);
+                const currentIndex = index >= 0 ? index : 0;
+                const nextIndex = (currentIndex + offset + days.length) % days.length;
+                setActive(days[nextIndex]);
+            }
+
+            if (prevBtn) {
+                prevBtn.addEventListener('click', function () {
+                    shiftDay(-1);
+                });
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', function () {
+                    shiftDay(1);
+                });
+            }
+        })();
+
+        (function () {
+            const modal = document.getElementById('scheduleDetailModal');
+            const closeBtn = document.getElementById('scheduleModalCloseBtn');
+            const closeTargets = Array.from(document.querySelectorAll('[data-modal-close]'));
+            const triggers = Array.from(document.querySelectorAll('.js-open-schedule-modal'));
+
+            const courseNameEl = document.getElementById('scheduleModalCourseName');
+            const courseCodeEl = document.getElementById('scheduleModalCourseCode');
+            const dayEl = document.getElementById('scheduleModalDay');
+            const timeEl = document.getElementById('scheduleModalTime');
+            const roomEl = document.getElementById('scheduleModalRoom');
+            const roomTypeEl = document.getElementById('scheduleModalRoomType');
+            const enrollmentEl = document.getElementById('scheduleModalEnrollment');
+
+            const scheduleDetails = <?php echo json_encode($schedule_modal_map, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+            const requestedScheduleId = <?php echo isset($_GET['schedule_id']) ? (int) $_GET['schedule_id'] : 0; ?>;
+
+            if (!modal) {
+                return;
+            }
+
+            function closeModal() {
+                modal.classList.add('hidden');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('overflow-hidden');
+            }
+
+            function openModal(scheduleId) {
+                const key = String(scheduleId || '');
+                if (key === '' || !scheduleDetails[key]) {
+                    return;
+                }
+
+                const detail = scheduleDetails[key];
+                const maxStudents = Number(detail.max_students || 0);
+                const enrolled = Number(detail.enrolled_students || 0);
+
+                courseNameEl.textContent = detail.course_name || 'Class details';
+                courseCodeEl.textContent = detail.course_code || 'No course code';
+                dayEl.textContent = detail.day_of_week || '-';
+                timeEl.textContent = detail.time_range || '-';
+                roomEl.textContent = detail.room_number || 'TBA';
+                roomTypeEl.textContent = detail.room_type || '-';
+                enrollmentEl.textContent = maxStudents > 0
+                    ? (enrolled + ' / ' + maxStudents + ' students')
+                    : (enrolled + ' students');
+
+                modal.classList.remove('hidden');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('overflow-hidden');
+            }
+
+            triggers.forEach(function (trigger) {
+                trigger.addEventListener('click', function () {
+                    openModal(trigger.getAttribute('data-schedule-id'));
+                });
+            });
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeModal);
+            }
+
+            closeTargets.forEach(function (target) {
+                target.addEventListener('click', closeModal);
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
+
+            if (requestedScheduleId > 0) {
+                openModal(requestedScheduleId);
+                const url = new URL(window.location.href);
+                url.searchParams.delete('schedule_id');
+                window.history.replaceState({}, '', url.toString());
+            }
         })();
     </script>
 </body>

@@ -221,7 +221,6 @@ $nav_items = [
                         </button>
 
                         <div class="hidden sm:flex items-center gap-2 text-sm">
-                            <i class="bi bi-x-lg text-slate-400"></i>
                             <i class="bi bi-layers text-emerald-500"></i>
                             <span class="text-slate-500">Instructor</span>
                             <span class="text-slate-300">/</span>

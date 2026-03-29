@@ -400,7 +400,6 @@ $nav_items = [
                         </button>
 
                         <div class="hidden sm:flex items-center gap-2 text-sm">
-                            <i class="bi bi-x-lg text-slate-400"></i>
                             <i class="bi bi-layers text-emerald-500"></i>
                             <span class="text-slate-500">Instructor</span>
                             <span class="text-slate-300">/</span>
@@ -637,21 +636,6 @@ $nav_items = [
                         <article class="rounded-3xl border border-slate-200 bg-white p-5">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <h3 class="text-[28px] font-semibold leading-tight text-slate-700">Avg. Attendance</h3>
-                                    <p class="text-sm text-slate-400">Last 6 weeks trend</p>
-                                </div>
-                                <span class="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
-                                    <i class="bi bi-graph-up-arrow mr-1"></i> <?php echo (int) $avg_attendance; ?>%
-                                </span>
-                            </div>
-                            <div class="mt-4 h-48">
-                                <canvas id="attendanceChart"></canvas>
-                            </div>
-                        </article>
-
-                        <article class="rounded-3xl border border-slate-200 bg-white p-5">
-                            <div class="flex items-center justify-between">
-                                <div>
                                     <h3 class="text-[28px] font-semibold leading-tight text-slate-700">Classes per Day</h3>
                                     <p class="text-sm text-slate-400">This week</p>
                                 </div>
@@ -808,65 +792,9 @@ $nav_items = [
         })();
 
         (function () {
-            const attendanceCtx = document.getElementById('attendanceChart');
             const classesCtx = document.getElementById('classesChart');
-            const attendanceLabels = <?php echo json_encode($attendance_labels); ?>;
-            const attendanceValues = <?php echo json_encode($attendance_values, JSON_NUMERIC_CHECK); ?>;
             const classesLabels = <?php echo json_encode($classes_day_labels); ?>;
             const classesValues = <?php echo json_encode($classes_day_values, JSON_NUMERIC_CHECK); ?>;
-
-            if (attendanceCtx && window.Chart) {
-                const context = attendanceCtx.getContext('2d');
-                const gradient = context.createLinearGradient(0, 0, 0, 220);
-                gradient.addColorStop(0, 'rgba(16, 185, 129, 0.33)');
-                gradient.addColorStop(1, 'rgba(16, 185, 129, 0.02)');
-
-                new Chart(attendanceCtx, {
-                    type: 'line',
-                    data: {
-                        labels: attendanceLabels,
-                        datasets: [{
-                            data: attendanceValues,
-                            borderColor: '#10b981',
-                            backgroundColor: gradient,
-                            fill: true,
-                            tension: 0.42,
-                            pointRadius: 0,
-                            borderWidth: 3
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (context) {
-                                        return context.parsed.y + '%';
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                grid: { display: false },
-                                ticks: { color: '#94a3b8', font: { size: 11 } }
-                            },
-                            y: {
-                                min: 50,
-                                max: 100,
-                                grid: { color: 'rgba(148, 163, 184, 0.16)' },
-                                ticks: {
-                                    color: '#94a3b8',
-                                    stepSize: 20,
-                                    callback: function (value) { return value; }
-                                }
-                            }
-                        }
-                    }
-                });
-            }
 
             if (classesCtx && window.Chart) {
                 new Chart(classesCtx, {
