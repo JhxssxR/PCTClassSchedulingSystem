@@ -316,15 +316,15 @@ foreach ($classrooms as $r) {
                 <?php endif; ?>
 
                 <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+                    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-300">
                         <div class="text-3xl font-semibold text-emerald-800"><?php echo (int)$available_count; ?></div>
                         <div class="mt-1 text-sm text-emerald-700"><span class="inline-block h-2 w-2 rounded-full bg-emerald-500 mr-2"></span>Available</div>
                     </div>
-                    <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4">
+                    <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-rose-300">
                         <div class="text-3xl font-semibold text-rose-800"><?php echo (int)$occupied_count; ?></div>
                         <div class="mt-1 text-sm text-rose-700"><span class="inline-block h-2 w-2 rounded-full bg-rose-500 mr-2"></span>Occupied</div>
                     </div>
-                    <div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+                    <div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-amber-300">
                         <div class="text-3xl font-semibold text-amber-800"><?php echo (int)$maintenance_count; ?></div>
                         <div class="mt-1 text-sm text-amber-700"><span class="inline-block h-2 w-2 rounded-full bg-amber-500 mr-2"></span>Maintenance</div>
                     </div>

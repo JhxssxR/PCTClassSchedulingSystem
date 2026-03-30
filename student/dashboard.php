@@ -2,355 +2,725 @@
 session_start();
 require_once '../config/database.php';
 
-// Check if user is logged in and is a student
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
     header('Location: ../auth/login.php?role=student');
     exit();
 }
 
 require_once __DIR__ . '/notifications_data.php';
 
-// Get student information and class schedule in a single query
+function student_day_short(string $day): string {
+    $map = [
+        'Monday' => 'Mon',
+        'Tuesday' => 'Tue',
+        'Wednesday' => 'Wed',
+        'Thursday' => 'Thu',
+        'Friday' => 'Fri',
+        'Saturday' => 'Sat',
+    ];
+    return $map[$day] ?? $day;
+}
+
+function student_time_display(string $time): string {
+    if ($time === '') {
+        return '';
+    }
+    $ts = strtotime($time);
+    if ($ts === false) {
+        return $time;
+    }
+    return date('g:i A', $ts);
+}
+
+function student_time_add_minutes(string $time, int $minutes): string {
+    if ($time === '') {
+        return '';
+    }
+    $ts = strtotime('1970-01-01 ' . $time);
+    if ($ts === false) {
+        return '';
+    }
+    return date('H:i:s', $ts + ($minutes * 60));
+}
+
+function student_time_range_display(string $start, string $end): string {
+    if ($start === '') {
+        return '-';
+    }
+    $end_time = $end !== '' ? $end : student_time_add_minutes($start, 120);
+    return student_time_display($start) . ' - ' . student_time_display($end_time);
+}
+
+function student_initials(string $first, string $last, string $fallback = 'S'): string {
+    $a = strtoupper(substr(trim($first), 0, 1));
+    $b = strtoupper(substr(trim($last), 0, 1));
+    $initials = trim($a . $b);
+    if ($initials === '') {
+        $initials = strtoupper(substr(trim($fallback), 0, 2));
+    }
+    return $initials !== '' ? $initials : 'S';
+}
+
+$student = [];
+$schedule = [];
+$week_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+$schedule_by_day = [];
+foreach ($week_days as $day_name) {
+    $schedule_by_day[$day_name] = [];
+}
+
+$semester_label = '2nd Sem 2025-2026';
+$college_label = 'College of Computing';
+$enrollment_label = 'Regularly Enrolled';
+$assigned_instructor = 'TBA';
+
 try {
-    // Get student info
-    $stmt = $conn->prepare("SELECT * FROM users WHERE id = ? AND role = 'student'");
+    $stmt = $conn->prepare("SELECT id, student_id, first_name, last_name, username, email, year_level FROM users WHERE id = ? AND role = 'student' LIMIT 1");
     $stmt->execute([$_SESSION['user_id']]);
-    $student = $stmt->fetch();
+    $student = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-    // Check if there are any active schedules
-    $schedule_check = $conn->prepare("SELECT COUNT(*) FROM schedules WHERE status = 'active'");
-    $schedule_check->execute();
-    $active_schedules = $schedule_check->fetchColumn();
-    error_log("Number of active schedules: " . $active_schedules);
+    $schedule_cols = [];
+    try {
+        $stmt_cols = $conn->query('DESCRIBE schedules');
+        foreach (($stmt_cols ? $stmt_cols->fetchAll(PDO::FETCH_ASSOC) : []) as $col_row) {
+            $schedule_cols[(string)($col_row['Field'] ?? '')] = true;
+        }
+    } catch (Throwable $e) {
+        $schedule_cols = [];
+    }
 
-    // Get class schedule
-    $stmt = $conn->prepare("
-        SELECT 
-            c.course_code as subject_code,
-            c.course_name as subject_name,
-            s.day_of_week as schedule_day,
-            s.start_time as schedule_time,
-            cr.room_number as room,
-            i.first_name as instructor_first_name,
-            i.last_name as instructor_last_name,
-            s.status as schedule_status
+    $course_cols = [];
+    try {
+        $course_stmt = $conn->query('DESCRIBE courses');
+        foreach (($course_stmt ? $course_stmt->fetchAll(PDO::FETCH_ASSOC) : []) as $col_row) {
+            $course_cols[(string)($col_row['Field'] ?? '')] = true;
+        }
+    } catch (Throwable $e) {
+        $course_cols = [];
+    }
+
+    $has_end_time = isset($schedule_cols['end_time']);
+    $has_duration_minutes = isset($schedule_cols['duration_minutes']);
+    $has_units = isset($course_cols['units']);
+
+    if ($has_end_time) {
+        $end_expr = 's.end_time';
+    } elseif ($has_duration_minutes) {
+        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
+    } else {
+        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    }
+
+    $units_expr = $has_units ? 'COALESCE(c.units, 3)' : '3';
+
+    $sql = "
+        SELECT
+            s.id AS schedule_id,
+            COALESCE(c.course_code, 'N/A') AS subject_code,
+            COALESCE(c.course_name, 'Untitled Subject') AS subject_name,
+            s.day_of_week AS schedule_day,
+            TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
+            TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,
+            {$units_expr} AS units,
+            COALESCE(cr.room_number, 'TBA') AS room_number,
+            TRIM(CONCAT(COALESCE(i.first_name, ''), ' ', COALESCE(i.last_name, ''))) AS instructor_name
         FROM enrollments e
         JOIN schedules s ON e.schedule_id = s.id
-        JOIN courses c ON s.course_id = c.id
-        JOIN users i ON s.instructor_id = i.id
-        JOIN classrooms cr ON s.classroom_id = cr.id
-        WHERE e.student_id = ? 
-        AND e.status = 'approved'
-        AND s.status = 'active'
-        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'),
-                 s.start_time
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $schedule = $stmt->fetchAll();
-    
-    // Add debug logging
-    error_log("Student ID: " . $_SESSION['user_id']);
-    error_log("Number of classes found: " . count($schedule));
-    
-    // Check if there are any enrollments at all for this student
-    $check_stmt = $conn->prepare("SELECT COUNT(*) FROM enrollments WHERE student_id = ?");
-    $check_stmt->execute([$_SESSION['user_id']]);
-    $total_enrollments = $check_stmt->fetchColumn();
-    error_log("Total enrollments for student: " . $total_enrollments);
-    
-    // Check enrollments by status
-    $status_stmt = $conn->prepare("SELECT status, COUNT(*) as count FROM enrollments WHERE student_id = ? GROUP BY status");
-    $status_stmt->execute([$_SESSION['user_id']]);
-    $status_counts = $status_stmt->fetchAll(PDO::FETCH_ASSOC);
-    error_log("Enrollment status counts: " . print_r($status_counts, true));
+        LEFT JOIN courses c ON s.course_id = c.id
+        LEFT JOIN classrooms cr ON s.classroom_id = cr.id
+        LEFT JOIN users i ON s.instructor_id = i.id
+        WHERE e.student_id = :student_id
+          AND e.status IN ('approved', 'enrolled')
+          AND s.status = 'active'
+        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time
+    ";
 
-    // Group classes by day for better organization
-    $schedule_by_day = [];
-    foreach ($schedule as $class) {
-        $schedule_by_day[$class['schedule_day']][] = $class;
+    $stmt = $conn->prepare($sql);
+    $stmt->execute(['student_id' => (int)$_SESSION['user_id']]);
+    $schedule = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    foreach ($schedule as $row) {
+        $d = (string)($row['schedule_day'] ?? '');
+        if (!isset($schedule_by_day[$d])) {
+            $schedule_by_day[$d] = [];
+        }
+        $schedule_by_day[$d][] = $row;
+
+        if ($assigned_instructor === 'TBA') {
+            $candidate = trim((string)($row['instructor_name'] ?? ''));
+            if ($candidate !== '') {
+                $assigned_instructor = $candidate;
+            }
+        }
     }
-} catch(PDOException $e) {
-    error_log("Error: " . $e->getMessage());
+} catch (Throwable $e) {
+    error_log('Student dashboard error: ' . $e->getMessage());
+    $student = [];
     $schedule = [];
-    $schedule_by_day = [];
 }
-?>
 
+$first_name = (string)($student['first_name'] ?? ($_SESSION['first_name'] ?? 'Student'));
+$last_name = (string)($student['last_name'] ?? ($_SESSION['last_name'] ?? ''));
+$username = (string)($student['username'] ?? ($_SESSION['username'] ?? 'student'));
+$full_name = trim($first_name . ' ' . $last_name);
+if ($full_name === '') {
+    $full_name = 'Student';
+}
+
+$student_id_label = trim((string)($student['student_id'] ?? ''));
+if ($student_id_label === '') {
+    $student_id_label = 'ID-' . str_pad((string)((int)($_SESSION['user_id'] ?? 0)), 4, '0', STR_PAD_LEFT);
+}
+
+$year_level_raw = (string)($student['year_level'] ?? '2');
+if (is_numeric($year_level_raw)) {
+    $year_level_label = 'Year ' . (int)$year_level_raw;
+} else {
+    $year_level_label = $year_level_raw !== '' ? $year_level_raw : 'Year 2';
+}
+
+$current_hour = (int)date('G');
+if ($current_hour < 12) {
+    $greeting = 'Good morning';
+} elseif ($current_hour < 18) {
+    $greeting = 'Good afternoon';
+} else {
+    $greeting = 'Good evening';
+}
+
+$enrolled_classes = count($schedule);
+$total_units = 0;
+foreach ($schedule as $row) {
+    $total_units += (int)($row['units'] ?? 0);
+}
+
+$today_name = date('l');
+$today_schedule = $schedule_by_day[$today_name] ?? [];
+$today_date_label = date('l, F j, Y');
+
+$week_schedule = [];
+foreach ($week_days as $day_name) {
+    foreach (($schedule_by_day[$day_name] ?? []) as $row) {
+        $week_schedule[] = $row;
+    }
+}
+
+$subject_map = [];
+foreach ($schedule as $row) {
+    $key = strtolower((string)($row['subject_code'] ?? '') . '|' . (string)($row['subject_name'] ?? ''));
+    if (!isset($subject_map[$key])) {
+        $subject_map[$key] = [
+            'subject_code' => (string)($row['subject_code'] ?? 'N/A'),
+            'subject_name' => (string)($row['subject_name'] ?? 'Untitled Subject'),
+            'units' => (int)($row['units'] ?? 0),
+            'sessions' => [],
+            'room_number' => (string)($row['room_number'] ?? 'TBA'),
+            'instructor_name' => (string)($row['instructor_name'] ?? 'TBA'),
+        ];
+    }
+
+    $subject_map[$key]['sessions'][] = student_day_short((string)($row['schedule_day'] ?? '')) . ' ' . student_time_range_display((string)($row['start_time'] ?? ''), (string)($row['end_time'] ?? ''));
+}
+
+$subjects = array_values($subject_map);
+
+$subject_palettes = [
+    ['badge' => 'bg-emerald-500', 'soft' => 'bg-emerald-50 text-emerald-700'],
+    ['badge' => 'bg-indigo-500', 'soft' => 'bg-indigo-50 text-indigo-700'],
+    ['badge' => 'bg-amber-500', 'soft' => 'bg-amber-50 text-amber-700'],
+    ['badge' => 'bg-pink-500', 'soft' => 'bg-pink-50 text-pink-700'],
+];
+
+$user_initials = student_initials($first_name, $last_name, $username);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Class Schedule - PCT</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <title>Student Dashboard - PCT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
-        :root {
-            --primary: #2c5d3f;
-            --secondary: #7bc26f;
+        .sidebar-shell {
+            width: 250px;
         }
-        body {
-            background-color: #f8f9fa;
-            padding-top: 56px;
+
+        .sidebar-compact .sidebar-brand-copy,
+        .sidebar-compact .sidebar-nav-title,
+        .sidebar-compact .sidebar-label,
+        .sidebar-compact .sidebar-active-dot {
+            display: none;
         }
-        .navbar {
-            background-color: var(--primary);
+
+        .sidebar-compact .sidebar-brand-row,
+        .sidebar-compact .sidebar-logout-link {
+            justify-content: center;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
         }
-        .card {
-            border: none;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+        .sidebar-compact .sidebar-nav-link {
+            justify-content: center;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
         }
-        .day-header {
-            background-color: var(--primary);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
+
+        .sidebar-compact .sidebar-nav-content {
+            justify-content: center;
+            gap: 0;
+            width: 100%;
         }
-        .class-card {
-            border-left: 4px solid var(--secondary);
-            margin-bottom: 15px;
-        }
-        .time-badge {
-            background-color: var(--secondary);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.875rem;
-        }
-        .subject-code {
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: var(--primary);
-        }
-        .subject-name {
-            font-size: 0.9rem;
-            color: #666;
-        }
-        .schedule-info {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin: 0.5rem 0;
-        }
-        .schedule-icon {
-            color: var(--primary);
-            width: 20px;
-        }
-        @media print {
-            .no-print {
-                display: none;
-            }
-            .card {
-                box-shadow: none;
-                border: 1px solid #ddd;
-                break-inside: avoid;
-            }
-            .day-header {
-                border: 1px solid #ddd;
-                color: #000;
-                background-color: #f8f9fa !important;
-                break-after: avoid;
-            }
-            .class-card {
-                break-inside: avoid;
-            }
+
+        .sidebar-compact .sidebar-nav-link i {
+            font-size: 1.38rem;
         }
     </style>
 </head>
-<body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-dark fixed-top no-print">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">
-                <img src="../pctlogo.png" alt="PCT Logo" height="30" class="d-inline-block align-text-top">
-                PCT Student Portal
-            </a>
-            <div class="d-flex align-items-center">
-                <div class="dropdown me-2">
-                    <button class="btn btn-outline-light position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifications">
-                        <i class="bi bi-bell"></i>
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger <?php echo (($notif_unread_total ?? 0) > 0) ? '' : 'd-none'; ?>">
-                            <?php echo htmlspecialchars($notif_badge_label ?? ''); ?>
+<body class="bg-slate-100 text-slate-800 antialiased">
+    <div class="min-h-screen">
+        <aside id="studentSidebar" class="sidebar-shell fixed inset-y-0 left-0 z-40 -translate-x-full lg:translate-x-0 transition-transform duration-300 bg-gradient-to-b from-emerald-950 via-emerald-900 to-emerald-950 text-emerald-50 border-r border-emerald-800/60">
+            <div class="sidebar-brand-row h-20 px-5 flex items-center gap-3 border-b border-emerald-800/70">
+                <img src="../pctlogo.png" alt="PCT Logo" class="h-10 w-10 rounded-full object-contain bg-white/10" />
+                <div class="sidebar-brand-copy">
+                    <div class="text-sm font-semibold leading-tight">PCT Student</div>
+                    <div class="text-xs text-emerald-200/80">Student Portal</div>
+                </div>
+            </div>
+
+            <div class="px-4 py-4">
+                <div class="sidebar-nav-title px-2 text-[11px] tracking-widest text-emerald-200/60">NAVIGATION</div>
+                <nav class="mt-3 space-y-1.5">
+                    <a href="dashboard.php" class="sidebar-nav-link flex items-center justify-between rounded-xl bg-emerald-700/45 px-3 py-2.5 text-sm font-medium text-emerald-50">
+                        <span class="sidebar-nav-content inline-flex items-center gap-2"><i class="bi bi-grid"></i><span class="sidebar-label">Dashboard</span></span>
+                        <span class="sidebar-active-dot h-1.5 w-1.5 rounded-full bg-emerald-200"></span>
+                    </a>
+                    <a href="my_schedule.php" class="sidebar-nav-link flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-emerald-100/90 hover:bg-emerald-800/50 hover:text-white"><span class="sidebar-nav-content inline-flex items-center gap-2"><i class="bi bi-calendar3"></i><span class="sidebar-label">My Schedule</span></span></a>
+                    <a href="my_subjects.php" class="sidebar-nav-link flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-emerald-100/90 hover:bg-emerald-800/50 hover:text-white"><span class="sidebar-nav-content inline-flex items-center gap-2"><i class="bi bi-book"></i><span class="sidebar-label">My Subjects</span></span></a>
+                </nav>
+            </div>
+
+            <div class="absolute inset-x-0 bottom-0 p-4 border-t border-emerald-800/70">
+                <a href="../auth/logout.php" class="sidebar-logout-link inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/10 hover:text-rose-100">
+                    <i class="bi bi-box-arrow-left"></i>
+                    <span class="sidebar-label">Logout</span>
+                </a>
+            </div>
+        </aside>
+
+        <div id="sidebarOverlay" class="fixed inset-0 z-30 hidden bg-slate-900/45 lg:hidden"></div>
+
+        <div id="contentWrap" class="min-h-screen transition-all duration-300">
+            <header class="sticky top-0 z-20 h-16 border-b border-slate-200 bg-white/90 backdrop-blur">
+                <div class="h-full px-4 sm:px-6 flex items-center justify-between">
+                    <div class="flex items-center gap-3 text-sm text-slate-500">
+                        <button id="sidebarBtn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Toggle menu">
+                            <i class="bi bi-list text-lg"></i>
+                        </button>
+                        <span class="inline-flex items-center gap-2">
+                            <i class="bi bi-eye text-emerald-500"></i>
+                            Student
+                            <span class="text-slate-300">/</span>
+                            <span class="text-slate-600">Dashboard</span>
                         </span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end p-0" style="width: 360px;">
-                        <li class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
-                            <span class="fw-semibold">Notifications</span>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-sm btn-link text-decoration-none p-0" onclick="pctNotifMarkRead(event)">Mark as read</button>
-                                <button type="button" class="btn btn-sm btn-link text-danger text-decoration-none p-0" onclick="pctNotifDelete(event)">Delete</button>
-                            </div>
-                        </li>
-                        <?php if (empty($notif_items)): ?>
-                            <li class="px-3 py-3 text-muted small">No new notifications</li>
-                        <?php else: ?>
-                            <?php foreach ($notif_items as $it): ?>
-                                <li>
-                                    <a class="dropdown-item py-2" href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>">
-                                        <div class="d-flex gap-2">
-                                            <div class="text-muted"><i class="bi <?php echo htmlspecialchars($it['icon'] ?? 'bi-bell'); ?>"></i></div>
-                                            <div class="flex-grow-1">
-                                                <div class="small fw-semibold"><?php echo htmlspecialchars($it['title'] ?? ''); ?></div>
-                                                <div class="small text-muted"><?php echo htmlspecialchars($it['subtitle'] ?? ''); ?></div>
-                                            </div>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <button id="notifBtn" type="button" class="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-haspopup="menu" aria-expanded="false" aria-controls="notifMenu">
+                                <i class="bi bi-bell"></i>
+                                <span id="notifDot" class="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white <?php echo (($notif_unread_total ?? 0) > 0) ? '' : 'hidden'; ?>">
+                                    <?php echo htmlspecialchars($notif_badge_label ?? ''); ?>
+                                </span>
+                            </button>
+
+                            <div id="notifMenu" class="absolute right-0 mt-2 w-80 hidden" role="menu" aria-label="Notifications">
+                                <div class="rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                                        <div class="text-sm font-semibold text-slate-900">Notifications</div>
+                                        <div class="flex items-center gap-3">
+                                            <button id="notifMarkRead" type="button" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Mark as read</button>
+                                            <button id="notifDelete" type="button" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Delete</button>
                                         </div>
-                                    </a>
-                                </li>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </ul>
-                </div>
-                <button class="btn btn-outline-light me-2" onclick="window.print()">
-                    <i class="bi bi-printer"></i> Print Schedule
-                </button>
-                <div class="dropdown">
-                    <button class="btn btn-link text-light text-decoration-none dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle"></i> <?php echo htmlspecialchars($student['first_name']); ?>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#profileModal">
-                            <i class="bi bi-person"></i> Profile
-                        </a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="../auth/logout.php">
-                            <i class="bi bi-box-arrow-right"></i> Logout
-                        </a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container py-4">
-        <!-- Student Info Card -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col">
-                        <h4 class="mb-1"><?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?></h4>
-                        <p class="text-muted mb-0">Student ID: <?php echo htmlspecialchars($student['id']); ?></p>
-                    </div>
-                    <div class="col-auto no-print">
-                        <span class="badge bg-primary">
-                            <?php echo count($schedule); ?> Classes
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Schedule Section -->
-        <?php if (empty($schedule)): ?>
-            <div class="card">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-calendar-x display-1 text-muted"></i>
-                    <h5 class="mt-3">No Classes Scheduled</h5>
-                    <p class="text-muted">Please contact the registrar's office for assistance.</p>
-                </div>
-            </div>
-        <?php else: ?>
-            <?php foreach ($schedule_by_day as $day => $classes): ?>
-                <div class="day-header">
-                    <h5 class="mb-0"><i class="bi bi-calendar-day"></i> <?php echo htmlspecialchars($day); ?></h5>
-                </div>
-                <?php foreach ($classes as $class): ?>
-                    <div class="card class-card">
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <div class="subject-code"><?php echo htmlspecialchars($class['subject_code']); ?></div>
-                                    <div class="subject-name"><?php echo htmlspecialchars($class['subject_name']); ?></div>
-                                    <div class="schedule-info">
-                                        <i class="bi bi-clock-fill schedule-icon"></i>
-                                        <span><?php echo date('g:i A', strtotime($class['schedule_time'])); ?></span>
                                     </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="schedule-info">
-                                        <i class="bi bi-door-open-fill schedule-icon"></i>
-                                        <span>Room <?php echo htmlspecialchars($class['room']); ?></span>
-                                    </div>
-                                    <div class="schedule-info">
-                                        <i class="bi bi-person-video3 schedule-icon"></i>
-                                        <span><?php echo htmlspecialchars($class['instructor_first_name'] . ' ' . $class['instructor_last_name']); ?></span>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="schedule-info">
-                                        <i class="bi bi-calendar3 schedule-icon"></i>
-                                        <span>
-                                            <?php echo htmlspecialchars($class['semester'] ?? 'Current Semester'); ?><br>
-                                            <small class="text-muted">SY <?php echo htmlspecialchars($class['school_year'] ?? date('Y')); ?></small>
-                                        </span>
+                                    <div class="max-h-80 overflow-auto p-3 space-y-2">
+                                        <?php if (empty($notif_items)): ?>
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">No new notifications.</div>
+                                        <?php else: ?>
+                                            <?php foreach (array_slice($notif_items, 0, 6) as $it): ?>
+                                                <a href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
+                                                    <div class="flex items-start gap-3">
+                                                        <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                                                            <i class="bi <?php echo htmlspecialchars($it['icon'] ?? 'bi-bell'); ?>"></i>
+                                                        </div>
+                                                        <div class="min-w-0">
+                                                            <div class="text-xs font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($it['title'] ?? 'Notification'); ?></div>
+                                                            <div class="text-xs text-slate-500 line-clamp-2"><?php echo htmlspecialchars($it['subtitle'] ?? ''); ?></div>
+                                                        </div>
+                                                    </div>
+                                                </a>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php endforeach; ?>
-        <?php endif; ?>
-    </div>
 
-    <!-- Profile Modal -->
-    <div class="modal fade" id="profileModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Profile Settings</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <div class="hidden sm:flex items-center gap-3 text-slate-700">
+                            <div class="h-8 w-8 rounded-md bg-emerald-600 text-white text-xs font-semibold flex items-center justify-center"><?php echo htmlspecialchars($user_initials); ?></div>
+                            <div class="text-sm font-semibold"><?php echo htmlspecialchars($full_name); ?></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-body">
-                    <form action="update_profile.php" method="POST">
-                        <div class="mb-3">
-                            <label class="form-label">Full Name</label>
-                            <input type="text" class="form-control" name="fullname" 
-                                   value="<?php echo htmlspecialchars($student['first_name'] . ' ' . $student['last_name']); ?>" required>
+            </header>
+
+            <main class="px-4 sm:px-6 py-5 space-y-4">
+                <section class="rounded-3xl bg-gradient-to-r from-emerald-950 via-emerald-900 to-emerald-700 text-white shadow-sm border border-emerald-800/50">
+                    <div class="px-5 sm:px-6 py-5">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div class="flex items-start gap-4">
+                                <div class="h-14 w-14 rounded-2xl bg-emerald-500/30 border border-emerald-300/40 text-2xl font-semibold flex items-center justify-center">
+                                    <?php echo htmlspecialchars($user_initials); ?>
+                                </div>
+                                <div>
+                                    <div class="text-[11px] uppercase tracking-[0.2em] text-emerald-200"><?php echo htmlspecialchars($greeting); ?></div>
+                                    <h1 class="text-3xl font-semibold leading-tight"><?php echo htmlspecialchars($full_name); ?></h1>
+                                    <div class="mt-1 text-sm text-emerald-100/90">Student ID: <?php echo htmlspecialchars($student_id_label); ?> &nbsp;&middot;&nbsp; BSCS &nbsp;&middot;&nbsp; <?php echo htmlspecialchars($year_level_label); ?></div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2">
+                                <a href="my_schedule.php" class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/30 bg-white/10 px-3 py-2 text-xs font-semibold text-emerald-50 hover:bg-white/20">
+                                    <i class="bi bi-calendar3"></i>
+                                    My Schedule
+                                </a>
+                                <a href="my_subjects.php" class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/30 bg-white/10 px-3 py-2 text-xs font-semibold text-emerald-50 hover:bg-white/20">
+                                    <i class="bi bi-book"></i>
+                                    My Subjects
+                                </a>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-control" name="email" 
-                                   value="<?php echo htmlspecialchars($student['email']); ?>" required>
+                    </div>
+
+                    <div class="border-t border-emerald-700/60 px-5 sm:px-6 py-3 grid grid-cols-2 lg:grid-cols-4 gap-3 text-[11px] text-emerald-100/90">
+                        <div>Semester: <span class="text-white"><?php echo htmlspecialchars($semester_label); ?></span></div>
+                        <div>College: <span class="text-white"><?php echo htmlspecialchars($college_label); ?></span></div>
+                        <div>Status: <span class="text-white"><?php echo htmlspecialchars($enrollment_label); ?></span></div>
+                        <div>Instructor: <span class="text-white"><?php echo htmlspecialchars($assigned_instructor); ?></span></div>
+                    </div>
+                </section>
+
+                <section class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><i class="bi bi-grid"></i></span>
+                            <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200"><i class="bi bi-arrow-up-right mr-1"></i>Active</span>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">New Password (leave blank to keep current)</label>
-                            <input type="password" class="form-control" name="new_password">
+                        <div class="mt-3 text-4xl leading-none font-semibold text-slate-800"><?php echo (int)$enrolled_classes; ?></div>
+                        <div class="mt-2 text-sm text-slate-500">Enrolled Classes</div>
+                        <div class="text-xs text-slate-400">This semester</div>
+                    </div>
+
+                    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><i class="bi bi-bullseye"></i></span>
+                            <span class="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200"><i class="bi bi-arrow-up-right mr-1"></i>+ <?php echo (int)$total_units; ?> units</span>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Confirm New Password</label>
-                            <input type="password" class="form-control" name="confirm_password">
+                        <div class="mt-3 text-4xl leading-none font-semibold text-slate-800"><?php echo (int)$total_units; ?></div>
+                        <div class="mt-2 text-sm text-slate-500">Total Units</div>
+                        <div class="text-xs text-slate-400">Enrolled this sem</div>
+                    </div>
+                </section>
+
+                <section id="todayClassesPanel" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                    <div class="px-4 sm:px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+                        <div>
+                            <div class="text-lg font-semibold text-slate-700">Today's Classes</div>
+                            <div class="text-xs text-slate-400"><?php echo htmlspecialchars($today_date_label); ?></div>
                         </div>
-                        <button type="submit" class="btn btn-primary">Update Profile</button>
-                    </form>
-                </div>
-            </div>
+                        <div class="inline-flex rounded-xl bg-slate-100 p-1">
+                            <button id="todayTabBtn" type="button" class="rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-xs font-semibold">Today</button>
+                            <button id="weekTabBtn" type="button" class="rounded-lg text-slate-500 px-3 py-1.5 text-xs font-semibold hover:bg-white">Week</button>
+                        </div>
+                    </div>
+
+                    <div id="todayPanel" class="px-4 sm:px-5 py-3">
+                        <?php if (empty($today_schedule)): ?>
+                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">No classes scheduled for today.</div>
+                        <?php else: ?>
+                            <div class="space-y-2">
+                                <?php foreach ($today_schedule as $idx => $cls): ?>
+                                    <?php
+                                        $start = (string)($cls['start_time'] ?? '');
+                                        $end = (string)($cls['end_time'] ?? '');
+                                        $start_ts = strtotime(date('Y-m-d') . ' ' . $start);
+                                        $end_ts = strtotime(date('Y-m-d') . ' ' . ($end !== '' ? $end : student_time_add_minutes($start, 120)));
+                                        $now_ts = time();
+                                        $is_ongoing = ($start_ts !== false && $end_ts !== false && $now_ts >= $start_ts && $now_ts <= $end_ts);
+                                        $badge_classes = $is_ongoing
+                                            ? 'bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-200'
+                                            : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200';
+                                        $badge_text = $is_ongoing ? 'Ongoing' : 'Upcoming';
+                                    ?>
+                                    <div class="grid grid-cols-[88px,1fr,auto] gap-3 items-center rounded-xl px-2 py-2 hover:bg-slate-50">
+                                        <div class="text-xs font-semibold text-slate-400"><?php echo htmlspecialchars(student_time_display($start)); ?></div>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-2">
+                                                <span class="inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[10px] font-semibold <?php echo htmlspecialchars($subject_palettes[$idx % count($subject_palettes)]['soft']); ?>"><?php echo htmlspecialchars((string)($cls['subject_code'] ?? '---')); ?></span>
+                                                <div class="text-sm font-medium text-slate-700 truncate"><?php echo htmlspecialchars((string)($cls['subject_name'] ?? 'Class')); ?></div>
+                                            </div>
+                                            <div class="mt-0.5 text-[11px] text-slate-400 truncate"><i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars((string)($cls['room_number'] ?? 'TBA')); ?> &nbsp; <i class="bi bi-person"></i> <?php echo htmlspecialchars((string)($cls['instructor_name'] ?? 'TBA')); ?></div>
+                                        </div>
+                                        <span class="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold <?php echo htmlspecialchars($badge_classes); ?>"><?php echo htmlspecialchars($badge_text); ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+                                <span><?php echo count($today_schedule); ?> class(es) scheduled today</span>
+                                <a href="my_schedule.php" class="font-semibold text-emerald-600 hover:text-emerald-700">Full schedule <i class="bi bi-chevron-right text-[10px]"></i></a>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div id="weekPanel" class="hidden px-4 sm:px-5 py-3">
+                        <?php if (empty($week_schedule)): ?>
+                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">No weekly schedule available.</div>
+                        <?php else: ?>
+                            <div class="space-y-2">
+                                <?php foreach (array_slice($week_schedule, 0, 8) as $idx => $cls): ?>
+                                    <div class="grid grid-cols-[80px,1fr,auto] gap-3 items-center rounded-xl px-2 py-2 hover:bg-slate-50">
+                                        <div class="text-xs font-semibold text-slate-400"><?php echo htmlspecialchars(student_day_short((string)($cls['schedule_day'] ?? ''))); ?></div>
+                                        <div class="min-w-0">
+                                            <div class="text-sm font-medium text-slate-700 truncate"><?php echo htmlspecialchars((string)($cls['subject_name'] ?? 'Class')); ?></div>
+                                            <div class="text-[11px] text-slate-400 truncate"><?php echo htmlspecialchars(student_time_range_display((string)($cls['start_time'] ?? ''), (string)($cls['end_time'] ?? ''))); ?> &nbsp; <i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars((string)($cls['room_number'] ?? 'TBA')); ?></div>
+                                        </div>
+                                        <span class="inline-flex items-center rounded-full bg-slate-100 text-slate-600 px-3 py-1 text-[11px] font-semibold"><?php echo htmlspecialchars((string)($cls['subject_code'] ?? '---')); ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </section>
+
+                <section>
+                    <div id="subjectsPanel" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                        <div class="px-4 sm:px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+                            <div>
+                                <div class="text-lg font-semibold text-slate-700">Enrolled Subjects</div>
+                                <div class="text-xs text-slate-400"><?php echo htmlspecialchars($semester_label); ?></div>
+                            </div>
+                            <a href="my_subjects.php" class="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200">View all <i class="bi bi-chevron-right text-[10px]"></i></a>
+                        </div>
+                        <div class="p-4 sm:p-5 space-y-3">
+                            <?php if (empty($subjects)): ?>
+                                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">No enrolled subjects yet.</div>
+                            <?php else: ?>
+                                <?php foreach ($subjects as $idx => $subject): ?>
+                                    <?php $palette = $subject_palettes[$idx % count($subject_palettes)]; ?>
+                                    <div class="flex items-center gap-3">
+                                        <div class="h-8 min-w-8 px-2 rounded-xl text-white text-[11px] font-semibold flex items-center justify-center <?php echo htmlspecialchars($palette['badge']); ?>"><?php echo htmlspecialchars((string)($subject['subject_code'] ?? '---')); ?></div>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="text-sm font-medium text-slate-700 truncate"><?php echo htmlspecialchars((string)($subject['subject_name'] ?? 'Subject')); ?></div>
+                                            <div class="text-[11px] text-slate-400 truncate"><?php echo htmlspecialchars(implode(' / ', array_slice($subject['sessions'], 0, 2))); ?> &nbsp; <i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars((string)($subject['room_number'] ?? 'TBA')); ?> &nbsp; <i class="bi bi-person"></i> <?php echo htmlspecialchars((string)($subject['instructor_name'] ?? 'TBA')); ?></div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-inset ring-slate-200"><?php echo (int)($subject['units'] ?? 0); ?> units</span>
+                                            <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200">Ongoing</span>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </section>
+            </main>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        async function pctPostNotifAction(action) {
-            const res = await fetch('notifications_seen.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ action })
+        (function () {
+            const sidebar = document.getElementById('studentSidebar');
+            const sidebarBtn = document.getElementById('sidebarBtn');
+            const overlay = document.getElementById('sidebarOverlay');
+            const contentWrap = document.getElementById('contentWrap');
+            let desktopExpanded = true;
+
+            function isDesktop() {
+                return window.innerWidth >= 1024;
+            }
+
+            function setSidebarOpen(open) {
+                if (isDesktop()) {
+                    sidebar.classList.remove('-translate-x-full');
+                    sidebar.classList.remove('lg:-translate-x-full');
+                    sidebar.classList.toggle('sidebar-compact', !open);
+                    const desktopWidth = open ? 250 : 86;
+                    sidebar.style.width = desktopWidth + 'px';
+
+                    if (contentWrap) {
+                        contentWrap.style.marginLeft = desktopWidth + 'px';
+                    }
+                } else {
+                    sidebar.classList.remove('sidebar-compact');
+                    sidebar.classList.remove('lg:-translate-x-full');
+                    sidebar.classList.toggle('-translate-x-full', !open);
+                    sidebar.style.width = '250px';
+
+                    if (contentWrap) {
+                        contentWrap.style.marginLeft = '0px';
+                    }
+                }
+
+                if (overlay) {
+                    overlay.classList.toggle('hidden', !open || isDesktop());
+                }
+            }
+
+            function applyLayoutState() {
+                if (isDesktop()) {
+                    setSidebarOpen(desktopExpanded);
+                    return;
+                }
+                setSidebarOpen(false);
+            }
+
+            function isSidebarOpen() {
+                return isDesktop()
+                    ? !sidebar.classList.contains('sidebar-compact')
+                    : !sidebar.classList.contains('-translate-x-full');
+            }
+
+            if (sidebarBtn) {
+                sidebarBtn.addEventListener('click', function () {
+                    const currentlyOpen = isSidebarOpen();
+
+                    if (isDesktop()) {
+                        desktopExpanded = !currentlyOpen;
+                        setSidebarOpen(desktopExpanded);
+                        return;
+                    }
+
+                    setSidebarOpen(!currentlyOpen);
+                });
+            }
+
+            if (overlay) {
+                overlay.addEventListener('click', function () {
+                    setSidebarOpen(false);
+                });
+            }
+
+            window.addEventListener('resize', applyLayoutState);
+            applyLayoutState();
+
+            const todayBtn = document.getElementById('todayTabBtn');
+            const weekBtn = document.getElementById('weekTabBtn');
+            const todayPanel = document.getElementById('todayPanel');
+            const weekPanel = document.getElementById('weekPanel');
+
+            function setToday() {
+                todayPanel?.classList.remove('hidden');
+                weekPanel?.classList.add('hidden');
+                todayBtn?.classList.add('bg-emerald-600', 'text-white');
+                todayBtn?.classList.remove('text-slate-500');
+                weekBtn?.classList.remove('bg-emerald-600', 'text-white');
+                weekBtn?.classList.add('text-slate-500');
+            }
+
+            function setWeek() {
+                weekPanel?.classList.remove('hidden');
+                todayPanel?.classList.add('hidden');
+                weekBtn?.classList.add('bg-emerald-600', 'text-white');
+                weekBtn?.classList.remove('text-slate-500');
+                todayBtn?.classList.remove('bg-emerald-600', 'text-white');
+                todayBtn?.classList.add('text-slate-500');
+            }
+
+            todayBtn?.addEventListener('click', setToday);
+            weekBtn?.addEventListener('click', setWeek);
+
+            const notifBtn = document.getElementById('notifBtn');
+            const notifMenu = document.getElementById('notifMenu');
+            const notifDot = document.getElementById('notifDot');
+            const notifMarkRead = document.getElementById('notifMarkRead');
+            const notifDelete = document.getElementById('notifDelete');
+
+            function notifOpen() {
+                notifMenu?.classList.remove('hidden');
+                notifBtn?.setAttribute('aria-expanded', 'true');
+            }
+
+            function notifClose() {
+                notifMenu?.classList.add('hidden');
+                notifBtn?.setAttribute('aria-expanded', 'false');
+            }
+
+            function notifToggle() {
+                if (!notifMenu) {
+                    return;
+                }
+                if (notifMenu.classList.contains('hidden')) {
+                    notifOpen();
+                } else {
+                    notifClose();
+                }
+            }
+
+            async function postNotifAction(action) {
+                try {
+                    const res = await fetch('notifications_seen.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'action=' + encodeURIComponent(action),
+                    });
+                    return res.ok;
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            notifBtn?.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                notifToggle();
             });
-            return res.ok;
-        }
 
-        async function pctNotifMarkRead(e) {
-            if (e) e.preventDefault();
-            await pctPostNotifAction('seen');
-            window.location.reload();
-        }
+            notifMarkRead?.addEventListener('click', async function (event) {
+                event.preventDefault();
+                const ok = await postNotifAction('seen');
+                if (ok) {
+                    notifDot?.classList.add('hidden');
+                    window.location.reload();
+                }
+            });
 
-        async function pctNotifDelete(e) {
-            if (e) e.preventDefault();
-            await pctPostNotifAction('delete');
-            window.location.reload();
-        }
+            notifDelete?.addEventListener('click', async function (event) {
+                event.preventDefault();
+                const ok = await postNotifAction('delete');
+                if (ok) {
+                    notifDot?.classList.add('hidden');
+                    window.location.reload();
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                const target = event.target;
+                if (!(target instanceof Element)) {
+                    return;
+                }
+                if (notifMenu?.contains(target) || notifBtn?.contains(target)) {
+                    return;
+                }
+                notifClose();
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    notifClose();
+                    closeSidebar();
+                }
+            });
+        })();
     </script>
 </body>
-</html> 
+</html>

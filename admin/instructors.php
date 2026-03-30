@@ -302,7 +302,7 @@ function instructor_status_classes($status) {
                             $email = (string)($ins['email'] ?? '');
                             $q = urlencode($email !== '' ? $email : $name);
                         ?>
-                        <article class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <article class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden transition duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-emerald-200">
                             <div class="h-1 bg-emerald-500"></div>
                             <div class="p-4">
                                 <div class="flex items-start justify-between gap-3">

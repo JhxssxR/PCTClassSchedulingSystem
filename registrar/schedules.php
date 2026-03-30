@@ -190,17 +190,37 @@ require_once __DIR__ . '/includes/layout_top.php';
                 <div class="p-3 space-y-3 bg-slate-50/60 min-h-[180px]">
                     <?php if (!empty($by_day[$day])): ?>
                         <?php foreach ($by_day[$day] as $s): ?>
-                            <div class="rounded-2xl bg-white border border-slate-200 shadow-sm p-3">
-                                <div class="text-sm font-semibold text-slate-900"><?php echo htmlspecialchars($s['subject_name'] ?? ''); ?></div>
+                            <?php
+                                $card_name = (string) ($s['subject_name'] ?? 'Class Schedule');
+                                $card_code = (string) ($s['subject_code'] ?? '');
+                                $card_time = fmt_time_range((string) ($s['start_time'] ?? ''), (string) ($s['end_time'] ?? ''));
+                                $card_room = (string) ($s['room_number'] ?? '');
+                                $card_instructor = (string) ($s['instructor_name'] ?? 'Unassigned');
+                                $card_enrollment = (int) ($s['enrollment_count'] ?? 0);
+                                $card_status = ucfirst(strtolower((string) ($s['status'] ?? 'active')));
+                            ?>
+                            <button
+                                type="button"
+                                class="week-schedule-card group w-full text-left rounded-2xl bg-white border border-slate-200 shadow-sm p-3 transition duration-150 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                                data-class-name="<?php echo htmlspecialchars($card_name); ?>"
+                                data-class-code="<?php echo htmlspecialchars($card_code); ?>"
+                                data-class-day="<?php echo htmlspecialchars((string) ($s['day_of_week'] ?? $day)); ?>"
+                                data-class-time="<?php echo htmlspecialchars($card_time); ?>"
+                                data-class-room="<?php echo htmlspecialchars($card_room); ?>"
+                                data-class-instructor="<?php echo htmlspecialchars($card_instructor); ?>"
+                                data-class-enrollment="<?php echo (int) $card_enrollment; ?>"
+                                data-class-status="<?php echo htmlspecialchars($card_status); ?>"
+                            >
+                                <div class="text-sm font-semibold text-slate-900"><?php echo htmlspecialchars($card_name); ?></div>
                                 <div class="mt-2 flex items-center gap-2 text-xs text-slate-500">
                                     <i class="bi bi-clock"></i>
-                                    <span><?php echo htmlspecialchars(fmt_time_range((string)($s['start_time'] ?? ''), (string)($s['end_time'] ?? ''))); ?></span>
+                                    <span><?php echo htmlspecialchars($card_time); ?></span>
                                 </div>
                                 <div class="mt-1 flex items-center gap-2 text-xs text-slate-500">
                                     <i class="bi bi-door-open"></i>
-                                    <span><?php echo htmlspecialchars($s['room_number'] ?? ''); ?></span>
+                                    <span><?php echo htmlspecialchars($card_room); ?></span>
                                 </div>
-                            </div>
+                            </button>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
@@ -208,6 +228,52 @@ require_once __DIR__ . '/includes/layout_top.php';
         <?php endforeach; ?>
     </div>
 </section>
+
+<!-- Class Detail Modal -->
+<div id="classDetailModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-slate-900/50" data-modal-close="classDetailModal"></div>
+    <div class="relative mx-auto my-10 w-[92%] max-w-xl">
+        <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                    <div class="text-xs font-semibold tracking-[0.18em] text-emerald-600">CLASS SCHEDULE</div>
+                    <h3 id="classDetailName" class="mt-1 text-xl font-semibold text-slate-900">Class</h3>
+                    <p id="classDetailCode" class="text-sm text-slate-500"></p>
+                </div>
+                <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" data-modal-close="classDetailModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="text-xs font-semibold text-slate-500">DAY</div>
+                    <div id="classDetailDay" class="mt-1 text-sm font-semibold text-slate-800">-</div>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="text-xs font-semibold text-slate-500">TIME</div>
+                    <div id="classDetailTime" class="mt-1 text-sm font-semibold text-slate-800">-</div>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="text-xs font-semibold text-slate-500">ROOM</div>
+                    <div id="classDetailRoom" class="mt-1 text-sm font-semibold text-slate-800">-</div>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="text-xs font-semibold text-slate-500">INSTRUCTOR</div>
+                    <div id="classDetailInstructor" class="mt-1 text-sm font-semibold text-slate-800">-</div>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="text-xs font-semibold text-slate-500">ENROLLED</div>
+                    <div id="classDetailEnrollment" class="mt-1 text-sm font-semibold text-slate-800">-</div>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div class="text-xs font-semibold text-slate-500">STATUS</div>
+                    <div id="classDetailStatus" class="mt-1 text-sm font-semibold text-slate-800">-</div>
+                </div>
+            </div>
+            <div class="px-5 pb-5 flex justify-end">
+                <button type="button" class="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700" data-modal-close="classDetailModal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Table View -->
 <section id="tableView" class="mt-6 hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -517,6 +583,59 @@ require_once __DIR__ . '/includes/layout_top.php';
     }
     weekBtn?.addEventListener('click', setWeek);
     tableBtn?.addEventListener('click', setTable);
+
+    const weekCards = Array.from(document.querySelectorAll('.week-schedule-card'));
+    const detailFields = {
+        name: document.getElementById('classDetailName'),
+        code: document.getElementById('classDetailCode'),
+        day: document.getElementById('classDetailDay'),
+        time: document.getElementById('classDetailTime'),
+        room: document.getElementById('classDetailRoom'),
+        instructor: document.getElementById('classDetailInstructor'),
+        enrollment: document.getElementById('classDetailEnrollment'),
+        status: document.getElementById('classDetailStatus')
+    };
+
+    function getCardValue(card, key, fallback) {
+        return (card?.dataset?.[key] || fallback || '').toString();
+    }
+
+    function openClassDetail(card) {
+        if (!card) {
+            return;
+        }
+
+        const classCode = getCardValue(card, 'classCode', '');
+        if (detailFields.name) detailFields.name.textContent = getCardValue(card, 'className', 'Class Schedule');
+        if (detailFields.code) detailFields.code.textContent = classCode;
+        if (detailFields.day) detailFields.day.textContent = getCardValue(card, 'classDay', '-');
+        if (detailFields.time) detailFields.time.textContent = getCardValue(card, 'classTime', '-');
+        if (detailFields.room) detailFields.room.textContent = getCardValue(card, 'classRoom', '-');
+        if (detailFields.instructor) detailFields.instructor.textContent = getCardValue(card, 'classInstructor', '-');
+        if (detailFields.enrollment) detailFields.enrollment.textContent = getCardValue(card, 'classEnrollment', '0') + ' student(s)';
+        if (detailFields.status) detailFields.status.textContent = getCardValue(card, 'classStatus', '-');
+
+        openModal('classDetailModal');
+    }
+
+    weekCards.forEach(function (card) {
+        card.addEventListener('click', function () {
+            openClassDetail(card);
+        });
+
+        card.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openClassDetail(card);
+            }
+        });
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            closeModal('classDetailModal');
+        }
+    });
 
     const searchInput = document.getElementById('scheduleSearch');
     const rows = Array.from(document.querySelectorAll('.schedule-row'));
