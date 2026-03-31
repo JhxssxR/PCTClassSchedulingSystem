@@ -112,7 +112,6 @@ try {
                                  OR (d.class_date = CURDATE() AND s.start_time >= CURTIME())
                             )
                         ORDER BY d.class_date ASC, s.start_time ASC
-                        LIMIT 6
         ");
                 $stmt->execute(['sid' => $student_id, 'active' => $active_status]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);

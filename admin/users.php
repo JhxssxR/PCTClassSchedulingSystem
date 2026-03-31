@@ -77,6 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ];
 
                     $role = strtolower(trim((string)$params['role']));
+                    if ($role === 'admin') {
+                        $role = 'super_admin';
+                    }
+                    $allowed_roles = ['student', 'instructor', 'registrar', 'super_admin'];
+                    if (!in_array($role, $allowed_roles, true)) {
+                        throw new Exception('Invalid role selected.');
+                    }
+                    $params['role'] = $role;
                     $year_level = normalize_year_level_value($_POST['year_level'] ?? null);
                     if ($role === 'student' && $year_level === null) {
                         throw new Exception('Year level is required for students.');
@@ -131,6 +139,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ];
 
                     $role = strtolower(trim((string)$params['role']));
+                    if ($role === 'admin') {
+                        $role = 'super_admin';
+                    }
+                    $allowed_roles = ['student', 'instructor', 'registrar', 'super_admin'];
+                    if (!in_array($role, $allowed_roles, true)) {
+                        throw new Exception('Invalid role selected.');
+                    }
+                    $params['role'] = $role;
                     $year_level = normalize_year_level_value($_POST['year_level'] ?? null);
                     if ($role === 'student' && $year_level === null) {
                         throw new Exception('Year level is required for students.');
@@ -384,7 +400,7 @@ function role_label($role) {
         case 'registrar':
             return 'Registrar';
         case 'admin':
-            return 'Admin';
+            return 'Super Admin';
         case 'instructor':
             return 'Instructor';
         case 'student':
@@ -397,11 +413,10 @@ function role_label($role) {
 function role_badge_classes($role) {
     switch ($role) {
         case 'super_admin':
+        case 'admin':
             return 'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200';
         case 'registrar':
             return 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200';
-        case 'admin':
-            return 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200';
         case 'instructor':
             return 'bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200';
         case 'student':
@@ -659,7 +674,6 @@ function role_badge_classes($role) {
                             <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="student">Students</button>
                             <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="instructor">Instructors</button>
                             <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="registrar">Registrar</button>
-                            <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="admin">Admin</button>
                             <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="super_admin">Super Admin</button>
                         </div>
                     </div>
@@ -683,6 +697,9 @@ function role_badge_classes($role) {
                                         $username = (string)($user['username'] ?? '');
                                         $email = (string)($user['email'] ?? '');
                                         $role = (string)($user['role'] ?? '');
+                                        if ($role === 'admin') {
+                                            $role = 'super_admin';
+                                        }
 
                                         $full = trim($first_name . ' ' . $last_name);
                                         if ($full === '') {
@@ -834,7 +851,6 @@ function role_badge_classes($role) {
                             <option value="student">Student</option>
                             <option value="instructor">Instructor</option>
                             <option value="registrar">Registrar</option>
-                            <option value="admin">Admin</option>
                             <option value="super_admin">Super Admin</option>
                         </select>
                     </div>
@@ -910,7 +926,6 @@ function role_badge_classes($role) {
                             <option value="student">Student</option>
                             <option value="instructor">Instructor</option>
                             <option value="registrar">Registrar</option>
-                            <option value="admin">Admin</option>
                             <option value="super_admin">Super Admin</option>
                         </select>
                     </div>
@@ -1043,7 +1058,8 @@ function role_badge_classes($role) {
 
             window.editUser = function (userData) {
                 document.getElementById('edit_user_id').value = userData.id;
-                document.getElementById('edit_role').value = userData.role;
+                const normalizedRole = (userData.role === 'admin') ? 'super_admin' : userData.role;
+                document.getElementById('edit_role').value = normalizedRole;
                 document.getElementById('edit_year_level').value = userData.year_level || '';
                 document.getElementById('edit_first_name').value = userData.first_name;
                 document.getElementById('edit_last_name').value = userData.last_name;
@@ -1125,7 +1141,7 @@ function role_badge_classes($role) {
                     const role = (params.get('role') || '').toLowerCase();
                     const roleSelect = document.getElementById('add_role');
                     if (roleSelect && role) {
-                        const allowed = new Set(['student', 'instructor', 'registrar', 'admin', 'super_admin']);
+                        const allowed = new Set(['student', 'instructor', 'registrar', 'super_admin']);
                         if (allowed.has(role)) {
                             roleSelect.value = role;
                             syncYearLevelVisibility(addRole, addYearGroup, addYear);

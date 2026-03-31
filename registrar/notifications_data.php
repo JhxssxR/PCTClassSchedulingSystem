@@ -412,8 +412,6 @@ try {
         return $tb <=> $ta;
     });
 
-    $notif_items = array_slice($notif_items, 0, 6);
-
     $any_unread = (
         $notif_new_enrollments > 0 ||
         $notif_new_instructors > 0 ||

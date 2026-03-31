@@ -294,39 +294,56 @@ $mini_trend_points = [
         .soft-card { box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.04); }
         .thin-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .thin-scrollbar::-webkit-scrollbar-thumb { background: #d4dbe7; border-radius: 999px; }
+        .sidebar-shell { width: 250px; }
+        .sidebar-compact .sidebar-brand-copy,
+        .sidebar-compact .sidebar-nav-title,
+        .sidebar-compact .sidebar-nav-link span,
+        .sidebar-compact .sidebar-logout-link span {
+            display: none;
+        }
+        .sidebar-compact .sidebar-brand-row,
+        .sidebar-compact .sidebar-logout-link,
+        .sidebar-compact .sidebar-nav-link {
+            justify-content: center;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        .sidebar-compact .sidebar-nav-link i {
+            font-size: 1.38rem;
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
 <div class="min-h-screen">
-    <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-72 -translate-x-full lg:translate-x-0 transition-transform bg-emerald-950 text-emerald-50 border-r border-emerald-900/40">
-        <div class="h-16 px-6 flex items-center gap-3 border-b border-emerald-900/40">
+    <aside id="sidebar" class="sidebar-shell fixed inset-y-0 left-0 z-40 -translate-x-full lg:translate-x-0 transition-transform bg-emerald-950 text-emerald-50 border-r border-emerald-900/40">
+        <div class="sidebar-brand-row h-16 px-6 flex items-center gap-3 border-b border-emerald-900/40">
             <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-emerald-50/10 object-contain" />
-            <div class="leading-tight">
+            <div class="sidebar-brand-copy leading-tight">
                 <div class="text-sm font-semibold">PCT Super Admin</div>
                 <div class="text-xs text-emerald-100/70">Management Portal</div>
             </div>
         </div>
 
         <div class="px-4 py-4">
-            <div class="text-[11px] tracking-widest text-emerald-100/60 px-3 mb-2">NAVIGATION</div>
+            <div class="sidebar-nav-title text-[11px] tracking-widest text-emerald-100/60 px-3 mb-2">NAVIGATION</div>
             <nav class="space-y-1">
-                <a href="dashboard.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-900/40 text-emerald-50"><i class="bi bi-speedometer2"></i><span class="text-sm font-medium">Dashboard</span></a>
-                <a href="users.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-people"></i><span class="text-sm font-medium">All Users</span></a>
-                <a href="instructors.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-video3"></i><span class="text-sm font-medium">Instructors</span></a>
-                <a href="students.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-mortarboard"></i><span class="text-sm font-medium">Students</span></a>
-                <a href="classes.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-book"></i><span class="text-sm font-medium">Classes</span></a>
-                <a href="classrooms.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-door-open"></i><span class="text-sm font-medium">Classrooms</span></a>
-                <a href="subjects.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-bookmark"></i><span class="text-sm font-medium">Subjects</span></a>
-                <a href="courses.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-text"></i><span class="text-sm font-medium">Courses</span></a>
-                <a href="schedules.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-calendar3"></i><span class="text-sm font-medium">Schedules</span></a>
-                <a href="enrollments.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-plus"></i><span class="text-sm font-medium">Enrollments</span></a>
-                <a href="reports.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-file-earmark-text"></i><span class="text-sm font-medium">Reports</span></a>
-                <a href="settings.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-gear"></i><span class="text-sm font-medium">Settings</span></a>
+                <a href="dashboard.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-900/40 text-emerald-50"><i class="bi bi-speedometer2"></i><span class="text-sm font-medium">Dashboard</span></a>
+                <a href="users.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-people"></i><span class="text-sm font-medium">All Users</span></a>
+                <a href="instructors.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-video3"></i><span class="text-sm font-medium">Instructors</span></a>
+                <a href="students.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-mortarboard"></i><span class="text-sm font-medium">Students</span></a>
+                <a href="classes.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-book"></i><span class="text-sm font-medium">Classes</span></a>
+                <a href="classrooms.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-door-open"></i><span class="text-sm font-medium">Classrooms</span></a>
+                <a href="subjects.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-bookmark"></i><span class="text-sm font-medium">Subjects</span></a>
+                <a href="courses.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-text"></i><span class="text-sm font-medium">Courses</span></a>
+                <a href="schedules.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-calendar3"></i><span class="text-sm font-medium">Schedules</span></a>
+                <a href="enrollments.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-plus"></i><span class="text-sm font-medium">Enrollments</span></a>
+                <a href="reports.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-file-earmark-text"></i><span class="text-sm font-medium">Reports</span></a>
+                <a href="settings.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-gear"></i><span class="text-sm font-medium">Settings</span></a>
             </nav>
         </div>
 
         <div class="absolute bottom-0 left-0 right-0 p-4">
-            <a href="../auth/logout.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-200 hover:text-rose-100 hover:bg-rose-500/15 border border-transparent hover:border-rose-400/20">
+            <a href="../auth/logout.php" class="sidebar-logout-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-200 hover:text-rose-100 hover:bg-rose-500/15 border border-transparent hover:border-rose-400/20">
                 <i class="bi bi-box-arrow-right text-rose-300"></i>
                 <span class="text-sm font-semibold">Logout</span>
             </a>
@@ -335,11 +352,11 @@ $mini_trend_points = [
 
     <div id="sidebarOverlay" class="fixed inset-0 z-30 hidden bg-slate-900/40 lg:hidden"></div>
 
-    <div class="lg:pl-72">
+    <div id="contentWrap" class="min-h-screen transition-all duration-300">
         <header class="sticky top-0 z-20 h-16 bg-white/90 backdrop-blur border-b border-slate-200">
             <div class="h-full px-4 sm:px-6 flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <button id="sidebarBtn" type="button" class="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
+                    <button id="sidebarBtn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
                         <i class="bi bi-list text-xl"></i>
                     </button>
                     <div class="flex items-center gap-2 text-sm">
@@ -375,11 +392,20 @@ $mini_trend_points = [
                                         </button>
                                     </div>
                                 </div>
-                                <div class="p-4">
-                                    <?php if (empty($notif_items)): ?>
-                                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No new notifications.</div>
-                                    <?php else: ?>
-                                        <div class="space-y-2">
+                                <div class="p-3">
+                                    <div class="mb-2 flex justify-end gap-1 <?php echo empty($notif_items) ? 'hidden' : ''; ?>">
+                                        <button id="notifScrollUp" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications up">
+                                            <i class="bi bi-chevron-up"></i>
+                                        </button>
+                                        <button id="notifScrollDown" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications down">
+                                            <i class="bi bi-chevron-down"></i>
+                                        </button>
+                                    </div>
+
+                                    <div id="notifList" class="max-h-80 overflow-auto thin-scrollbar pr-1 space-y-2">
+                                        <?php if (empty($notif_items)): ?>
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No new notifications.</div>
+                                        <?php else: ?>
                                             <?php foreach ($notif_items as $it): ?>
                                                 <a href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
                                                     <div class="flex items-start gap-3">
@@ -393,8 +419,8 @@ $mini_trend_points = [
                                                     </div>
                                                 </a>
                                             <?php endforeach; ?>
-                                        </div>
-                                    <?php endif; ?>
+                                        <?php endif; ?>
+                                    </div>
 
                                     <div class="mt-3 text-xs text-slate-500">
                                         <?php
@@ -658,25 +684,63 @@ $mini_trend_points = [
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     const btn = document.getElementById('sidebarBtn');
+    const contentWrap = document.getElementById('contentWrap');
+    const desktopQuery = window.matchMedia('(min-width: 1024px)');
+    const desktopExpandedWidth = 250;
+    const desktopCompactWidth = 86;
+    let desktopExpanded = true;
 
-    function openSidebar() {
-        sidebar?.classList.remove('-translate-x-full');
-        overlay?.classList.remove('hidden');
-    }
+    function setSidebarOpen(open) {
+        if (!sidebar) return;
+        if (desktopQuery.matches) {
+            sidebar.classList.remove('-translate-x-full');
+            overlay?.classList.add('hidden');
+            const desktopWidth = open ? desktopExpandedWidth : desktopCompactWidth;
+            sidebar.style.width = desktopWidth + 'px';
+            sidebar.classList.toggle('sidebar-compact', !open);
+            if (contentWrap) {
+                contentWrap.style.marginLeft = desktopWidth + 'px';
+            }
+            return;
+        }
 
-    function closeSidebar() {
-        sidebar?.classList.add('-translate-x-full');
+        sidebar.style.width = desktopExpandedWidth + 'px';
+        sidebar.classList.remove('sidebar-compact');
+        if (contentWrap) {
+            contentWrap.style.marginLeft = '0px';
+        }
+        if (open) {
+            sidebar.classList.remove('-translate-x-full');
+            overlay?.classList.remove('hidden');
+            return;
+        }
+        sidebar.classList.add('-translate-x-full');
         overlay?.classList.add('hidden');
     }
 
-    btn?.addEventListener('click', function () {
-        if (sidebar?.classList.contains('-translate-x-full')) {
-            openSidebar();
-        } else {
-            closeSidebar();
+    function applyLayoutState() {
+        if (desktopQuery.matches) {
+            setSidebarOpen(desktopExpanded);
+            return;
         }
+        setSidebarOpen(false);
+    }
+
+    btn?.addEventListener('click', function () {
+        if (desktopQuery.matches) {
+            desktopExpanded = !desktopExpanded;
+            setSidebarOpen(desktopExpanded);
+            return;
+        }
+        const currentlyOpen = sidebar ? !sidebar.classList.contains('-translate-x-full') : false;
+        setSidebarOpen(!currentlyOpen);
     });
-    overlay?.addEventListener('click', closeSidebar);
+    overlay?.addEventListener('click', function () {
+        setSidebarOpen(false);
+    });
+
+    window.addEventListener('resize', applyLayoutState);
+    applyLayoutState();
 
     async function refreshSummaryCards() {
         try {
@@ -714,6 +778,10 @@ $mini_trend_points = [
     const btn = document.getElementById('notifBtn');
     const menu = document.getElementById('notifMenu');
     const dot = document.getElementById('notifDot');
+    const notifList = document.getElementById('notifList');
+    const scrollUpBtn = document.getElementById('notifScrollUp');
+    const scrollDownBtn = document.getElementById('notifScrollDown');
+    const scrollStep = 150;
     if (!btn || !menu) return;
 
     function isOpen() {
@@ -739,11 +807,25 @@ $mini_trend_points = [
     function openMenu() {
         menu.classList.remove('hidden');
         btn.setAttribute('aria-expanded', 'true');
+        window.requestAnimationFrame(updateScrollButtons);
     }
 
     function closeMenu() {
         menu.classList.add('hidden');
         btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function updateScrollButtons() {
+        if (!notifList || !scrollUpBtn || !scrollDownBtn) return;
+        const maxScroll = Math.max(0, notifList.scrollHeight - notifList.clientHeight);
+        const atTop = notifList.scrollTop <= 1;
+        const atBottom = notifList.scrollTop >= (maxScroll - 1);
+
+        scrollUpBtn.disabled = atTop;
+        scrollDownBtn.disabled = atBottom;
+
+        scrollUpBtn.classList.toggle('opacity-40', atTop);
+        scrollDownBtn.classList.toggle('opacity-40', atBottom);
     }
 
     btn.addEventListener('click', function (e) {
@@ -774,6 +856,21 @@ $mini_trend_points = [
             location.reload();
         }
     });
+
+    scrollUpBtn?.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        notifList?.scrollBy({ top: -scrollStep, behavior: 'smooth' });
+    });
+
+    scrollDownBtn?.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        notifList?.scrollBy({ top: scrollStep, behavior: 'smooth' });
+    });
+
+    notifList?.addEventListener('scroll', updateScrollButtons);
+    updateScrollButtons();
 
     document.addEventListener('click', function (e) {
         if (!isOpen()) return;

@@ -427,26 +427,30 @@ $nav_items = [
                                             <div class="text-sm font-semibold text-slate-900">Notifications</div>
                                             <div class="text-xs text-slate-500">Class updates and reminders</div>
                                         </div>
-                                        <div class="flex items-center gap-1">
-                                            <button id="notifMarkRead" type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                                                <i class="bi bi-check2"></i>
-                                                <span>Read</span>
-                                            </button>
-                                            <button id="notifDelete" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Delete notifications">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
+                                        <div class="flex items-center gap-3">
+                                            <button id="notifMarkRead" type="button" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Mark as read</button>
+                                            <button id="notifDelete" type="button" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Delete</button>
                                         </div>
                                     </div>
 
-                                    <div class="p-3 max-h-80 overflow-y-auto">
-                                        <?php if (empty($notif_items)): ?>
-                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">No new notifications.</div>
-                                        <?php else: ?>
-                                            <div class="space-y-2">
+                                    <div class="p-3">
+                                        <div class="mb-2 flex justify-end gap-1 <?php echo empty($notif_items) ? 'hidden' : ''; ?>">
+                                            <button id="notifScrollUp" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications up">
+                                                <i class="bi bi-chevron-up"></i>
+                                            </button>
+                                            <button id="notifScrollDown" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications down">
+                                                <i class="bi bi-chevron-down"></i>
+                                            </button>
+                                        </div>
+
+                                        <div id="notifList" class="max-h-80 overflow-auto pr-1 space-y-2">
+                                            <?php if (empty($notif_items)): ?>
+                                                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">No new notifications.</div>
+                                            <?php else: ?>
                                                 <?php foreach ($notif_items as $item): ?>
                                                     <a href="<?php echo htmlspecialchars($item['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
                                                         <div class="flex items-start gap-3">
-                                                            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                                                            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                                                                 <i class="bi <?php echo htmlspecialchars($item['icon'] ?? 'bi-bell'); ?>"></i>
                                                             </div>
                                                             <div class="min-w-0">
@@ -456,8 +460,8 @@ $nav_items = [
                                                         </div>
                                                     </a>
                                                 <?php endforeach; ?>
-                                            </div>
-                                        <?php endif; ?>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -731,11 +735,20 @@ $nav_items = [
         (function () {
             const btn = document.getElementById('notifBtn');
             const menu = document.getElementById('notifMenu');
+            const dot = document.getElementById('notifDot');
             const markRead = document.getElementById('notifMarkRead');
             const delBtn = document.getElementById('notifDelete');
+            const notifList = document.getElementById('notifList');
+            const scrollUpBtn = document.getElementById('notifScrollUp');
+            const scrollDownBtn = document.getElementById('notifScrollDown');
+            const scrollStep = 96;
 
             if (!btn || !menu) {
                 return;
+            }
+
+            function isOpen() {
+                return !menu.classList.contains('hidden');
             }
 
             function closeMenu() {
@@ -744,10 +757,10 @@ $nav_items = [
             }
 
             function toggleMenu() {
-                const isHidden = menu.classList.contains('hidden');
-                if (isHidden) {
+                if (!isOpen()) {
                     menu.classList.remove('hidden');
                     btn.setAttribute('aria-expanded', 'true');
+                    window.requestAnimationFrame(updateScrollButtons);
                 } else {
                     closeMenu();
                 }
@@ -763,32 +776,80 @@ $nav_items = [
                 event.stopPropagation();
             });
 
-            document.addEventListener('click', closeMenu);
+            document.addEventListener('click', function (event) {
+                if (!isOpen()) return;
+                const target = event.target;
+                if (!(target instanceof Element)) return;
+                if (menu.contains(target) || btn.contains(target)) return;
+                closeMenu();
+            });
 
             async function postAction(action) {
-                const response = await fetch('notifications_seen.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: action })
-                });
-                return response.ok;
+                try {
+                    const response = await fetch('notifications_seen.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'action=' + encodeURIComponent(action)
+                    });
+                    return response.ok;
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            function updateScrollButtons() {
+                if (!notifList || !scrollUpBtn || !scrollDownBtn) return;
+                const maxScroll = Math.max(0, notifList.scrollHeight - notifList.clientHeight);
+                const atTop = notifList.scrollTop <= 1;
+                const atBottom = notifList.scrollTop >= (maxScroll - 1);
+
+                scrollUpBtn.disabled = atTop;
+                scrollDownBtn.disabled = atBottom;
+
+                scrollUpBtn.classList.toggle('opacity-40', atTop);
+                scrollDownBtn.classList.toggle('opacity-40', atBottom);
             }
 
             if (markRead) {
                 markRead.addEventListener('click', async function (event) {
                     event.preventDefault();
-                    await postAction('seen');
-                    window.location.reload();
+                    event.stopPropagation();
+                    const ok = await postAction('seen');
+                    if (ok) {
+                        dot?.classList.add('hidden');
+                        closeMenu();
+                        window.location.reload();
+                    }
                 });
             }
 
             if (delBtn) {
                 delBtn.addEventListener('click', async function (event) {
                     event.preventDefault();
-                    await postAction('delete');
-                    window.location.reload();
+                    event.stopPropagation();
+                    const ok = await postAction('delete');
+                    if (ok) {
+                        dot?.classList.add('hidden');
+                        closeMenu();
+                        window.location.reload();
+                    }
                 });
             }
+
+            scrollUpBtn?.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                notifList?.scrollBy({ top: -scrollStep, behavior: 'smooth' });
+            });
+
+            scrollDownBtn?.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                notifList?.scrollBy({ top: scrollStep, behavior: 'smooth' });
+            });
+
+            notifList?.addEventListener('scroll', updateScrollButtons);
+            updateScrollButtons();
         })();
 
         (function () {

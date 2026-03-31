@@ -407,8 +407,6 @@ try {
         return $tb <=> $ta;
     });
 
-    $notif_items = array_slice($notif_items, 0, 6);
-
     // Fallback: if counts say there are unread items but we couldn't build the list,
     // show a generic entry so the UI and red dot stay consistent.
     $any_unread = (

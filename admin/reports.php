@@ -608,11 +608,38 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
         .report-surface {
             background: linear-gradient(180deg, #f1f5f9 0%, #f8fafc 100%);
         }
+        .sidebar-shell {
+            width: 250px;
+        }
+        .sidebar-compact .sidebar-brand-copy,
+        .sidebar-compact .sidebar-nav-title,
+        .sidebar-compact .sidebar-nav-link span,
+        .sidebar-compact .sidebar-logout-link span {
+            display: none;
+        }
+        .sidebar-compact .sidebar-brand-row,
+        .sidebar-compact .sidebar-logout-link,
+        .sidebar-compact .sidebar-nav-link {
+            justify-content: center;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        .sidebar-compact .sidebar-nav-link i {
+            font-size: 1.38rem;
+        }
         .report-card {
             border: 1px solid #e2e8f0;
             border-radius: 16px;
             background: #ffffff;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 30px rgba(15, 23, 42, 0.03);
+        }
+        .summary-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .summary-card:hover {
+            transform: translateY(-4px);
+            border-color: #cbd5e1;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
         }
         .report-pill {
             border: 1px solid rgba(148, 163, 184, 0.45);
@@ -648,35 +675,35 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
 <body class="bg-slate-100 text-slate-900">
 
 <div class="min-h-screen report-surface">
-    <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-72 -translate-x-full lg:translate-x-0 transition-transform bg-emerald-950 text-emerald-50 border-r border-emerald-900/40">
-        <div class="h-16 px-6 flex items-center gap-3 border-b border-emerald-900/40">
+    <aside id="sidebar" class="sidebar-shell fixed inset-y-0 left-0 z-40 -translate-x-full lg:translate-x-0 transition-transform bg-emerald-950 text-emerald-50 border-r border-emerald-900/40">
+        <div class="sidebar-brand-row h-16 px-6 flex items-center gap-3 border-b border-emerald-900/40">
             <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-emerald-50/10 object-contain" />
-            <div class="leading-tight">
+            <div class="sidebar-brand-copy leading-tight">
                 <div class="text-sm font-semibold">PCT Super Admin</div>
                 <div class="text-xs text-emerald-100/70">Management Portal</div>
             </div>
         </div>
 
         <div class="px-4 py-4">
-            <div class="text-[11px] tracking-widest text-emerald-100/60 px-3 mb-2">NAVIGATION</div>
+            <div class="sidebar-nav-title text-[11px] tracking-widest text-emerald-100/60 px-3 mb-2">NAVIGATION</div>
             <nav class="space-y-1">
-                <a href="dashboard.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-speedometer2"></i><span class="text-sm font-medium">Dashboard</span></a>
-                <a href="users.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-people"></i><span class="text-sm font-medium">All Users</span></a>
-                <a href="instructors.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-video3"></i><span class="text-sm font-medium">Instructors</span></a>
-                <a href="students.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-mortarboard"></i><span class="text-sm font-medium">Students</span></a>
-                <a href="classes.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-book"></i><span class="text-sm font-medium">Classes</span></a>
-                <a href="classrooms.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-door-open"></i><span class="text-sm font-medium">Classrooms</span></a>
-                <a href="subjects.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-bookmark"></i><span class="text-sm font-medium">Subjects</span></a>
-                <a href="courses.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-text"></i><span class="text-sm font-medium">Courses</span></a>
-                <a href="schedules.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-calendar3"></i><span class="text-sm font-medium">Schedules</span></a>
-                <a href="enrollments.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-plus"></i><span class="text-sm font-medium">Enrollments</span></a>
-                <a href="reports.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-900/40 text-emerald-50"><i class="bi bi-file-earmark-text"></i><span class="text-sm font-medium">Reports</span></a>
-                <a href="settings.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-gear"></i><span class="text-sm font-medium">Settings</span></a>
+                <a href="dashboard.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-speedometer2"></i><span class="text-sm font-medium">Dashboard</span></a>
+                <a href="users.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-people"></i><span class="text-sm font-medium">All Users</span></a>
+                <a href="instructors.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-video3"></i><span class="text-sm font-medium">Instructors</span></a>
+                <a href="students.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-mortarboard"></i><span class="text-sm font-medium">Students</span></a>
+                <a href="classes.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-book"></i><span class="text-sm font-medium">Classes</span></a>
+                <a href="classrooms.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-door-open"></i><span class="text-sm font-medium">Classrooms</span></a>
+                <a href="subjects.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-bookmark"></i><span class="text-sm font-medium">Subjects</span></a>
+                <a href="courses.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-journal-text"></i><span class="text-sm font-medium">Courses</span></a>
+                <a href="schedules.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-calendar3"></i><span class="text-sm font-medium">Schedules</span></a>
+                <a href="enrollments.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-person-plus"></i><span class="text-sm font-medium">Enrollments</span></a>
+                <a href="reports.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-900/40 text-emerald-50"><i class="bi bi-file-earmark-text"></i><span class="text-sm font-medium">Reports</span></a>
+                <a href="settings.php" class="sidebar-nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-gear"></i><span class="text-sm font-medium">Settings</span></a>
             </nav>
         </div>
 
         <div class="absolute bottom-0 left-0 right-0 p-4">
-            <a href="../auth/logout.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-200 hover:text-rose-100 hover:bg-rose-500/15 border border-transparent hover:border-rose-400/20">
+            <a href="../auth/logout.php" class="sidebar-logout-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-200 hover:text-rose-100 hover:bg-rose-500/15 border border-transparent hover:border-rose-400/20">
                 <i class="bi bi-box-arrow-right text-rose-300"></i>
                 <span class="text-sm font-semibold">Logout</span>
             </a>
@@ -685,11 +712,11 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
 
     <div id="sidebarOverlay" class="fixed inset-0 z-30 hidden bg-slate-900/40 lg:hidden"></div>
 
-    <div class="lg:pl-72">
+    <div id="contentWrap" class="min-h-screen transition-all duration-300">
         <header class="sticky top-0 z-20 h-16 bg-white/90 backdrop-blur border-b border-slate-200">
             <div class="h-full px-4 sm:px-6 flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <button id="sidebarBtn" type="button" class="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
+                    <button id="sidebarBtn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
                         <i class="bi bi-list text-xl"></i>
                     </button>
                     <div class="flex items-center gap-2 text-sm">
@@ -715,36 +742,40 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
                                         <div class="text-sm font-semibold text-slate-900">Notifications</div>
                                         <div class="text-xs text-slate-500">Updates and reminders</div>
                                     </div>
-                                    <div class="flex items-center gap-2">
-                                        <button id="notifMarkRead" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                                            <i class="bi bi-check2"></i>
-                                            <span>Mark as read</span>
-                                        </button>
-                                        <button id="notifDelete" type="button" class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white h-8 w-8 text-slate-700 hover:bg-slate-50" aria-label="Delete notifications">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
+                                    <div class="flex items-center gap-3">
+                                        <button id="notifMarkRead" type="button" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Mark as read</button>
+                                        <button id="notifDelete" type="button" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Delete</button>
                                     </div>
                                 </div>
-                                <div class="p-4">
-                                    <?php if (empty($notif_items)): ?>
-                                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No new notifications.</div>
-                                    <?php else: ?>
-                                        <div class="space-y-2">
+                                <div class="p-3">
+                                    <div class="mb-2 flex justify-end gap-1 <?php echo empty($notif_items) ? 'hidden' : ''; ?>">
+                                        <button id="notifScrollUp" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications up">
+                                            <i class="bi bi-chevron-up"></i>
+                                        </button>
+                                        <button id="notifScrollDown" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications down">
+                                            <i class="bi bi-chevron-down"></i>
+                                        </button>
+                                    </div>
+
+                                    <div id="notifList" class="max-h-80 overflow-auto thin-scrollbar pr-1 space-y-2">
+                                        <?php if (empty($notif_items)): ?>
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">No new notifications.</div>
+                                        <?php else: ?>
                                             <?php foreach ($notif_items as $it): ?>
                                                 <a href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
                                                     <div class="flex items-start gap-3">
-                                                        <div class="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                                                        <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                                                             <i class="bi <?php echo htmlspecialchars($it['icon'] ?? 'bi-bell'); ?>"></i>
                                                         </div>
                                                         <div class="min-w-0">
-                                                            <div class="text-sm font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($it['title'] ?? 'Notification'); ?></div>
-                                                            <div class="text-xs text-slate-500 truncate"><?php echo htmlspecialchars($it['subtitle'] ?? ''); ?></div>
+                                                            <div class="text-xs font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($it['title'] ?? 'Notification'); ?></div>
+                                                            <div class="text-xs text-slate-500 line-clamp-2"><?php echo htmlspecialchars($it['subtitle'] ?? ''); ?></div>
                                                         </div>
                                                     </div>
                                                 </a>
                                             <?php endforeach; ?>
-                                        </div>
-                                    <?php endif; ?>
+                                        <?php endif; ?>
+                                    </div>
 
                                     <div class="mt-3 text-xs text-slate-500">
                                         <?php
@@ -812,7 +843,7 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
 
             <section id="section-overview" class="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 <?php foreach ($metric_cards as $idx => $card): ?>
-                    <article class="report-card p-4">
+                    <article class="report-card summary-card p-4">
                         <div class="flex items-center justify-between gap-3">
                             <div class="h-9 w-9 rounded-xl flex items-center justify-center <?php echo htmlspecialchars($card['icon_bg']); ?>">
                                 <i class="bi <?php echo htmlspecialchars($card['icon']); ?> text-sm"></i>
@@ -962,7 +993,7 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
                                 if ($mini['color'] === 'violet') $iconStyle = 'bg-violet-100 text-violet-700';
                                 if ($mini['color'] === 'orange') $iconStyle = 'bg-orange-100 text-orange-700';
                             ?>
-                            <article class="report-card p-4">
+                            <article class="report-card summary-card p-4">
                                 <div class="h-9 w-9 rounded-xl <?php echo $iconStyle; ?> flex items-center justify-center">
                                     <i class="bi <?php echo htmlspecialchars($mini['icon']); ?>"></i>
                                 </div>
@@ -1054,26 +1085,77 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
 <script>
 (function () {
     const sidebar = document.getElementById('sidebar');
+    const sidebarBtn = document.getElementById('sidebarBtn');
     const overlay = document.getElementById('sidebarOverlay');
-    const btn = document.getElementById('sidebarBtn');
+    const contentWrap = document.getElementById('contentWrap');
+    let desktopExpanded = true;
 
-    function openSidebar() {
-        sidebar && sidebar.classList.remove('-translate-x-full');
-        overlay && overlay.classList.remove('hidden');
+    function isDesktop() {
+        return window.innerWidth >= 1024;
     }
 
-    function closeSidebar() {
-        sidebar && sidebar.classList.add('-translate-x-full');
-        overlay && overlay.classList.add('hidden');
-    }
-
-    btn && btn.addEventListener('click', function () {
+    function setSidebarOpen(open) {
         if (!sidebar) return;
-        if (sidebar.classList.contains('-translate-x-full')) openSidebar();
-        else closeSidebar();
+
+        if (isDesktop()) {
+            sidebar.classList.remove('-translate-x-full');
+            sidebar.classList.remove('lg:-translate-x-full');
+            sidebar.classList.toggle('sidebar-compact', !open);
+            const desktopWidth = open ? 250 : 86;
+            sidebar.style.width = desktopWidth + 'px';
+
+            if (contentWrap) {
+                contentWrap.style.marginLeft = desktopWidth + 'px';
+            }
+        } else {
+            sidebar.classList.remove('sidebar-compact');
+            sidebar.classList.remove('lg:-translate-x-full');
+            sidebar.classList.toggle('-translate-x-full', !open);
+            sidebar.style.width = '250px';
+
+            if (contentWrap) {
+                contentWrap.style.marginLeft = '0px';
+            }
+        }
+
+        if (overlay) {
+            overlay.classList.toggle('hidden', !open || isDesktop());
+        }
+    }
+
+    function applyLayoutState() {
+        if (isDesktop()) {
+            setSidebarOpen(desktopExpanded);
+            return;
+        }
+        setSidebarOpen(false);
+    }
+
+    function isSidebarOpen() {
+        if (!sidebar) return false;
+        return isDesktop()
+            ? !sidebar.classList.contains('sidebar-compact')
+            : !sidebar.classList.contains('-translate-x-full');
+    }
+
+    sidebarBtn && sidebarBtn.addEventListener('click', function () {
+        const currentlyOpen = isSidebarOpen();
+
+        if (isDesktop()) {
+            desktopExpanded = !currentlyOpen;
+            setSidebarOpen(desktopExpanded);
+            return;
+        }
+
+        setSidebarOpen(!currentlyOpen);
     });
 
-    overlay && overlay.addEventListener('click', closeSidebar);
+    overlay && overlay.addEventListener('click', function () {
+        setSidebarOpen(false);
+    });
+
+    window.addEventListener('resize', applyLayoutState);
+    applyLayoutState();
 })();
 
 (function () {
@@ -1084,6 +1166,10 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
 
     const markBtn = document.getElementById('notifMarkRead');
     const delBtn = document.getElementById('notifDelete');
+    const notifList = document.getElementById('notifList');
+    const scrollUpBtn = document.getElementById('notifScrollUp');
+    const scrollDownBtn = document.getElementById('notifScrollDown');
+    const scrollStep = 96;
 
     function isOpen() {
         return !menu.classList.contains('hidden');
@@ -1092,6 +1178,7 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
     function openMenu() {
         menu.classList.remove('hidden');
         btn.setAttribute('aria-expanded', 'true');
+        window.requestAnimationFrame(updateScrollButtons);
     }
 
     function closeMenu() {
@@ -1110,6 +1197,19 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
         } catch (_) {
             return false;
         }
+    }
+
+    function updateScrollButtons() {
+        if (!notifList || !scrollUpBtn || !scrollDownBtn) return;
+        const maxScroll = Math.max(0, notifList.scrollHeight - notifList.clientHeight);
+        const atTop = notifList.scrollTop <= 1;
+        const atBottom = notifList.scrollTop >= (maxScroll - 1);
+
+        scrollUpBtn.disabled = atTop;
+        scrollDownBtn.disabled = atBottom;
+
+        scrollUpBtn.classList.toggle('opacity-40', atTop);
+        scrollDownBtn.classList.toggle('opacity-40', atBottom);
     }
 
     btn.addEventListener('click', function (e) {
@@ -1140,6 +1240,21 @@ $export_url = 'reports.php?range=' . rawurlencode($selected_range) . '&export=cs
             window.location.reload();
         }
     });
+
+    scrollUpBtn && scrollUpBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        notifList && notifList.scrollBy({ top: -scrollStep, behavior: 'smooth' });
+    });
+
+    scrollDownBtn && scrollDownBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        notifList && notifList.scrollBy({ top: scrollStep, behavior: 'smooth' });
+    });
+
+    notifList && notifList.addEventListener('scroll', updateScrollButtons);
+    updateScrollButtons();
 
     document.addEventListener('click', function (e) {
         if (!isOpen()) return;

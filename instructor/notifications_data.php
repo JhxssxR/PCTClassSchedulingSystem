@@ -180,7 +180,6 @@ try {
         $tb = strtotime((string) ($b['ts'] ?? '')) ?: 0;
         return $tb <=> $ta;
     });
-    $notif_items = array_slice($notif_items, 0, 6);
 } catch (Throwable $e) {
     // Fail closed: no notifications.
     $notif_items = [];

@@ -244,6 +244,11 @@ foreach ($classes_by_day as $row) {
     }
 }
 
+$month_day_map = [];
+foreach ($day_map as $dayName => $weeklyCount) {
+    $month_day_map[$dayName] = (int) $weeklyCount;
+}
+
 $trend_path = svg_sparkline_path($enrollment_trend, 420, 120, 8);
 $trend_small_paths = [
     'total_students' => svg_sparkline_path($students_trend, 84, 28, 3),
@@ -352,15 +357,15 @@ $trend_small_paths = [
         <div class="flex items-center justify-between">
             <div>
                 <div class="text-sm font-semibold">Classes by Day</div>
-                <div class="text-xs text-slate-500">This week</div>
+                <div id="classesByDayRange" class="text-xs text-slate-500">This week</div>
             </div>
             <div class="flex items-center gap-2">
-                <span class="rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white">Week</span>
-                <span class="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600">Month</span>
+                <button id="classesByDayWeekBtn" type="button" class="rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white" aria-pressed="true">Week</button>
+                <button id="classesByDayMonthBtn" type="button" class="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50" aria-pressed="false">Month</button>
             </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-6 gap-5 items-end h-44">
+        <div id="classesByDayChart" class="mt-6 grid grid-cols-6 gap-5 items-end h-44">
             <?php
             $short = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             $days = array_keys($day_map);
@@ -369,11 +374,11 @@ $trend_small_paths = [
                 $h = max(6, (int) round(($count / $max_day_count) * 120));
             ?>
                 <div class="group flex flex-col items-center gap-2">
-                    <div class="w-10 rounded-xl bg-emerald-100 relative overflow-hidden" style="height: 128px;" title="<?php echo htmlspecialchars($days[$i]); ?>: <?php echo (int)$count; ?> class<?php echo ((int)$count === 1) ? '' : 'es'; ?>">
-                        <div class="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                            <?php echo (int)$count; ?> class<?php echo ((int)$count === 1) ? '' : 'es'; ?>
+                    <div class="w-10 rounded-xl bg-emerald-100 relative overflow-hidden class-day-track" data-day="<?php echo htmlspecialchars($days[$i]); ?>" style="height: 128px;" title="<?php echo htmlspecialchars($days[$i]); ?>: <?php echo (int)$count; ?> class<?php echo ((int)$count === 1) ? '' : 'es'; ?>">
+                        <div class="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 class-day-tooltip">
+                            <span class="class-day-count"><?php echo (int)$count; ?></span> class<span class="class-day-plural"><?php echo ((int)$count === 1) ? '' : 'es'; ?></span>
                         </div>
-                        <div class="absolute bottom-0 left-0 right-0 rounded-xl bg-emerald-500" style="height: <?php echo (int) $h; ?>px;"></div>
+                        <div class="absolute bottom-0 left-0 right-0 rounded-xl bg-emerald-500 class-day-fill" style="height: <?php echo (int) $h; ?>px;"></div>
                     </div>
                     <div class="text-[11px] text-slate-500"><?php echo htmlspecialchars($short[$i]); ?></div>
                 </div>
@@ -508,5 +513,79 @@ $trend_small_paths = [
         </div>
     </section>
 </div>
+
+<script>
+(function () {
+    const weekBtn = document.getElementById('classesByDayWeekBtn');
+    const monthBtn = document.getElementById('classesByDayMonthBtn');
+    const rangeLabel = document.getElementById('classesByDayRange');
+    const chart = document.getElementById('classesByDayChart');
+    if (!weekBtn || !monthBtn || !rangeLabel || !chart) {
+        return;
+    }
+
+    const dayOrder = <?php echo json_encode(array_keys($day_map), JSON_UNESCAPED_SLASHES); ?>;
+    const weekData = <?php echo json_encode(array_values($day_map), JSON_UNESCAPED_SLASHES); ?>;
+    const monthData = <?php echo json_encode(array_values($month_day_map), JSON_UNESCAPED_SLASHES); ?>;
+    const tracks = Array.from(chart.querySelectorAll('.class-day-track'));
+
+    function setButtonState(mode) {
+        const weekActive = mode === 'week';
+        const active = ['bg-emerald-600', 'text-white'];
+        const inactive = ['border', 'border-slate-200', 'text-slate-600', 'hover:bg-slate-50'];
+
+        weekBtn.classList.remove(...active, ...inactive);
+        monthBtn.classList.remove(...active, ...inactive);
+
+        if (weekActive) {
+            weekBtn.classList.add(...active);
+            monthBtn.classList.add(...inactive);
+        } else {
+            monthBtn.classList.add(...active);
+            weekBtn.classList.add(...inactive);
+        }
+
+        weekBtn.setAttribute('aria-pressed', weekActive ? 'true' : 'false');
+        monthBtn.setAttribute('aria-pressed', weekActive ? 'false' : 'true');
+    }
+
+    function render(mode) {
+        const values = mode === 'month' ? monthData : weekData;
+        const maxValue = Math.max(1, ...values);
+        rangeLabel.textContent = mode === 'month' ? 'This month' : 'This week';
+
+        tracks.forEach(function (track, idx) {
+            const value = Number(values[idx] || 0);
+            const height = Math.max(6, Math.round((value / maxValue) * 120));
+            const fill = track.querySelector('.class-day-fill');
+            const countText = track.querySelector('.class-day-count');
+            const plural = track.querySelector('.class-day-plural');
+            const dayName = String(dayOrder[idx] || 'Day');
+
+            if (fill) {
+                fill.style.height = height + 'px';
+            }
+            if (countText) {
+                countText.textContent = String(value);
+            }
+            if (plural) {
+                plural.textContent = value === 1 ? '' : 'es';
+            }
+
+            track.title = dayName + ': ' + value + ' class' + (value === 1 ? '' : 'es');
+        });
+
+        setButtonState(mode);
+    }
+
+    weekBtn.addEventListener('click', function () {
+        render('week');
+    });
+
+    monthBtn.addEventListener('click', function () {
+        render('month');
+    });
+})();
+</script>
 
 <?php require_once __DIR__ . '/includes/layout_bottom.php'; ?>

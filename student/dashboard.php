@@ -343,24 +343,34 @@ $user_initials = student_initials($first_name, $last_name, $username);
                                             <button id="notifDelete" type="button" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Delete</button>
                                         </div>
                                     </div>
-                                    <div class="max-h-80 overflow-auto p-3 space-y-2">
-                                        <?php if (empty($notif_items)): ?>
-                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">No new notifications.</div>
-                                        <?php else: ?>
-                                            <?php foreach (array_slice($notif_items, 0, 6) as $it): ?>
-                                                <a href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
-                                                    <div class="flex items-start gap-3">
-                                                        <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                                                            <i class="bi <?php echo htmlspecialchars($it['icon'] ?? 'bi-bell'); ?>"></i>
+                                    <div class="p-3">
+                                        <div class="mb-2 flex justify-end gap-1 <?php echo empty($notif_items) ? 'hidden' : ''; ?>">
+                                            <button id="notifScrollUp" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications up">
+                                                <i class="bi bi-chevron-up"></i>
+                                            </button>
+                                            <button id="notifScrollDown" type="button" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Scroll notifications down">
+                                                <i class="bi bi-chevron-down"></i>
+                                            </button>
+                                        </div>
+                                        <div id="notifList" class="max-h-80 overflow-auto pr-1 space-y-2">
+                                            <?php if (empty($notif_items)): ?>
+                                                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">No new notifications.</div>
+                                            <?php else: ?>
+                                                <?php foreach ($notif_items as $it): ?>
+                                                    <a href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
+                                                        <div class="flex items-start gap-3">
+                                                            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                                                                <i class="bi <?php echo htmlspecialchars($it['icon'] ?? 'bi-bell'); ?>"></i>
+                                                            </div>
+                                                            <div class="min-w-0">
+                                                                <div class="text-xs font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($it['title'] ?? 'Notification'); ?></div>
+                                                                <div class="text-xs text-slate-500 line-clamp-2"><?php echo htmlspecialchars($it['subtitle'] ?? ''); ?></div>
+                                                            </div>
                                                         </div>
-                                                        <div class="min-w-0">
-                                                            <div class="text-xs font-semibold text-slate-900 truncate"><?php echo htmlspecialchars($it['title'] ?? 'Notification'); ?></div>
-                                                            <div class="text-xs text-slate-500 line-clamp-2"><?php echo htmlspecialchars($it['subtitle'] ?? ''); ?></div>
-                                                        </div>
-                                                    </div>
-                                                </a>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
+                                                    </a>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -644,10 +654,15 @@ $user_initials = student_initials($first_name, $last_name, $username);
             const notifDot = document.getElementById('notifDot');
             const notifMarkRead = document.getElementById('notifMarkRead');
             const notifDelete = document.getElementById('notifDelete');
+            const notifList = document.getElementById('notifList');
+            const notifScrollUp = document.getElementById('notifScrollUp');
+            const notifScrollDown = document.getElementById('notifScrollDown');
+            const notifScrollStep = 96;
 
             function notifOpen() {
                 notifMenu?.classList.remove('hidden');
                 notifBtn?.setAttribute('aria-expanded', 'true');
+                window.requestAnimationFrame(updateNotifScrollButtons);
             }
 
             function notifClose() {
@@ -679,6 +694,19 @@ $user_initials = student_initials($first_name, $last_name, $username);
                 }
             }
 
+            function updateNotifScrollButtons() {
+                if (!notifList || !notifScrollUp || !notifScrollDown) return;
+                const maxScroll = Math.max(0, notifList.scrollHeight - notifList.clientHeight);
+                const atTop = notifList.scrollTop <= 1;
+                const atBottom = notifList.scrollTop >= (maxScroll - 1);
+
+                notifScrollUp.disabled = atTop;
+                notifScrollDown.disabled = atBottom;
+
+                notifScrollUp.classList.toggle('opacity-40', atTop);
+                notifScrollDown.classList.toggle('opacity-40', atBottom);
+            }
+
             notifBtn?.addEventListener('click', function (event) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -687,6 +715,7 @@ $user_initials = student_initials($first_name, $last_name, $username);
 
             notifMarkRead?.addEventListener('click', async function (event) {
                 event.preventDefault();
+                event.stopPropagation();
                 const ok = await postNotifAction('seen');
                 if (ok) {
                     notifDot?.classList.add('hidden');
@@ -696,12 +725,28 @@ $user_initials = student_initials($first_name, $last_name, $username);
 
             notifDelete?.addEventListener('click', async function (event) {
                 event.preventDefault();
+                event.stopPropagation();
                 const ok = await postNotifAction('delete');
                 if (ok) {
                     notifDot?.classList.add('hidden');
                     window.location.reload();
                 }
             });
+
+            notifScrollUp?.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                notifList?.scrollBy({ top: -notifScrollStep, behavior: 'smooth' });
+            });
+
+            notifScrollDown?.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                notifList?.scrollBy({ top: notifScrollStep, behavior: 'smooth' });
+            });
+
+            notifList?.addEventListener('scroll', updateNotifScrollButtons);
+            updateNotifScrollButtons();
 
             document.addEventListener('click', function (event) {
                 const target = event.target;
@@ -717,7 +762,7 @@ $user_initials = student_initials($first_name, $last_name, $username);
             document.addEventListener('keydown', function (event) {
                 if (event.key === 'Escape') {
                     notifClose();
-                    closeSidebar();
+                    setSidebarOpen(false);
                 }
             });
         })();

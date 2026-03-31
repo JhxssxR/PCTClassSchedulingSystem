@@ -602,6 +602,14 @@ require_once __DIR__ . '/includes/layout_top.php';
         background: #ffffff;
         box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 30px rgba(15, 23, 42, 0.03);
     }
+    .summary-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .summary-card:hover {
+        transform: translateY(-4px);
+        border-color: #cbd5e1;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+    }
     .report-pill {
         border: 1px solid rgba(148, 163, 184, 0.45);
         border-radius: 999px;
@@ -676,7 +684,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 
     <section id="section-overview" class="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <?php foreach ($metric_cards as $idx => $card): ?>
-            <article class="report-card p-4">
+            <article class="report-card summary-card p-4">
                 <div class="flex items-center justify-between gap-3">
                     <div class="h-9 w-9 rounded-xl flex items-center justify-center <?php echo htmlspecialchars($card['icon_bg']); ?>">
                         <i class="bi <?php echo htmlspecialchars($card['icon']); ?> text-sm"></i>
@@ -826,7 +834,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                         if ($mini['color'] === 'violet') $iconStyle = 'bg-violet-100 text-violet-700';
                         if ($mini['color'] === 'orange') $iconStyle = 'bg-orange-100 text-orange-700';
                     ?>
-                    <article class="report-card p-4">
+                    <article class="report-card summary-card p-4">
                         <div class="h-9 w-9 rounded-xl <?php echo $iconStyle; ?> flex items-center justify-center">
                             <i class="bi <?php echo htmlspecialchars($mini['icon']); ?>"></i>
                         </div>
