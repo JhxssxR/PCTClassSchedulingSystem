@@ -368,11 +368,11 @@ function status_badge(string $status): array {
     <div id="sidebarOverlay" class="fixed inset-0 z-30 hidden bg-slate-900/40 lg:hidden"></div>
 
     <!-- Main -->
-    <div class="lg:pl-72">
+    <div id="contentWrap" class="min-h-screen transition-all duration-300">
         <header class="sticky top-0 z-20 h-16 bg-white/90 backdrop-blur border-b border-slate-200">
             <div class="h-full px-4 sm:px-6 flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <button id="sidebarBtn" type="button" class="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
+                    <button id="sidebarBtn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
                         <i class="bi bi-list text-xl"></i>
                     </button>
                     <div class="flex items-center gap-2 text-sm">
@@ -757,8 +757,8 @@ function status_badge(string $status): array {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Status</label>
                             <select id="addEnrollmentStatus" name="status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="active">Active</option>
-                                <option value="pending" selected>Pending</option>
+                                <option value="active" selected>Active</option>
+                                <option value="pending">Pending</option>
                                 <option value="dropped">Dropped</option>
                             </select>
                         </div>
@@ -815,20 +815,81 @@ function status_badge(string $status): array {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     const btn = document.getElementById('sidebarBtn');
+    const contentWrap = document.getElementById('contentWrap');
+    let desktopExpanded = true;
 
-    function openSidebar() {
-        sidebar?.classList.remove('-translate-x-full');
-        overlay?.classList.remove('hidden');
+    function isDesktop() {
+        return window.innerWidth >= 1024;
     }
-    function closeSidebar() {
-        sidebar?.classList.add('-translate-x-full');
-        overlay?.classList.add('hidden');
+
+    function ensureSidebarCompactStyles() {
+        if (document.getElementById('adminSidebarCompactStyles')) return;
+        const style = document.createElement('style');
+        style.id = 'adminSidebarCompactStyles';
+        style.textContent = '#sidebar.sidebar-compact .leading-tight,#sidebar.sidebar-compact nav a span,#sidebar.sidebar-compact .absolute.bottom-0 a span{display:none;}#sidebar.sidebar-compact .px-4.py-4 > div:first-child{display:none;}#sidebar.sidebar-compact .h-16,#sidebar.sidebar-compact nav a,#sidebar.sidebar-compact .absolute.bottom-0 a{justify-content:center;padding-left:.5rem;padding-right:.5rem;}#sidebar.sidebar-compact nav a i{font-size:1.38rem;}';
+        document.head.appendChild(style);
     }
+
+    function setSidebarOpen(open) {
+        if (!sidebar) return;
+
+        if (isDesktop()) {
+            sidebar.classList.remove('-translate-x-full');
+            sidebar.classList.toggle('sidebar-compact', !open);
+            const desktopWidth = open ? 250 : 86;
+            sidebar.style.width = desktopWidth + 'px';
+            if (contentWrap) {
+                contentWrap.style.marginLeft = desktopWidth + 'px';
+            }
+        } else {
+            sidebar.classList.remove('sidebar-compact');
+            sidebar.style.width = '250px';
+            sidebar.classList.toggle('-translate-x-full', !open);
+            if (contentWrap) {
+                contentWrap.style.marginLeft = '0px';
+            }
+        }
+
+        if (overlay) {
+            overlay.classList.toggle('hidden', !open || isDesktop());
+        }
+    }
+
+    function applyLayoutState() {
+        if (isDesktop()) {
+            setSidebarOpen(desktopExpanded);
+            return;
+        }
+        setSidebarOpen(false);
+    }
+
+    function isSidebarOpen() {
+        if (!sidebar) return false;
+        return isDesktop()
+            ? !sidebar.classList.contains('sidebar-compact')
+            : !sidebar.classList.contains('-translate-x-full');
+    }
+
     btn?.addEventListener('click', function () {
-        if (sidebar.classList.contains('-translate-x-full')) openSidebar();
-        else closeSidebar();
+        const currentlyOpen = isSidebarOpen();
+        if (isDesktop()) {
+            desktopExpanded = !currentlyOpen;
+            setSidebarOpen(desktopExpanded);
+            return;
+        }
+        setSidebarOpen(!currentlyOpen);
     });
-    overlay?.addEventListener('click', closeSidebar);
+
+    overlay?.addEventListener('click', function () {
+        setSidebarOpen(false);
+    });
+
+    window.openSidebar = function () { setSidebarOpen(true); };
+    window.closeSidebar = function () { setSidebarOpen(false); };
+
+    ensureSidebarCompactStyles();
+    window.addEventListener('resize', applyLayoutState);
+    applyLayoutState();
 
     function openModal(id) {
         const el = document.getElementById(id);

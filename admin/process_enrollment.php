@@ -208,6 +208,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $exec[] = $new_status;
                     $exec[] = $active_status;
                 }
+                if (isset($enroll_cols['dropped_at'])) {
+                    $set_parts[] = 'dropped_at = CASE WHEN ? = ? THEN NOW() ELSE dropped_at END';
+                    $exec[] = $new_status;
+                    $exec[] = 'dropped';
+                }
+                if (isset($enroll_cols['rejected_at'])) {
+                    $set_parts[] = 'rejected_at = CASE WHEN ? = ? THEN NOW() ELSE rejected_at END';
+                    $exec[] = $new_status;
+                    $exec[] = 'rejected';
+                }
 
                 $exec[] = $_POST['enrollment_id'];
                 $stmt = $conn->prepare('UPDATE enrollments SET ' . implode(', ', $set_parts) . ' WHERE id = ?');

@@ -70,7 +70,7 @@ foreach ($week_days as $day_name) {
 }
 
 $semester_label = '2nd Sem 2025-2026';
-$college_label = 'College of Computing';
+$college_label = 'Information of Technology Education';
 $enrollment_label = 'Regularly Enrolled';
 $assigned_instructor = 'TBA';
 
@@ -329,7 +329,7 @@ $user_initials = student_initials($first_name, $last_name, $username);
                         <div class="relative">
                             <button id="notifBtn" type="button" class="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-haspopup="menu" aria-expanded="false" aria-controls="notifMenu">
                                 <i class="bi bi-bell"></i>
-                                <span id="notifDot" class="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white <?php echo (($notif_unread_total ?? 0) > 0) ? '' : 'hidden'; ?>">
+                                <span id="notifDot" class="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white <?php echo (($notif_has_new ?? false) ? '' : 'hidden'); ?>">
                                     <?php echo htmlspecialchars($notif_badge_label ?? ''); ?>
                                 </span>
                             </button>
@@ -395,7 +395,7 @@ $user_initials = student_initials($first_name, $last_name, $username);
                                 <div>
                                     <div class="text-[11px] uppercase tracking-[0.2em] text-emerald-200"><?php echo htmlspecialchars($greeting); ?></div>
                                     <h1 class="text-3xl font-semibold leading-tight"><?php echo htmlspecialchars($full_name); ?></h1>
-                                    <div class="mt-1 text-sm text-emerald-100/90">Student ID: <?php echo htmlspecialchars($student_id_label); ?> &nbsp;&middot;&nbsp; BSCS &nbsp;&middot;&nbsp; <?php echo htmlspecialchars($year_level_label); ?></div>
+                                    <div class="mt-1 text-sm text-emerald-100/90">Student ID: <?php echo htmlspecialchars($student_id_label); ?> &nbsp;&middot;&nbsp; DIT &nbsp;&middot;&nbsp; <?php echo htmlspecialchars($year_level_label); ?></div>
                                 </div>
                             </div>
 

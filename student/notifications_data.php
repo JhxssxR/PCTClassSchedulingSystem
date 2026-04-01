@@ -15,6 +15,15 @@ if (!isset($conn) || !($conn instanceof PDO)) {
 
 $user_id = (int)($_SESSION['user_id'] ?? 0);
 
+function student_notif_has_column(PDO $conn, string $table, string $column): bool {
+    try {
+        $stmt = $conn->query("SHOW COLUMNS FROM `" . $table . "` LIKE " . $conn->quote($column));
+        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 try {
     $notif_now = (string)$conn->query('SELECT NOW()')->fetchColumn();
 } catch (Throwable $e) {
@@ -39,18 +48,13 @@ if ($user_id > 0) {
 }
 
 if (empty($notif_seen_at)) {
-    $notif_seen_at = $notif_now;
-    try {
-        if ($user_id > 0) {
-            $stmt = $conn->prepare('INSERT INTO notification_state (user_id, notif_seen_at, notif_cleared_at) VALUES (?, ?, NULL) ON DUPLICATE KEY UPDATE notif_seen_at = VALUES(notif_seen_at)');
-            $stmt->execute([$user_id, $notif_seen_at]);
-        }
-    } catch (Throwable $e) {
-        // ignore
-    }
+    $notif_seen_at = null;
 }
 
-$notif_cutoff_at = $notif_seen_at;
+$notif_cutoff_at = '1970-01-01 00:00:00';
+if (!empty($notif_seen_at)) {
+    $notif_cutoff_at = (string)$notif_seen_at;
+}
 if (!empty($notif_cleared_at) && (string)$notif_cleared_at > (string)$notif_cutoff_at) {
     $notif_cutoff_at = $notif_cleared_at;
 }
@@ -63,74 +67,79 @@ $notif_badge_label = '';
 $student_id = (int)($_SESSION['user_id'] ?? 0);
 
 try {
-    // Determine "active" enrollment status label
-    $active_status = 'approved';
-    try {
-        $row = $conn->query("SHOW COLUMNS FROM enrollments LIKE 'status'")->fetch(PDO::FETCH_ASSOC);
-        $type = (string)($row['Type'] ?? '');
-        if (preg_match("/^enum\((.*)\)$/i", $type, $m)) {
-            $vals = str_getcsv($m[1], ',', "'");
-            $allowed = [];
-            foreach ($vals as $v) {
-                $allowed[strtolower(trim($v))] = true;
-            }
-            if (isset($allowed['approved'])) $active_status = 'approved';
-            elseif (isset($allowed['enrolled'])) $active_status = 'enrolled';
+    $enroll_ts_candidates = [];
+    foreach (['enrolled_at', 'enrollment_date', 'created_at', 'updated_at', 'dropped_at', 'rejected_at'] as $col) {
+        if (student_notif_has_column($conn, 'enrollments', $col)) {
+            $enroll_ts_candidates[] = 'e.' . $col;
         }
-    } catch (Throwable $e) {
-        // ignore
     }
 
-        // Upcoming approved classes in the next 7 days
+    $notif_has_event_ts = count($enroll_ts_candidates) > 0;
+
+    $schedule_end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    if (student_notif_has_column($conn, 'schedules', 'end_time')) {
+        $schedule_end_expr = 's.end_time';
+    } elseif (student_notif_has_column($conn, 'schedules', 'duration_minutes')) {
+        $schedule_end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
+    }
+
+    $enroll_ts_expr = 'NULL';
+    if (count($enroll_ts_candidates) === 1) {
+        $enroll_ts_expr = $enroll_ts_candidates[0];
+    } elseif (count($enroll_ts_candidates) > 1) {
+        $enroll_ts_expr = 'COALESCE(' . implode(', ', $enroll_ts_candidates) . ')';
+    } else {
+        // Fallback keeps list visible even on schemas without enrollment timestamps.
+        $enroll_ts_expr = "'1970-01-01 00:00:00'";
+    }
+
+    // Enrollment status events (enrolled/approved/active/dropped/rejected).
     if ($student_id > 0) {
-        $stmt = $conn->prepare("
-                        SELECT s.id, s.day_of_week, s.start_time, s.end_time,
-                                     c.course_code, c.course_name,
-                                     cr.room_number,
-                                     i.first_name AS instructor_first,
-                                     i.last_name AS instructor_last,
-                                     d.class_date
-                        FROM (
-                                SELECT CURDATE() AS class_date
-                                UNION ALL SELECT CURDATE() + INTERVAL 1 DAY
-                                UNION ALL SELECT CURDATE() + INTERVAL 2 DAY
-                                UNION ALL SELECT CURDATE() + INTERVAL 3 DAY
-                                UNION ALL SELECT CURDATE() + INTERVAL 4 DAY
-                                UNION ALL SELECT CURDATE() + INTERVAL 5 DAY
-                                UNION ALL SELECT CURDATE() + INTERVAL 6 DAY
-                        ) d
-                        JOIN schedules s ON s.day_of_week = DAYNAME(d.class_date)
-                        JOIN enrollments e ON e.schedule_id = s.id
-                        JOIN courses c ON c.id = s.course_id
-                        JOIN classrooms cr ON cr.id = s.classroom_id
-                        JOIN users i ON i.id = s.instructor_id
-                        WHERE e.student_id = :sid
-                            AND e.status = :active
-                            AND s.status = 'active'
-                            AND (
-                                        d.class_date > CURDATE()
-                                 OR (d.class_date = CURDATE() AND s.start_time >= CURTIME())
-                            )
-                        ORDER BY d.class_date ASC, s.start_time ASC
-        ");
-                $stmt->execute(['sid' => $student_id, 'active' => $active_status]);
+        $sql = "
+            SELECT
+                e.id AS enrollment_id,
+                {$enroll_ts_expr} AS event_ts,
+                e.status AS enrollment_status,
+                s.id AS schedule_id,
+                s.day_of_week,
+                TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
+                TIME_FORMAT({$schedule_end_expr}, '%H:%i:%s') AS end_time,
+                c.course_code,
+                c.course_name,
+                COALESCE(cr.room_number, 'TBA') AS room_number,
+                COALESCE(i.first_name, '') AS instructor_first,
+                COALESCE(i.last_name, '') AS instructor_last
+                        FROM enrollments e
+                        LEFT JOIN schedules s ON s.id = e.schedule_id
+            LEFT JOIN courses c ON c.id = s.course_id
+            LEFT JOIN classrooms cr ON cr.id = s.classroom_id
+            LEFT JOIN users i ON i.id = s.instructor_id
+            WHERE e.student_id = :sid
+                            AND LOWER(COALESCE(e.status, '')) IN ('approved', 'enrolled', 'active', 'pending', 'dropped', 'rejected')
+                        ORDER BY {$enroll_ts_expr} DESC, e.id DESC
+                        LIMIT 30
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->execute(['sid' => $student_id]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $notif_new_enrollments = count($rows);
+        $notif_new_enrollments = 0;
+
         foreach ($rows as $r) {
+            $event_ts = (string)($r['event_ts'] ?? '');
+            $is_unread = ($event_ts !== '' && $event_ts > (string)$notif_cutoff_at);
+            if ($is_unread) {
+                $notif_new_enrollments++;
+            }
+
+            $item_ts = $event_ts !== '' ? $event_ts : $notif_now;
             $course = trim(($r['course_code'] ?? '') . ' — ' . ($r['course_name'] ?? ''));
-            $classDate = (string)($r['class_date'] ?? '');
             $dayLabel = (string)($r['day_of_week'] ?? '');
-            $dateLabel = '';
-            if ($classDate !== '') {
-                $ts = strtotime($classDate);
-                if ($ts !== false) {
-                    $dateLabel = date('M j, Y', $ts);
-                }
-            }
-            $when = trim($dayLabel . ($dateLabel !== '' ? (' (' . $dateLabel . ')') : '') . ' ' . (string)($r['start_time'] ?? ''));
-            if (!empty($r['end_time'])) {
-                $when .= '-' . (string)$r['end_time'];
-            }
+            $start_time = (string)($r['start_time'] ?? '');
+            $end_time = (string)($r['end_time'] ?? '');
+            $start_label = $start_time !== '' ? date('g:i A', strtotime($start_time)) : '';
+            $end_label = $end_time !== '' ? date('g:i A', strtotime($end_time)) : '';
+            $when = trim($dayLabel . ' ' . trim($start_label . ($end_label !== '' ? (' - ' . $end_label) : '')));
             $room = trim((string)($r['room_number'] ?? ''));
             $inst = trim(($r['instructor_first'] ?? '') . ' ' . ($r['instructor_last'] ?? ''));
             $sub = $course;
@@ -138,24 +147,57 @@ try {
             if ($extra !== '') {
                 $sub = ($sub !== '' ? ($sub . ' • ' . $extra) : $extra);
             }
-            $title = 'Upcoming class';
-            if ($classDate !== '' && $classDate === date('Y-m-d')) {
-                $title = 'Today\'s class';
+
+            $status = strtolower(trim((string)($r['enrollment_status'] ?? '')));
+            $is_dropped = ($status === 'dropped' || $status === 'rejected');
+
+            $title = 'Class enrollment confirmed';
+            $icon = 'bi-check-circle';
+            $href = 'my_schedule.php';
+
+            if ($status === 'approved') {
+                $title = 'Enrollment approved';
             }
+            if ($status === 'pending') {
+                $title = 'Enrollment submitted';
+                $icon = 'bi-hourglass-split';
+            }
+            if ($is_dropped) {
+                $title = 'Enrollment dropped';
+                $icon = 'bi-x-circle';
+                $href = 'dashboard.php';
+            }
+
+            if ($sub === '' && $is_dropped) {
+                $sub = 'A class was removed from your schedule.';
+            }
+
             $notif_items[] = [
-                'ts' => $notif_now,
-                'icon' => 'bi-calendar-check',
+                'ts' => $item_ts,
+                'icon' => $icon,
                 'title' => $title,
                 'subtitle' => $sub !== '' ? $sub : 'Class schedule',
-                'href' => 'dashboard.php',
+                'href' => $href,
             ];
         }
     }
 
+    usort($notif_items, function (array $a, array $b): int {
+        $ta = strtotime((string)($a['ts'] ?? '')) ?: 0;
+        $tb = strtotime((string)($b['ts'] ?? '')) ?: 0;
+        return $tb <=> $ta;
+    });
+
+    // Fallback: when schema/events do not provide usable timestamps yet,
+    // show indicator until user explicitly marks notifications as seen.
+    if ($notif_new_enrollments === 0 && !empty($notif_items) && (string)$notif_cutoff_at === '1970-01-01 00:00:00') {
+        $notif_new_enrollments = count($notif_items);
+    }
+
     $notif_unread_total = (int)$notif_new_enrollments;
     $notif_badge_label = $notif_unread_total > 99 ? '99+' : (string)$notif_unread_total;
-    $notif_has_new = $notif_unread_total > 0;
-
+    $notif_has_new = ($notif_unread_total > 0)
+        || (!empty($notif_items) && (string)$notif_cutoff_at === '1970-01-01 00:00:00');
 } catch (Throwable $e) {
     $notif_items = [];
     $notif_has_new = false;

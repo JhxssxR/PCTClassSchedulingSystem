@@ -613,8 +613,8 @@ require_once __DIR__ . '/includes/layout_top.php';
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Status</label>
                             <select id="addEnrollmentStatus" name="status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="active">Active</option>
-                                <option value="pending" selected>Pending</option>
+                                <option value="active" selected>Active</option>
+                                <option value="pending">Pending</option>
                                 <option value="dropped">Dropped</option>
                             </select>
                         </div>

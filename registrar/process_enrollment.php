@@ -96,8 +96,33 @@ try {
             if ($status === 'dropped' || $status === 'rejected') {
                 // Allow re-enrolling by updating record to the selected status when supported.
                 $target = normalize_target_status($requested_status, $active_db, $allowed);
-                $stmt = $conn->prepare('UPDATE enrollments SET status = ? WHERE id = ?');
-                $stmt->execute([$target, (int)$existing['id']]);
+                $set_parts = ['status = ?'];
+                $exec = [$target];
+                if (isset($cols['updated_at'])) {
+                    $set_parts[] = 'updated_at = NOW()';
+                }
+                if (isset($cols['enrolled_at'])) {
+                    $set_parts[] = 'enrolled_at = CASE WHEN ? = ? THEN NOW() ELSE enrolled_at END';
+                    $exec[] = $target;
+                    $exec[] = $active_db;
+                } elseif (isset($cols['enrollment_date'])) {
+                    $set_parts[] = 'enrollment_date = CASE WHEN ? = ? THEN NOW() ELSE enrollment_date END';
+                    $exec[] = $target;
+                    $exec[] = $active_db;
+                }
+                if (isset($cols['dropped_at'])) {
+                    $set_parts[] = 'dropped_at = CASE WHEN ? = ? THEN NOW() ELSE dropped_at END';
+                    $exec[] = $target;
+                    $exec[] = 'dropped';
+                }
+                if (isset($cols['rejected_at'])) {
+                    $set_parts[] = 'rejected_at = CASE WHEN ? = ? THEN NOW() ELSE rejected_at END';
+                    $exec[] = $target;
+                    $exec[] = 'rejected';
+                }
+                $exec[] = (int)$existing['id'];
+                $stmt = $conn->prepare('UPDATE enrollments SET ' . implode(', ', $set_parts) . ' WHERE id = ?');
+                $stmt->execute($exec);
                 redirect_with_message('success', 'Enrollment updated successfully.');
             }
             redirect_with_message('error', 'Student is already enrolled in this schedule.');
@@ -113,17 +138,15 @@ try {
             $cols[$r['Field']] = true;
         }
 
-        $now = date('Y-m-d H:i:s');
-
         if (isset($cols['enrolled_at'])) {
-            $stmt = $conn->prepare('INSERT INTO enrollments (student_id, schedule_id, status, enrolled_at) VALUES (?, ?, ?, ?)');
-            $stmt->execute([$student_id, $schedule_id, $initial, $now]);
+            $stmt = $conn->prepare('INSERT INTO enrollments (student_id, schedule_id, status, enrolled_at) VALUES (?, ?, ?, NOW())');
+            $stmt->execute([$student_id, $schedule_id, $initial]);
         } elseif (isset($cols['enrollment_date'])) {
-            $stmt = $conn->prepare('INSERT INTO enrollments (student_id, schedule_id, status, enrollment_date) VALUES (?, ?, ?, ?)');
-            $stmt->execute([$student_id, $schedule_id, $initial, $now]);
+            $stmt = $conn->prepare('INSERT INTO enrollments (student_id, schedule_id, status, enrollment_date) VALUES (?, ?, ?, NOW())');
+            $stmt->execute([$student_id, $schedule_id, $initial]);
         } elseif (isset($cols['created_at'])) {
-            $stmt = $conn->prepare('INSERT INTO enrollments (student_id, schedule_id, status, created_at) VALUES (?, ?, ?, ?)');
-            $stmt->execute([$student_id, $schedule_id, $initial, $now]);
+            $stmt = $conn->prepare('INSERT INTO enrollments (student_id, schedule_id, status, created_at) VALUES (?, ?, ?, NOW())');
+            $stmt->execute([$student_id, $schedule_id, $initial]);
         } else {
             $stmt = $conn->prepare('INSERT INTO enrollments (student_id, schedule_id, status) VALUES (?, ?, ?)');
             $stmt->execute([$student_id, $schedule_id, $initial]);
