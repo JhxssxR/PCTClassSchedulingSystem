@@ -265,10 +265,11 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
 
                                         <div class="mt-3 text-xs text-slate-500">
                                             <?php
+                                                $nr = (int)($notif_new_registrars ?? 0);
                                                 $ni = (int)($notif_new_instructors ?? 0);
                                                 $ns = (int)($notif_new_students ?? 0);
                                                 $ne = (int)($notif_new_enrollments ?? 0);
-                                                echo htmlspecialchars($ni . ' new instructor(s), ' . $ns . ' new student(s), ' . $ne . ' new enrollment(s) since last check.');
+                                                echo htmlspecialchars($nr . ' new registrar(s), ' . $ni . ' new instructor(s), ' . $ns . ' new student(s), ' . $ne . ' new enrollment(s) since last check.');
                                             ?>
                                         </div>
                                     </div>

@@ -45,6 +45,28 @@ function add_minutes_to_time(string $start_time, int $minutes): string {
     return date('H:i:s', $t + ($minutes * 60));
 }
 
+function ensure_schedule_updated_at_column(PDO $conn, array &$cols): void {
+    if (isset($cols['updated_at'])) {
+        return;
+    }
+
+    try {
+        $conn->exec("ALTER TABLE schedules ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+        $cols['updated_at'] = true;
+    } catch (Throwable $e) {
+        // Ignore if schema cannot be altered (permissions/old MySQL), we'll continue without updated_at.
+    }
+}
+
+function is_instructor_user(PDO $conn, int $user_id): bool {
+    if ($user_id <= 0) {
+        return false;
+    }
+    $stmt = $conn->prepare("SELECT 1 FROM users WHERE id = ? AND role = 'instructor' LIMIT 1");
+    $stmt->execute([$user_id]);
+    return (bool)$stmt->fetchColumn();
+}
+
 function record_exists(PDO $conn, string $table, int $id): bool {
     if ($id <= 0) {
         return false;
@@ -66,6 +88,7 @@ $action = $_POST['action'] ?? '';
 
 try {
     $cols = table_columns($conn, 'schedules');
+    ensure_schedule_updated_at_column($conn, $cols);
 
     $has_end_time = isset($cols['end_time']);
     $has_duration_minutes = isset($cols['duration_minutes']);
@@ -121,6 +144,9 @@ try {
             }
             if (!record_exists($conn, 'users', $instructor_id)) {
                 throw new Exception('Selected instructor is invalid or no longer exists. Please refresh and select again.');
+            }
+            if (!is_instructor_user($conn, $instructor_id)) {
+                throw new Exception('Selected user is not an instructor. Please refresh and select a valid instructor.');
             }
             if (!record_exists($conn, 'classrooms', $classroom_id)) {
                 throw new Exception('Selected classroom is invalid or no longer exists. Please refresh and select again.');
@@ -262,6 +288,9 @@ try {
             if (!record_exists($conn, 'users', $instructor_id)) {
                 throw new Exception('Selected instructor is invalid or no longer exists. Please refresh and select again.');
             }
+            if (!is_instructor_user($conn, $instructor_id)) {
+                throw new Exception('Selected user is not an instructor. Please refresh and select a valid instructor.');
+            }
             if (!record_exists($conn, 'classrooms', $classroom_id)) {
                 throw new Exception('Selected classroom is invalid or no longer exists. Please refresh and select again.');
             }
@@ -361,14 +390,32 @@ try {
             }
             $schedule_id = (int)$_POST['schedule_id'];
 
-            $stmt = $conn->prepare("SELECT COUNT(*) FROM enrollments WHERE schedule_id = ? AND status IN ('approved', 'enrolled')");
-            $stmt->execute([$schedule_id]);
-            if ((int)$stmt->fetchColumn() > 0) {
-                throw new Exception('Cannot delete class with active enrollments');
-            }
+            $conn->beginTransaction();
+            try {
+                $stmt = $conn->prepare("SELECT COUNT(*) FROM enrollments WHERE schedule_id = ? AND status IN ('approved', 'enrolled')");
+                $stmt->execute([$schedule_id]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    throw new Exception('Cannot delete class with active enrollments. Use force delete to remove enrolled students too.');
+                }
 
-            $stmt = $conn->prepare('DELETE FROM schedules WHERE id = ?');
-            $stmt->execute([$schedule_id]);
+                // Remove non-active enrollments first to satisfy FK enrollments.schedule_id -> schedules.id.
+                $stmt = $conn->prepare("DELETE FROM enrollments WHERE schedule_id = ? AND status NOT IN ('approved', 'enrolled')");
+                $stmt->execute([$schedule_id]);
+
+                $stmt = $conn->prepare('DELETE FROM schedules WHERE id = ?');
+                $stmt->execute([$schedule_id]);
+
+                if ($stmt->rowCount() === 0) {
+                    throw new Exception('Class record was not found or already deleted.');
+                }
+
+                $conn->commit();
+            } catch (Throwable $e) {
+                if ($conn->inTransaction()) {
+                    $conn->rollBack();
+                }
+                throw $e;
+            }
 
             $_SESSION['success'] = 'Class deleted successfully';
             break;
@@ -410,8 +457,38 @@ try {
 } catch (PDOException $e) {
     $message = $e->getMessage();
     $driverCode = is_array($e->errorInfo ?? null) ? ($e->errorInfo[1] ?? null) : null;
+    if ((int)$driverCode === 1451) {
+        $message = 'Cannot delete this class because it is still referenced by enrollments. Try force delete to remove related enrollments first.';
+    }
     if ((string)$e->getCode() === '23000' || (int)$driverCode === 1452) {
-        $message = 'Unable to save class because one or more selected references are invalid. Please refresh and reselect Course, Subject, Instructor, and Classroom.';
+        $invalid_refs = [];
+
+        $course_id = (int)($_POST['course_id'] ?? 0);
+        $instructor_id = (int)($_POST['instructor_id'] ?? 0);
+        $classroom_id = (int)($_POST['classroom_id'] ?? 0);
+        $subject_id = (int)($_POST['subject_id'] ?? 0);
+
+        if ($course_id > 0 && !record_exists($conn, 'courses', $course_id)) {
+            $invalid_refs[] = 'Course';
+        }
+        if ($instructor_id > 0 && !record_exists($conn, 'users', $instructor_id)) {
+            $invalid_refs[] = 'Instructor';
+        }
+        if ($instructor_id > 0 && record_exists($conn, 'users', $instructor_id) && !is_instructor_user($conn, $instructor_id)) {
+            $invalid_refs[] = 'Instructor (role mismatch)';
+        }
+        if ($classroom_id > 0 && !record_exists($conn, 'classrooms', $classroom_id)) {
+            $invalid_refs[] = 'Classroom';
+        }
+        if ($subject_id > 0 && !record_exists($conn, 'subjects', $subject_id)) {
+            $invalid_refs[] = 'Subject';
+        }
+
+        if (!empty($invalid_refs)) {
+            $message = 'Unable to save class because these references are invalid: ' . implode(', ', $invalid_refs) . '. Please refresh and reselect.';
+        } else {
+            $message = 'Unable to save class because one or more selected references are invalid. Please refresh and reselect Course, Subject, Instructor, and Classroom.';
+        }
     }
     $_SESSION['error'] = $message;
     header('Location: classes.php');

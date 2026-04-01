@@ -252,19 +252,14 @@ function status_badge_classes($status) {
                                             <div class="text-sm font-semibold text-slate-900">Notifications</div>
                                             <div class="text-xs text-slate-500">Updates and reminders</div>
                                         </div>
-                                        <div class="flex items-center gap-2">
-                                            <button id="notifMarkRead" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                                                <i class="bi bi-check2"></i>
-                                                <span>Mark as read</span>
-                                            </button>
-                                            <button id="notifDelete" type="button" class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white h-8 w-8 text-slate-700 hover:bg-slate-50" aria-label="Delete notifications">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
+                                        <div class="flex items-center gap-3">
+                                            <button id="notifMarkRead" type="button" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Mark as read</button>
+                                            <button id="notifDelete" type="button" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Delete</button>
                                         </div>
                                     </div>
-                                    <div class="p-4">
+                                    <div class="p-3">
                                         <?php if (empty($notif_items)): ?>
-                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
                                                 No new notifications.
                                             </div>
                                         <?php else: ?>
@@ -272,7 +267,7 @@ function status_badge_classes($status) {
                                                 <?php foreach ($notif_items as $it): ?>
                                                     <a href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
                                                         <div class="flex items-start gap-3">
-                                                            <div class="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                                                            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                                                                 <i class="bi <?php echo htmlspecialchars($it['icon'] ?? 'bi-bell'); ?>"></i>
                                                             </div>
                                                             <div class="min-w-0">
@@ -856,6 +851,8 @@ function status_badge_classes($status) {
             window.deleteClass = function (scheduleId) {
                 const hard = confirm('Are you sure you want to delete this class? This action cannot be undone.');
                 if (hard) {
+                    const force = confirm('Use FORCE delete?\n\nOK: Remove this class and all its enrollments.\nCancel: Regular delete (will fail if active enrollments exist).');
+
                     const form = document.createElement('form');
                     form.method = 'POST';
                     form.action = 'process_class.php';
@@ -863,9 +860,7 @@ function status_badge_classes($status) {
                     const actionInput = document.createElement('input');
                     actionInput.type = 'hidden';
                     actionInput.name = 'action';
-                    // Default: regular delete (blocked if there are active enrollments).
-                    // If blocked, user can re-try via a manual force delete option.
-                    actionInput.value = 'delete';
+                    actionInput.value = force ? 'force_delete' : 'delete';
 
                     const idInput = document.createElement('input');
                     idInput.type = 'hidden';

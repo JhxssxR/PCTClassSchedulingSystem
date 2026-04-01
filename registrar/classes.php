@@ -591,6 +591,8 @@ require_once __DIR__ . '/includes/layout_top.php';
 
         window.deleteClass = function (scheduleId) {
             if (confirm('Are you sure you want to delete this class? This action cannot be undone.')) {
+                const force = confirm('Use FORCE delete?\n\nOK: Remove this class and all its enrollments.\nCancel: Regular delete (will fail if active enrollments exist).');
+
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = 'process_class.php';
@@ -598,7 +600,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 const actionInput = document.createElement('input');
                 actionInput.type = 'hidden';
                 actionInput.name = 'action';
-                actionInput.value = 'delete';
+                actionInput.value = force ? 'force_delete' : 'delete';
 
                 const idInput = document.createElement('input');
                 idInput.type = 'hidden';

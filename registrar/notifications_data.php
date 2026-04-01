@@ -10,6 +10,7 @@ if (!isset($conn) || !($conn instanceof PDO)) {
     $notif_items = [];
     $notif_has_new = false;
     $notif_seen_at = $_SESSION['registrar_notif_seen_at'] ?? null;
+    $notif_new_registrars = 0;
     $notif_new_instructors = 0;
     $notif_new_students = 0;
     $notif_new_enrollments = 0;
@@ -109,6 +110,7 @@ $notif_list_cutoff_at = !empty($notif_cleared_at) ? (string)$notif_cleared_at : 
 
 $notif_items = [];
 $notif_has_new = false;
+$notif_new_registrars = 0;
 $notif_new_instructors = 0;
 $notif_new_students = 0;
 $notif_new_enrollments = 0;
@@ -135,8 +137,12 @@ try {
         $users_has_created_at = true;
     }
 
-    // New instructors/students since cutoff
+    // New registrars/instructors/students since cutoff
     if ($users_has_created_at) {
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE role = 'registrar' AND created_at > :cutoff_at AND created_at <= :now_ts");
+        $stmt->execute(['cutoff_at' => $notif_unread_cutoff_at, 'now_ts' => $notif_now]);
+        $notif_new_registrars = (int)$stmt->fetchColumn();
+
         $stmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE role = 'instructor' AND created_at > :cutoff_at AND created_at <= :now_ts");
         $stmt->execute(['cutoff_at' => $notif_unread_cutoff_at, 'now_ts' => $notif_now]);
         $notif_new_instructors = (int)$stmt->fetchColumn();
@@ -146,10 +152,23 @@ try {
         $notif_new_students = (int)$stmt->fetchColumn();
     }
 
-    // Latest instructors/students for list display (independent of enrollments)
+    // Latest registrars/instructors/students for list display (independent of enrollments)
+    $latest_registrars = [];
     $latest_instructors = [];
     $latest_students = [];
     if ($users_has_created_at) {
+        $stmt = $conn->prepare(" 
+            SELECT id, first_name, last_name, created_at
+            FROM users
+            WHERE role = 'registrar'
+              AND created_at > :cutoff_at
+              AND created_at <= :now_ts
+            ORDER BY created_at DESC
+            LIMIT 5
+        ");
+                $stmt->execute(['cutoff_at' => $notif_list_cutoff_at, 'now_ts' => $notif_now]);
+        $latest_registrars = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
         $stmt = $conn->prepare("
             SELECT id, first_name, last_name, created_at
             FROM users
@@ -255,6 +274,17 @@ try {
         }
     }
 
+    foreach ($latest_registrars as $r) {
+        $name = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
+        $notif_items[] = [
+            'ts' => (string)($r['created_at'] ?? ''),
+            'icon' => 'bi-person-badge',
+            'title' => ($name !== '' ? $name : 'Registrar') . ' added',
+            'subtitle' => 'New registrar account',
+            'href' => 'dashboard.php',
+        ];
+    }
+
     foreach ($latest_students as $r) {
         $name = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
         $notif_items[] = [
@@ -289,21 +319,34 @@ try {
         $s_cols = [];
     }
 
-    if (isset($s_cols['created_at'])) {
-        $stmt = $conn->prepare("SELECT COUNT(*) FROM schedules WHERE created_at > :cutoff_at AND created_at <= :now_ts");
+    $schedule_ts_expr = null;
+    if (isset($s_cols['updated_at']) && isset($s_cols['created_at'])) {
+        $schedule_ts_expr = 'COALESCE(s.updated_at, s.created_at)';
+    } elseif (isset($s_cols['updated_at'])) {
+        $schedule_ts_expr = 's.updated_at';
+    } elseif (isset($s_cols['created_at'])) {
+        $schedule_ts_expr = 's.created_at';
+    }
+
+    if ($schedule_ts_expr !== null) {
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM schedules s WHERE $schedule_ts_expr > :cutoff_at AND $schedule_ts_expr <= :now_ts");
         $stmt->execute(['cutoff_at' => $notif_unread_cutoff_at, 'now_ts' => $notif_now]);
         $notif_new_classes = (int)$stmt->fetchColumn();
 
         $select_end = isset($s_cols['end_time']) ? ', s.end_time' : '';
-        $stmt = $conn->prepare("
-            SELECT s.id, s.created_at, s.day_of_week, s.start_time$select_end,
+        $select_created = isset($s_cols['created_at']) ? ', s.created_at' : ', NULL AS created_at';
+        $select_updated = isset($s_cols['updated_at']) ? ', s.updated_at' : ', NULL AS updated_at';
+        $stmt = $conn->prepare(" 
+            SELECT s.id, $schedule_ts_expr AS event_ts, s.day_of_week, s.start_time$select_end,
                    c.course_code, c.course_name,
                    r.room_number
+                   $select_created
+                   $select_updated
             FROM schedules s
             JOIN courses c ON c.id = s.course_id
             JOIN classrooms r ON r.id = s.classroom_id
-            WHERE s.created_at > :cutoff_at AND s.created_at <= :now_ts
-            ORDER BY s.created_at DESC
+            WHERE $schedule_ts_expr > :cutoff_at AND $schedule_ts_expr <= :now_ts
+            ORDER BY event_ts DESC
             LIMIT 5
         ");
         $stmt->execute(['cutoff_at' => $notif_list_cutoff_at, 'now_ts' => $notif_now]);
@@ -319,11 +362,16 @@ try {
             if ($extra !== '') {
                 $sub = ($sub !== '' ? ($sub . ' • ' . $extra) : $extra);
             }
+
+            $created_ts = (string)($r['created_at'] ?? '');
+            $updated_ts = (string)($r['updated_at'] ?? '');
+            $is_updated = ($updated_ts !== '' && $created_ts !== '' && (strtotime($updated_ts) ?: 0) > ((strtotime($created_ts) ?: 0) + 1));
+
             $notif_items[] = [
-                'ts' => (string)($r['created_at'] ?? ''),
-                'icon' => 'bi-calendar-plus',
-                'title' => 'Class added',
-                'subtitle' => $sub !== '' ? $sub : 'New class schedule',
+                'ts' => (string)($r['event_ts'] ?? ''),
+                'icon' => $is_updated ? 'bi-pencil-square' : 'bi-calendar-plus',
+                'title' => $is_updated ? 'Class updated' : 'Class added',
+                'subtitle' => $sub !== '' ? $sub : 'Class schedule change',
                 'href' => 'classes.php',
             ];
         }
@@ -414,6 +462,7 @@ try {
 
     $any_unread = (
         $notif_new_enrollments > 0 ||
+        $notif_new_registrars > 0 ||
         $notif_new_instructors > 0 ||
         $notif_new_students > 0 ||
         $notif_new_classes > 0 ||
@@ -429,6 +478,15 @@ try {
                 'title' => $notif_new_enrollments . ' new enrollment(s)',
                 'subtitle' => 'Review enrollments',
                 'href' => 'manage_enrollments.php',
+            ];
+        }
+        if ($notif_new_registrars > 0) {
+            $notif_items[] = [
+                'ts' => $notif_now,
+                'icon' => 'bi-person-badge',
+                'title' => $notif_new_registrars . ' new registrar(s)',
+                'subtitle' => 'New registrar accounts',
+                'href' => 'dashboard.php',
             ];
         }
         if ($notif_new_instructors > 0) {
@@ -453,7 +511,7 @@ try {
             $notif_items[] = [
                 'ts' => $notif_now,
                 'icon' => 'bi-calendar-plus',
-                'title' => $notif_new_classes . ' new class(es)',
+                'title' => $notif_new_classes . ' class change(s)',
                 'subtitle' => 'Review classes',
                 'href' => 'classes.php',
             ];
@@ -478,12 +536,13 @@ try {
         }
     }
 
-    $notif_unread_total = (int)$notif_new_instructors + (int)$notif_new_students + (int)$notif_new_enrollments + (int)$notif_new_classes + (int)$notif_new_courses + (int)$notif_new_rooms;
+    $notif_unread_total = (int)$notif_new_registrars + (int)$notif_new_instructors + (int)$notif_new_students + (int)$notif_new_enrollments + (int)$notif_new_classes + (int)$notif_new_courses + (int)$notif_new_rooms;
     $notif_badge_label = $notif_unread_total > 99 ? '99+' : (string)$notif_unread_total;
     $notif_has_new = ($notif_unread_total > 0);
 } catch (Throwable $e) {
     $notif_items = [];
     $notif_has_new = false;
+    $notif_new_registrars = 0;
     $notif_new_instructors = 0;
     $notif_new_students = 0;
     $notif_new_enrollments = 0;

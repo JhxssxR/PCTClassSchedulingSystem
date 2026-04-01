@@ -382,15 +382,10 @@ $mini_trend_points = [
                                         <div class="text-sm font-semibold text-slate-900">Notifications</div>
                                         <div class="text-xs text-slate-500">Updates and reminders</div>
                                     </div>
-                                    <div class="flex items-center gap-2">
-                                        <button id="notifMarkRead" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                                            <i class="bi bi-check2"></i>
-                                            <span>Mark as read</span>
-                                        </button>
-                                        <button id="notifDelete" type="button" class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white h-8 w-8 text-slate-700 hover:bg-slate-50" aria-label="Delete notifications">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </div>
+                                    <div class="flex items-center gap-3">
+                                            <button id="notifMarkRead" type="button" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Mark as read</button>
+                                            <button id="notifDelete" type="button" class="text-xs font-semibold text-rose-600 hover:text-rose-700">Delete</button>
+                                        </div>
                                 </div>
                                 <div class="p-3">
                                     <div class="mb-2 flex justify-end gap-1 <?php echo empty($notif_items) ? 'hidden' : ''; ?>">
@@ -404,12 +399,12 @@ $mini_trend_points = [
 
                                     <div id="notifList" class="max-h-80 overflow-auto thin-scrollbar pr-1 space-y-2">
                                         <?php if (empty($notif_items)): ?>
-                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No new notifications.</div>
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">No new notifications.</div>
                                         <?php else: ?>
                                             <?php foreach ($notif_items as $it): ?>
                                                 <a href="<?php echo htmlspecialchars($it['href'] ?? '#'); ?>" class="block rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50">
                                                     <div class="flex items-start gap-3">
-                                                        <div class="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                                                        <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                                                             <i class="bi <?php echo htmlspecialchars($it['icon'] ?? 'bi-bell'); ?>"></i>
                                                         </div>
                                                         <div class="min-w-0">
