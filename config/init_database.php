@@ -61,7 +61,7 @@ try {
         room_number VARCHAR(20) UNIQUE NOT NULL,
         capacity INT NOT NULL,
         building VARCHAR(50) NOT NULL,
-        room_type ENUM('lecture', 'laboratory', 'conference') NOT NULL,
+        room_type ENUM('lecture', 'comlab', 'laboratory', 'conference') NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )";
 

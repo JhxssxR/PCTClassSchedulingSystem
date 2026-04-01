@@ -20,13 +20,16 @@ function table_columns(PDO $conn, string $table): array {
 function normalize_room_type(string $room_type): string {
     $room_type = strtolower(trim($room_type));
     // Map UI-friendly values to known enums.
-    if ($room_type === 'computer' || $room_type === 'computer lab' || $room_type === 'lab') {
+    if ($room_type === 'computer' || $room_type === 'computer lab' || $room_type === 'comlab') {
+        return 'comlab';
+    }
+    if ($room_type === 'lab') {
         return 'laboratory';
     }
     if ($room_type === 'seminar' || $room_type === 'seminar hall') {
         return 'conference';
     }
-    if (!in_array($room_type, ['lecture', 'laboratory', 'conference'], true)) {
+    if (!in_array($room_type, ['lecture', 'comlab', 'laboratory', 'conference'], true)) {
         return 'lecture';
     }
     return $room_type;

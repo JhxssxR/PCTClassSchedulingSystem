@@ -101,7 +101,7 @@ $tables = [
         room_number VARCHAR(20) UNIQUE NOT NULL,
         capacity INT NOT NULL DEFAULT 30,
         building VARCHAR(50) NOT NULL DEFAULT 'Main Building',
-        room_type ENUM('lecture', 'laboratory', 'conference') NOT NULL DEFAULT 'lecture',
+        room_type ENUM('lecture', 'comlab', 'laboratory', 'conference') NOT NULL DEFAULT 'lecture',
         status ENUM('active', 'maintenance', 'inactive') NOT NULL DEFAULT 'active',
         created_by INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -213,6 +213,13 @@ try {
 } catch (PDOException $e) {
     // Ignore if permissions/schema prevent alteration.
     error_log("Schema repair warning (users.role): " . $e->getMessage());
+}
+
+try {
+    $conn->exec("ALTER TABLE classrooms MODIFY COLUMN room_type ENUM('lecture', 'comlab', 'laboratory', 'conference') NOT NULL DEFAULT 'lecture'");
+} catch (PDOException $e) {
+    // Ignore if permissions/schema prevent alteration.
+    error_log("Schema repair warning (classrooms.room_type): " . $e->getMessage());
 }
 
 // Repair any users with missing/blank roles.

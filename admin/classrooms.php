@@ -60,7 +60,8 @@ function time_range_label($start, $end) {
 function room_type_label($room_type) {
     $room_type = strtolower(trim((string)$room_type));
     if ($room_type === 'lecture') return 'Lecture Room';
-    if ($room_type === 'laboratory' || $room_type === 'computer') return 'Computer Lab';
+    if ($room_type === 'comlab' || $room_type === 'computer') return 'Comlab';
+    if ($room_type === 'laboratory') return 'Laboratory';
     if ($room_type === 'conference') return 'Seminar Hall';
     return ucfirst($room_type);
 }
@@ -68,7 +69,8 @@ function room_type_label($room_type) {
 function room_type_pill_classes($room_type) {
     $room_type = strtolower(trim((string)$room_type));
     if ($room_type === 'lecture') return 'bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200';
-    if ($room_type === 'laboratory' || $room_type === 'computer') return 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200';
+    if ($room_type === 'comlab' || $room_type === 'computer') return 'bg-cyan-50 text-cyan-700 ring-1 ring-inset ring-cyan-200';
+    if ($room_type === 'laboratory') return 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200';
     if ($room_type === 'conference') return 'bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200';
     return 'bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200';
 }
@@ -331,10 +333,22 @@ foreach ($classrooms as $r) {
                             <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
                             <input id="roomSearch" type="text" placeholder="Search rooms…" class="w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-emerald-200" />
                         </div>
+                        <div class="w-full sm:w-56">
+                            <select id="floorFilter" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200">
+                                <option value="all">All Floors</option>
+                                <option value="1">1st Floor</option>
+                                <option value="2">2nd Floor</option>
+                                <option value="3">3rd Floor</option>
+                                <option value="4">4th Floor</option>
+                                <option value="5">5th Floor</option>
+                                <option value="6">6th Floor</option>
+                                <option value="7">7th Floor</option>
+                            </select>
+                        </div>
                         <div class="flex flex-wrap gap-2">
                             <button type="button" class="room-pill px-3 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-emerald-600 text-white" data-type="all">All</button>
                             <button type="button" class="room-pill px-3 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-type="lecture">Lecture Room</button>
-                            <button type="button" class="room-pill px-3 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-type="computer">Computer Lab</button>
+                            <button type="button" class="room-pill px-3 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-type="comlab">Comlab</button>
                             <button type="button" class="room-pill px-3 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-type="conference">Seminar Hall</button>
                             <button type="button" class="room-pill px-3 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-type="laboratory">Laboratory</button>
                         </div>
@@ -348,9 +362,12 @@ foreach ($classrooms as $r) {
                             [$badge_label, $badge_classes] = state_badge($state);
                             $top = ($state === 'available') ? 'bg-emerald-500' : (($state === 'occupied') ? 'bg-rose-500' : 'bg-amber-500');
                             $type_key = strtolower(trim((string)($room['room_type'] ?? '')));
+                            $room_no_raw = trim((string)($room['room_number'] ?? ''));
+                            $room_no_int = ctype_digit($room_no_raw) ? (int)$room_no_raw : 0;
+                            $floor_key = ($room_no_int >= 100 && $room_no_int <= 799) ? (string)intdiv($room_no_int, 100) : 'unknown';
                             $search = strtolower(trim((string)($room['room_number'] ?? '') . ' ' . (string)($room['building'] ?? '') . ' ' . room_type_label($room['room_type'] ?? '') ));
                         ?>
-                        <div class="room-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden" data-type="<?php echo htmlspecialchars($type_key); ?>" data-search="<?php echo htmlspecialchars($search); ?>">
+                        <div class="room-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden" data-type="<?php echo htmlspecialchars($type_key); ?>" data-floor="<?php echo htmlspecialchars($floor_key); ?>" data-search="<?php echo htmlspecialchars($search); ?>">
                             <div class="h-1.5 <?php echo $top; ?>"></div>
                             <div class="p-5">
                                 <div class="flex items-start justify-between gap-3">
@@ -395,6 +412,15 @@ foreach ($classrooms as $r) {
                         </div>
                     <?php endforeach; ?>
                 </div>
+
+                <div class="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div id="roomPaginationInfo" class="text-sm text-slate-500">Showing 0-0 of 0 rooms</div>
+                    <div class="inline-flex items-center gap-2">
+                        <button id="roomPrevPage" type="button" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Previous</button>
+                        <div id="roomPageLabel" class="min-w-28 text-center text-sm font-semibold text-slate-700">Page 1 of 1</div>
+                        <button id="roomNextPage" type="button" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Next</button>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -426,7 +452,7 @@ foreach ($classrooms as $r) {
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Room type</label>
                             <select name="room_type" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                                 <option value="lecture">Lecture Room</option>
-                                <option value="computer">Computer Lab</option>
+                                <option value="comlab">Comlab</option>
                                 <option value="conference">Seminar Hall</option>
                                 <option value="laboratory">Laboratory</option>
                             </select>
@@ -478,7 +504,7 @@ foreach ($classrooms as $r) {
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Room type</label>
                             <select name="room_type" id="edit_room_type" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                                 <option value="lecture">Lecture Room</option>
-                                <option value="computer">Computer Lab</option>
+                                <option value="comlab">Comlab</option>
                                 <option value="conference">Seminar Hall</option>
                                 <option value="laboratory">Laboratory</option>
                             </select>
@@ -612,7 +638,8 @@ foreach ($classrooms as $r) {
                 document.getElementById('edit_classroom_id').value = roomData.id;
                 document.getElementById('edit_room_number').value = roomData.room_number || '';
                 document.getElementById('edit_capacity').value = roomData.capacity || 30;
-                document.getElementById('edit_room_type').value = roomData.room_type || 'lecture';
+                const roomType = (roomData.room_type || 'lecture').toLowerCase();
+                document.getElementById('edit_room_type').value = (roomType === 'computer') ? 'comlab' : roomType;
                 document.getElementById('edit_status').value = roomData.status || 'active';
                 openModal('editRoomModal');
             }
@@ -641,25 +668,107 @@ foreach ($classrooms as $r) {
             }
 
             const searchInput = document.getElementById('roomSearch');
+            const floorFilter = document.getElementById('floorFilter');
             const pills = Array.from(document.querySelectorAll('.room-pill'));
             const cards = Array.from(document.querySelectorAll('.room-card'));
+            const prevPageBtn = document.getElementById('roomPrevPage');
+            const nextPageBtn = document.getElementById('roomNextPage');
+            const pageLabel = document.getElementById('roomPageLabel');
+            const pageInfo = document.getElementById('roomPaginationInfo');
             let activeType = 'all';
+            let activeFloor = 'all';
+            let currentPage = 1;
+            const pageSize = 6;
+
+            function updatePaginationControls(totalItems, totalPages, startIndex, endIndex) {
+                if (pageLabel) {
+                    pageLabel.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+                }
+                if (pageInfo) {
+                    const startItem = totalItems === 0 ? 0 : startIndex + 1;
+                    const endItem = totalItems === 0 ? 0 : Math.min(endIndex, totalItems);
+                    pageInfo.textContent = 'Showing ' + startItem + '-' + endItem + ' of ' + totalItems + ' rooms';
+                }
+
+                if (prevPageBtn) {
+                    const disabled = currentPage <= 1;
+                    prevPageBtn.disabled = disabled;
+                    prevPageBtn.classList.toggle('opacity-50', disabled);
+                    prevPageBtn.classList.toggle('cursor-not-allowed', disabled);
+                }
+                if (nextPageBtn) {
+                    const disabled = currentPage >= totalPages;
+                    nextPageBtn.disabled = disabled;
+                    nextPageBtn.classList.toggle('opacity-50', disabled);
+                    nextPageBtn.classList.toggle('cursor-not-allowed', disabled);
+                }
+            }
 
             function applyFilters() {
                 const q = (searchInput?.value || '').trim().toLowerCase();
+                const filteredCards = [];
+
                 cards.forEach(function (card) {
                     const type = (card.getAttribute('data-type') || '').toLowerCase();
+                    const floor = (card.getAttribute('data-floor') || 'unknown').toLowerCase();
                     const hay = (card.getAttribute('data-search') || '').toLowerCase();
-                    const typeOk = (activeType === 'all') || (type === activeType) || (activeType === 'computer' && type === 'laboratory');
+                    const typeOk = (activeType === 'all') || (type === activeType) || (activeType === 'comlab' && type === 'computer');
+                    const floorOk = (activeFloor === 'all') || (floor === activeFloor);
                     const searchOk = (!q) || hay.includes(q);
-                    card.style.display = (typeOk && searchOk) ? '' : 'none';
+                    const showByFilter = typeOk && floorOk && searchOk;
+                    if (showByFilter) {
+                        filteredCards.push(card);
+                    }
                 });
+
+                const totalItems = filteredCards.length;
+                const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+                if (currentPage > totalPages) {
+                    currentPage = totalPages;
+                }
+
+                const startIndex = (currentPage - 1) * pageSize;
+                const endIndex = startIndex + pageSize;
+
+                cards.forEach(function (card) {
+                    card.style.display = 'none';
+                });
+
+                filteredCards.forEach(function (card, index) {
+                    if (index >= startIndex && index < endIndex) {
+                        card.style.display = '';
+                    }
+                });
+
+                updatePaginationControls(totalItems, totalPages, startIndex, endIndex);
             }
 
-            searchInput?.addEventListener('input', applyFilters);
+            searchInput?.addEventListener('input', function () {
+                currentPage = 1;
+                applyFilters();
+            });
+
+            floorFilter?.addEventListener('change', function () {
+                activeFloor = (floorFilter.value || 'all').toLowerCase();
+                currentPage = 1;
+                applyFilters();
+            });
+
+            prevPageBtn?.addEventListener('click', function () {
+                if (currentPage <= 1) return;
+                currentPage -= 1;
+                applyFilters();
+            });
+
+            nextPageBtn?.addEventListener('click', function () {
+                currentPage += 1;
+                applyFilters();
+            });
+
             pills.forEach(function (p) {
                 p.addEventListener('click', function () {
                     activeType = p.getAttribute('data-type') || 'all';
+                    currentPage = 1;
                     pills.forEach(function (x) {
                         x.classList.remove('bg-emerald-600', 'text-white');
                         x.classList.add('bg-white', 'text-slate-700');
