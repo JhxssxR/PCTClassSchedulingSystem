@@ -1,2 +1,0 @@
--- Update the day_of_week column to include Sunday and Monday-Friday
-ALTER TABLE schedules MODIFY COLUMN day_of_week ENUM('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Monday-Friday') NOT NULL; 
