@@ -331,13 +331,13 @@ $trend_small_paths = [
         ];
         foreach ($mini_cards as $c):
         ?>
-            <div class="rounded-3xl border border-slate-200 bg-white p-4">
+            <div class="group rounded-3xl border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-1 hover:shadow-xl hover:border-slate-300 cursor-pointer">
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <div class="text-xs text-slate-500"><?php echo htmlspecialchars($c['label']); ?></div>
                         <div class="mt-1 text-2xl font-semibold"><?php echo number_format($c['value']); ?></div>
                     </div>
-                    <div class="h-9 w-9 rounded-2xl <?php echo $c['bg']; ?> flex items-center justify-center">
+                    <div class="h-9 w-9 rounded-2xl <?php echo $c['bg']; ?> flex items-center justify-center transition-transform duration-200 group-hover:scale-110">
                         <span class="<?php echo $c['accent']; ?>">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
                         </span>

@@ -324,7 +324,6 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Course</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Year</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">GPA</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
             </thead>
@@ -341,6 +340,7 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                         $status_label = student_status_label($status);
                         $status_classes = student_status_classes($status);
                         $email = (string)($s['email'] ?? '');
+                        $year_level = (int)($s['year_level'] ?? 0);
                         $courses_str = (string)($s['enrolled_courses'] ?? '');
                         $course_codes = array_values(array_filter(array_map('trim', explode(',', $courses_str))));
                         $primary_course = !empty($course_codes) ? $course_codes[0] : '—';
@@ -369,13 +369,12 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                                 <span class="text-sm text-slate-500">—</span>
                             <?php endif; ?>
                         </td>
-                        <td class="px-4 py-3 text-sm text-slate-600">—</td>
+                        <td class="px-4 py-3 text-sm text-slate-600"><?php echo ($year_level >= 1 && $year_level <= 4) ? ('Year ' . $year_level) : '—'; ?></td>
                         <td class="px-4 py-3">
                             <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold <?php echo htmlspecialchars($status_classes); ?>">
                                 <?php echo htmlspecialchars($status_label); ?>
                             </span>
                         </td>
-                        <td class="px-4 py-3 text-sm text-slate-600">—</td>
                         <td class="px-4 py-3">
                             <div class="flex items-center justify-end gap-2">
                                 <a href="../admin/enrollments.php?student_id=<?php echo (int)$s['id']; ?>" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="View enrollments" aria-label="View">
@@ -394,7 +393,7 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
 
                 <?php if (empty($students)): ?>
                     <tr>
-                        <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">No students found</td>
+                        <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">No students found</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
