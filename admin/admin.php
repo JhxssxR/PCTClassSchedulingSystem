@@ -48,7 +48,8 @@ try {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8"/>
+    <link rel="icon" type="image/png" href="/PCTClassSchedulingSystem/pctlogo.png">
+<meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1" name="viewport"/>
     <meta name="description" content="Classroom Scheduling System - Administrative Dashboard"/>
     <title>Super Admin Dashboard - Enhanced</title>
