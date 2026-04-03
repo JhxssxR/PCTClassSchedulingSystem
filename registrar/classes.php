@@ -327,12 +327,21 @@ require_once __DIR__ . '/includes/layout_top.php';
 
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Classroom</label>
-                        <select name="classroom_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                        <select name="classroom_id" id="add_classroom_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                             <option value="">Select room</option>
                             <?php foreach ($classrooms as $r): ?>
-                                <option value="<?php echo (int)$r['id']; ?>"><?php echo htmlspecialchars($r['room_number'] ?? ''); ?></option>
+                                <option value="<?php echo (int)$r['id']; ?>" data-room-type="<?php echo htmlspecialchars(strtolower((string)($r['room_type'] ?? 'lecture'))); ?>"><?php echo htmlspecialchars($r['room_number'] ?? ''); ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <div class="mt-2">
+                            <div id="addRoomTypeText" class="mb-2 text-xs text-slate-500">No room selected</div>
+                            <div class="flex flex-wrap gap-2">
+                                <span data-room-type-indicator="lecture" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Lecture Room</span>
+                                <span data-room-type-indicator="comlab" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Comlab</span>
+                                <span data-room-type-indicator="conference" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Seminar Hall</span>
+                                <span data-room-type-indicator="laboratory" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Laboratory</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div>
@@ -555,9 +564,51 @@ require_once __DIR__ . '/includes/layout_top.php';
 
         const addYear = document.getElementById('add_year_level');
         const addSubj = document.getElementById('add_subject_id');
+        const addClassroom = document.getElementById('add_classroom_id');
+        const addRoomTypeText = document.getElementById('addRoomTypeText');
+        const addRoomTypePills = Array.from(document.querySelectorAll('[data-room-type-indicator]'));
+
+        function normalizeRoomType(type) {
+            const t = String(type || '').toLowerCase().trim();
+            if (t === 'computer') return 'comlab';
+            return t;
+        }
+
+        function roomTypeLabel(type) {
+            if (type === 'lecture') return 'Lecture Room';
+            if (type === 'comlab') return 'Comlab';
+            if (type === 'conference') return 'Seminar Hall';
+            if (type === 'laboratory') return 'Laboratory';
+            return 'Unknown';
+        }
+
+        function updateAddRoomTypeIndicator() {
+            const selectedOption = addClassroom?.options?.[addClassroom.selectedIndex] || null;
+            const selectedType = normalizeRoomType(selectedOption?.getAttribute('data-room-type') || '');
+
+            addRoomTypePills.forEach(function (pill) {
+                const pillType = pill.getAttribute('data-room-type-indicator') || '';
+                const isActive = selectedType !== '' && pillType === selectedType;
+                pill.classList.toggle('bg-emerald-600', isActive);
+                pill.classList.toggle('text-white', isActive);
+                pill.classList.toggle('border-emerald-600', isActive);
+                pill.classList.toggle('bg-white', !isActive);
+                pill.classList.toggle('text-slate-700', !isActive);
+                pill.classList.toggle('border-slate-200', !isActive);
+            });
+
+            if (addRoomTypeText) {
+                addRoomTypeText.textContent = selectedType === ''
+                    ? 'No room selected'
+                    : ('Selected type: ' + roomTypeLabel(selectedType));
+            }
+        }
+
         addYear?.addEventListener('change', function () {
             filterSubjectsByYear(addSubj, addYear.value);
         });
+        addClassroom?.addEventListener('change', updateAddRoomTypeIndicator);
+        updateAddRoomTypeIndicator();
 
         const editYear = document.getElementById('edit_year_level');
         const editSubj = document.getElementById('edit_subject_id');

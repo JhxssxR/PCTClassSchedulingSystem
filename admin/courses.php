@@ -285,11 +285,7 @@ $card_colors = [
                             </div>
 
                             <div class="p-5">
-                                <div class="grid grid-cols-3 gap-3">
-                                    <div class="rounded-xl bg-slate-50 border border-slate-200 px-3 py-3 text-center">
-                                        <div class="text-lg font-semibold text-slate-900"><?php echo htmlspecialchars($course['units'] ?? '—'); ?></div>
-                                        <div class="text-xs text-slate-500">Units</div>
-                                    </div>
+                                <div class="grid grid-cols-2 gap-3">
                                     <div class="rounded-xl bg-slate-50 border border-slate-200 px-3 py-3 text-center">
                                         <div class="text-lg font-semibold text-slate-900"><?php echo (int)($course['enrollment_count'] ?? 0); ?></div>
                                         <div class="text-xs text-slate-500">Students</div>
@@ -369,8 +365,7 @@ $card_colors = [
                             <input type="text" name="course_name" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Units</label>
-                            <input type="number" name="units" min="1" max="6" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                            <input type="hidden" name="units" value="3">
                         </div>
                     </div>
                     <div class="mt-5 flex items-center justify-end gap-3">
@@ -407,8 +402,7 @@ $card_colors = [
                             <input type="text" name="course_name" id="edit_course_name" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Units</label>
-                            <input type="number" name="units" id="edit_units" min="1" max="6" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                            <input type="hidden" name="units" id="edit_units" value="3">
                         </div>
                     </div>
                     <div class="mt-5 flex items-center justify-end gap-3">
@@ -530,7 +524,7 @@ $card_colors = [
                 document.getElementById('edit_course_id').value = courseData.id;
                 document.getElementById('edit_course_code').value = courseData.course_code || '';
                 document.getElementById('edit_course_name').value = courseData.course_name || '';
-                document.getElementById('edit_units').value = courseData.units || '';
+                document.getElementById('edit_units').value = courseData.units || courseData.credits || 3;
                 openModal('editCourseModal');
             }
 
