@@ -83,6 +83,26 @@ try {
         $schedule_end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
     }
 
+    $subjects_table_exists = false;
+    try {
+        $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+        $subjects_exists_stmt->execute();
+        $subjects_table_exists = ((int)$subjects_exists_stmt->fetchColumn() > 0);
+    } catch (Throwable $e) {
+        $subjects_table_exists = false;
+    }
+    $subjects_enabled = ($subjects_table_exists && student_notif_has_column($conn, 'schedules', 'subject_id'));
+
+    $subject_code_expr = $subjects_enabled
+        ? "COALESCE(subj.subject_code, 'N/A')"
+        : "COALESCE(c.course_code, 'N/A')";
+    $subject_name_expr = $subjects_enabled
+        ? "COALESCE(subj.subject_name, 'Untitled Subject')"
+        : "COALESCE(c.course_name, 'Untitled Subject')";
+    $subject_join_sql = $subjects_enabled
+        ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
+        : '';
+
     $enroll_ts_expr = 'NULL';
     if (count($enroll_ts_candidates) === 1) {
         $enroll_ts_expr = $enroll_ts_candidates[0];
@@ -104,14 +124,15 @@ try {
                 s.day_of_week,
                 TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
                 TIME_FORMAT({$schedule_end_expr}, '%H:%i:%s') AS end_time,
-                c.course_code,
-                c.course_name,
+                {$subject_code_expr} AS subject_code,
+                {$subject_name_expr} AS subject_name,
                 COALESCE(cr.room_number, 'TBA') AS room_number,
                 COALESCE(i.first_name, '') AS instructor_first,
                 COALESCE(i.last_name, '') AS instructor_last
                         FROM enrollments e
                         LEFT JOIN schedules s ON s.id = e.schedule_id
             LEFT JOIN courses c ON c.id = s.course_id
+            {$subject_join_sql}
             LEFT JOIN classrooms cr ON cr.id = s.classroom_id
             LEFT JOIN users i ON i.id = s.instructor_id
             WHERE e.student_id = :sid
@@ -133,7 +154,7 @@ try {
             }
 
             $item_ts = $event_ts !== '' ? $event_ts : $notif_now;
-            $course = trim(($r['course_code'] ?? '') . ' — ' . ($r['course_name'] ?? ''));
+            $subject = trim(($r['subject_code'] ?? '') . ' — ' . ($r['subject_name'] ?? ''));
             $dayLabel = (string)($r['day_of_week'] ?? '');
             $start_time = (string)($r['start_time'] ?? '');
             $end_time = (string)($r['end_time'] ?? '');
@@ -142,7 +163,7 @@ try {
             $when = trim($dayLabel . ' ' . trim($start_label . ($end_label !== '' ? (' - ' . $end_label) : '')));
             $room = trim((string)($r['room_number'] ?? ''));
             $inst = trim(($r['instructor_first'] ?? '') . ' ' . ($r['instructor_last'] ?? ''));
-            $sub = $course;
+            $sub = $subject;
             $extra = trim($when . ($room !== '' ? (' • Room ' . $room) : '') . ($inst !== '' ? (' • ' . $inst) : ''));
             if ($extra !== '') {
                 $sub = ($sub !== '' ? ($sub . ' • ' . $extra) : $extra);

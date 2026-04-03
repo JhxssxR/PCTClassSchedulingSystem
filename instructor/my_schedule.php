@@ -9,8 +9,28 @@ function ins_format_time(string $time): string {
     return date('g:i A', strtotime($time));
 }
 
+function ins_time_add_minutes_raw(string $time, int $minutes): string {
+    $ts = strtotime('1970-01-01 ' . $time);
+    if ($ts === false) {
+        return '';
+    }
+    return date('H:i:s', $ts + ($minutes * 60));
+}
+
 function ins_time_plus_two_hours(string $time): string {
-    return date('g:i A', strtotime($time . ' +2 hours'));
+    $end = ins_time_add_minutes_raw($time, 120);
+    return $end !== '' ? date('g:i A', strtotime($end)) : '';
+}
+
+function ins_class_duration(string $start_date, string $end_date, string $start_time, string $end_time): string {
+    $sd = $start_date !== '' ? strtotime($start_date) : false;
+    $ed = $end_date !== '' ? strtotime($end_date) : false;
+
+    if ($sd !== false && $ed !== false) {
+        return date('F d, Y', $sd) . ' - ' . date('F d, Y', $ed);
+    }
+
+    return 'N/A';
 }
 
 function ins_day_short(string $day): string {
@@ -47,7 +67,29 @@ if ($full_name === '') {
 }
 $user_initials = strtoupper(substr((string) ($instructor['first_name'] ?? 'I'), 0, 1) . substr((string) ($instructor['last_name'] ?? 'N'), 0, 1));
 
-$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.day_of_week,\n        s.start_time,\n        s.max_students,\n        c.course_code,\n        c.course_name,\n        cl.room_number,\n        cl.room_type,\n        COUNT(CASE WHEN e.status = 'approved' THEN e.id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
+$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
+$schedule_cols_stmt->execute();
+$schedule_cols = [];
+foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    $schedule_cols[$r['Field']] = true;
+}
+
+if (isset($schedule_cols['end_time'])) {
+    $end_expr = 's.end_time';
+} elseif (isset($schedule_cols['duration_minutes'])) {
+    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
+} else {
+    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+}
+
+$start_date_expr = isset($schedule_cols['start_date'])
+    ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
+    : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
+$end_date_expr = isset($schedule_cols['end_date'])
+    ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
+    : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+
+$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.day_of_week,\n        s.start_time,\n        TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,\n        {$start_date_expr} AS start_date,\n        {$end_date_expr} AS end_date,\n        s.max_students,\n        c.course_code,\n        c.course_name,\n        cl.room_number,\n        cl.room_type,\n        COUNT(CASE WHEN e.status = 'approved' THEN e.id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
 $stmt->execute(['instructor_id' => $instructor_id]);
 $all_schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -83,9 +125,14 @@ foreach ($all_schedules as $row) {
     }
 
     $start_time = (string) ($row['start_time'] ?? '');
-    $time_range = $start_time !== ''
-        ? (ins_format_time($start_time) . ' - ' . ins_time_plus_two_hours($start_time))
+    $end_time = (string) ($row['end_time'] ?? '');
+    if ($end_time === '') {
+        $end_time = ins_time_add_minutes_raw($start_time, 120);
+    }
+    $time_range = ($start_time !== '' && $end_time !== '')
+        ? (ins_format_time($start_time) . ' - ' . ins_format_time($end_time))
         : 'Time not set';
+    $duration_label = ins_class_duration((string) ($row['start_date'] ?? ''), (string) ($row['end_date'] ?? ''), $start_time, $end_time);
 
     $schedule_modal_map[$schedule_id] = [
         'id' => $schedule_id,
@@ -93,6 +140,7 @@ foreach ($all_schedules as $row) {
         'course_code' => (string) ($row['course_code'] ?? ''),
         'day_of_week' => (string) ($row['day_of_week'] ?? ''),
         'time_range' => $time_range,
+        'duration_label' => $duration_label,
         'room_number' => (string) ($row['room_number'] ?? 'TBA'),
         'room_type' => ins_type_label((string) ($row['room_type'] ?? 'lecture')),
         'enrolled_students' => (int) ($row['enrolled_students'] ?? 0),
@@ -114,7 +162,6 @@ $nav_items = [
     ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'bi-grid'],
     ['key' => 'schedule', 'label' => 'My Schedule', 'href' => 'my_schedule.php', 'icon' => 'bi-calendar3'],
     ['key' => 'classes', 'label' => 'My Classes', 'href' => 'my_classes.php', 'icon' => 'bi-book'],
-    ['key' => 'profile', 'label' => 'Update Profile', 'href' => 'profile.php', 'icon' => 'bi-person-circle'],
 ];
 
 ?>
@@ -143,6 +190,9 @@ $nav_items = [
     </script>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <link href="https://unpkg.com/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
@@ -338,7 +388,35 @@ $nav_items = [
                 </div>
             </header>
 
-            <main class="px-4 sm:px-6 py-5 space-y-4">
+            <main id="scheduleExportArea" class="px-4 sm:px-6 py-5 space-y-4">
+                <section class="flex justify-end">
+                    <div class="relative export-controls">
+                        <button id="exportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu">
+                            <i class="bi bi-download"></i>
+                            Export
+                            <i class="bi bi-chevron-down text-xs"></i>
+                        </button>
+                        <div id="exportMenu" class="absolute right-0 mt-2 hidden min-w-[190px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl" role="menu" aria-label="Export options">
+                            <button type="button" class="export-option flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" data-export-format="excel" role="menuitem">
+                                <i class="bi bi-file-earmark-spreadsheet text-emerald-600"></i>
+                                Save as Excel
+                            </button>
+                            <button type="button" class="export-option flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" data-export-format="pdf" role="menuitem">
+                                <i class="bi bi-filetype-pdf text-rose-500"></i>
+                                Save as PDF
+                            </button>
+                            <button type="button" class="export-option flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" data-export-format="png" role="menuitem">
+                                <i class="bi bi-filetype-png text-emerald-500"></i>
+                                Save as PNG
+                            </button>
+                            <button type="button" class="export-option flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" data-export-format="jpeg" role="menuitem">
+                                <i class="bi bi-file-earmark-image text-amber-500"></i>
+                                Save as JPEG
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
                 <section class="rounded-3xl border border-slate-200 bg-white overflow-hidden">
                     <div class="bg-gradient-to-r from-emerald-950 via-emerald-900 to-emerald-700 px-5 py-4 text-white flex items-center justify-between">
                         <div>
@@ -353,9 +431,17 @@ $nav_items = [
                             <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">No classes scheduled for today.</div>
                         <?php else: ?>
                             <?php foreach ($today_schedule as $schedule): ?>
+                                <?php
+                                    $today_start = (string) ($schedule['start_time'] ?? '');
+                                    $today_end = (string) ($schedule['end_time'] ?? '');
+                                    if ($today_end === '') {
+                                        $today_end = ins_time_add_minutes_raw($today_start, 120);
+                                    }
+                                    $today_duration = ins_class_duration((string) ($schedule['start_date'] ?? ''), (string) ($schedule['end_date'] ?? ''), $today_start, $today_end);
+                                ?>
                                 <button type="button" class="js-open-schedule-modal w-full text-left py-3 grid grid-cols-[150px,1fr,auto] gap-3 items-center rounded-xl hover:bg-slate-50/70 transition" data-schedule-id="<?php echo (int) ($schedule['id'] ?? 0); ?>">
                                     <div class="text-slate-500 text-sm font-semibold">
-                                        <?php echo htmlspecialchars(ins_format_time((string) $schedule['start_time'])); ?> - <?php echo htmlspecialchars(ins_time_plus_two_hours((string) $schedule['start_time'])); ?>
+                                        <?php echo htmlspecialchars(ins_format_time($today_start)); ?> - <?php echo htmlspecialchars(ins_format_time($today_end)); ?>
                                     </div>
                                     <div>
                                         <div class="flex items-center gap-2">
@@ -365,6 +451,10 @@ $nav_items = [
                                         <div class="mt-1 text-sm text-slate-400 flex items-center gap-4">
                                             <span><i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars((string) $schedule['room_number']); ?></span>
                                             <span><i class="bi bi-people"></i> <?php echo (int) ($schedule['enrolled_students'] ?? 0); ?> students</span>
+                                        </div>
+                                        <div class="mt-1 text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                                            <i class="bi bi-hourglass-split"></i>
+                                            <span><?php echo htmlspecialchars($today_duration); ?></span>
                                         </div>
                                     </div>
                                     <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-violet-50 text-violet-600">
@@ -406,10 +496,18 @@ $nav_items = [
                                 <?php else: ?>
                                     <div class="space-y-3">
                                         <?php foreach ($schedule_by_day[$day] as $schedule): ?>
+                                            <?php
+                                                $slot_start = (string) ($schedule['start_time'] ?? '');
+                                                $slot_end = (string) ($schedule['end_time'] ?? '');
+                                                if ($slot_end === '') {
+                                                    $slot_end = ins_time_add_minutes_raw($slot_start, 120);
+                                                }
+                                                $slot_duration = ins_class_duration((string) ($schedule['start_date'] ?? ''), (string) ($schedule['end_date'] ?? ''), $slot_start, $slot_end);
+                                            ?>
                                             <button type="button" class="js-open-schedule-modal block w-full text-left rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 grid grid-cols-[90px,1fr] gap-4 items-center hover:bg-slate-100/70 transition" data-schedule-id="<?php echo (int) ($schedule['id'] ?? 0); ?>">
                                                 <div class="rounded-2xl border border-slate-200 bg-white text-center py-2">
-                                                    <div class="text-sm font-semibold text-emerald-500"><?php echo htmlspecialchars(date('g:i', strtotime((string) $schedule['start_time']))); ?></div>
-                                                    <div class="text-xs text-slate-400 mt-2"><?php echo htmlspecialchars(ins_time_plus_two_hours((string) $schedule['start_time'])); ?></div>
+                                                    <div class="text-sm font-semibold text-emerald-500"><?php echo htmlspecialchars(ins_format_time($slot_start)); ?></div>
+                                                    <div class="text-xs text-slate-400 mt-2"><?php echo htmlspecialchars(ins_format_time($slot_end)); ?></div>
                                                 </div>
                                                 <div>
                                                     <div class="text-[30px] leading-tight font-medium text-slate-700"><?php echo htmlspecialchars((string) $schedule['course_name']); ?></div>
@@ -417,6 +515,10 @@ $nav_items = [
                                                         <span><i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars((string) $schedule['room_number']); ?></span>
                                                         <span><i class="bi bi-people"></i> <?php echo (int) ($schedule['enrolled_students'] ?? 0); ?> students</span>
                                                         <span class="rounded-full bg-blue-50 text-blue-600 px-2.5 py-0.5 text-xs font-semibold"><?php echo htmlspecialchars(ins_type_label((string) ($schedule['room_type'] ?? 'lecture'))); ?></span>
+                                                    </div>
+                                                    <div class="mt-1 text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                                                        <i class="bi bi-hourglass-split"></i>
+                                                        <span><?php echo htmlspecialchars($slot_duration); ?></span>
                                                     </div>
                                                 </div>
                                             </button>
@@ -444,9 +546,18 @@ $nav_items = [
                                         <div class="text-sm italic text-slate-300">No classes</div>
                                     <?php else: ?>
                                         <?php foreach ($schedule_by_day[$day] as $schedule): ?>
+                                            <?php
+                                                $overview_start = (string) ($schedule['start_time'] ?? '');
+                                                $overview_end = (string) ($schedule['end_time'] ?? '');
+                                                if ($overview_end === '') {
+                                                    $overview_end = ins_time_add_minutes_raw($overview_start, 120);
+                                                }
+                                                $overview_duration = ins_class_duration((string) ($schedule['start_date'] ?? ''), (string) ($schedule['end_date'] ?? ''), $overview_start, $overview_end);
+                                            ?>
                                             <button type="button" class="js-open-schedule-modal block w-full text-left rounded-xl px-2.5 py-2 text-xs border hover:opacity-90 transition <?php echo $is_today_col ? 'bg-emerald-100/70 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'; ?>" data-schedule-id="<?php echo (int) ($schedule['id'] ?? 0); ?>">
                                                 <div class="font-semibold truncate"><?php echo htmlspecialchars((string) $schedule['course_name']); ?></div>
-                                                <div class="mt-0.5"><?php echo htmlspecialchars(date('g:i', strtotime((string) $schedule['start_time']))); ?></div>
+                                                <div class="mt-0.5"><?php echo htmlspecialchars(ins_format_time($overview_start)); ?></div>
+                                                <div class="mt-0.5 font-semibold"><?php echo htmlspecialchars($overview_duration); ?></div>
                                             </button>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
@@ -482,6 +593,7 @@ $nav_items = [
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div class="text-xs font-semibold tracking-wide text-slate-500">TIME</div>
                         <div id="scheduleModalTime" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                        <div id="scheduleModalDuration" class="mt-1 text-xs font-semibold text-emerald-700">-</div>
                     </div>
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div class="text-xs font-semibold tracking-wide text-slate-500">ROOM</div>
@@ -576,6 +688,232 @@ $nav_items = [
 
             window.addEventListener('resize', applyLayoutState);
             applyLayoutState();
+        })();
+
+        (function () {
+            const exportBtn = document.getElementById('exportBtn');
+            const exportMenu = document.getElementById('exportMenu');
+            const exportOptions = Array.from(document.querySelectorAll('.export-option'));
+            const exportScheduleDetails = <?php echo json_encode($schedule_modal_map, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+            function setExportMenuOpen(open) {
+                if (!exportBtn || !exportMenu) {
+                    return;
+                }
+                exportMenu.classList.toggle('hidden', !open);
+                exportBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+
+            function buildExportName(ext) {
+                const now = new Date();
+                const pad = function (n) { return String(n).padStart(2, '0'); };
+                const stamp = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + '_' + pad(now.getHours()) + '-' + pad(now.getMinutes());
+                return 'instructor_schedule_' + stamp + '.' + ext;
+            }
+
+            function triggerDownload(dataUrl, filename) {
+                const link = document.createElement('a');
+                link.href = dataUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            function toCsvValue(value) {
+                const text = String(value == null ? '' : value);
+                if (text.includes('"') || text.includes(',') || text.includes('\n')) {
+                    return '"' + text.replace(/"/g, '""') + '"';
+                }
+                return text;
+            }
+
+            function scheduleRowsForExport() {
+                const rows = Object.keys(exportScheduleDetails || {}).map(function (k) {
+                    return exportScheduleDetails[k] || {};
+                });
+
+                const dayRank = {
+                    'Monday': 1,
+                    'Tuesday': 2,
+                    'Wednesday': 3,
+                    'Thursday': 4,
+                    'Friday': 5,
+                    'Saturday': 6,
+                    'Sunday': 7,
+                };
+
+                rows.sort(function (a, b) {
+                    const byDay = (dayRank[a.day_of_week] || 99) - (dayRank[b.day_of_week] || 99);
+                    if (byDay !== 0) {
+                        return byDay;
+                    }
+                    return String(a.time_range || '').localeCompare(String(b.time_range || ''));
+                });
+
+                return rows.map(function (row, idx) {
+                    return {
+                        No: idx + 1,
+                        CourseCode: row.course_code || '',
+                        CourseName: row.course_name || '',
+                        Day: row.day_of_week || '',
+                        Time: row.time_range || '',
+                        ClassDuration: row.duration_label || '',
+                        Room: row.room_number || '',
+                        RoomType: row.room_type || '',
+                        Enrollment: (row.max_students > 0)
+                            ? (String(row.enrolled_students || 0) + ' / ' + String(row.max_students) + ' students')
+                            : (String(row.enrolled_students || 0) + ' students'),
+                    };
+                });
+            }
+
+            function exportExcelFile() {
+                const rows = scheduleRowsForExport();
+                if (rows.length === 0) {
+                    throw new Error('No schedule rows to export.');
+                }
+
+                if (window.XLSX && window.XLSX.utils && window.XLSX.utils.json_to_sheet) {
+                    const ws = window.XLSX.utils.json_to_sheet(rows);
+                    ws['!cols'] = [
+                        { wch: 6 },
+                        { wch: 16 },
+                        { wch: 38 },
+                        { wch: 14 },
+                        { wch: 24 },
+                        { wch: 36 },
+                        { wch: 10 },
+                        { wch: 12 },
+                        { wch: 20 },
+                    ];
+
+                    const wb = window.XLSX.utils.book_new();
+                    window.XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
+                    window.XLSX.writeFile(wb, buildExportName('xlsx'));
+                    return;
+                }
+
+                const headers = Object.keys(rows[0]);
+                const csvLines = [headers.map(toCsvValue).join(',')];
+                rows.forEach(function (row) {
+                    const line = headers.map(function (key) { return toCsvValue(row[key]); }).join(',');
+                    csvLines.push(line);
+                });
+                const csv = csvLines.join('\n');
+                triggerDownload('data:text/csv;charset=utf-8,' + encodeURIComponent(csv), buildExportName('csv'));
+            }
+
+            async function captureScheduleCanvas() {
+                const target = document.getElementById('scheduleExportArea');
+                if (!target || typeof window.html2canvas !== 'function') {
+                    throw new Error('Export library is not available.');
+                }
+
+                await new Promise(function (resolve) {
+                    window.requestAnimationFrame(function () {
+                        window.requestAnimationFrame(resolve);
+                    });
+                });
+
+                return window.html2canvas(target, {
+                    backgroundColor: '#f1f5f9',
+                    scale: 2,
+                    useCORS: true,
+                    scrollX: 0,
+                    scrollY: -window.scrollY,
+                    windowWidth: document.documentElement.clientWidth,
+                    onclone: function (doc) {
+                        doc.querySelectorAll('.export-controls').forEach(function (el) {
+                            el.style.display = 'none';
+                        });
+                    },
+                });
+            }
+
+            let exportingNow = false;
+            async function exportSchedule(format) {
+                if (exportingNow) {
+                    return;
+                }
+                exportingNow = true;
+                exportOptions.forEach(function (btn) { btn.disabled = true; });
+
+                const originalLabel = exportBtn ? exportBtn.innerHTML : '';
+                if (exportBtn) {
+                    exportBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Exporting...';
+                }
+
+                try {
+                    if (format === 'excel') {
+                        exportExcelFile();
+                    } else {
+                        const canvas = await captureScheduleCanvas();
+
+                        if (format === 'png') {
+                            triggerDownload(canvas.toDataURL('image/png'), buildExportName('png'));
+                        } else if (format === 'jpeg') {
+                            triggerDownload(canvas.toDataURL('image/jpeg', 0.95), buildExportName('jpg'));
+                        } else if (format === 'pdf') {
+                            const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+                            if (!jsPDFCtor) {
+                                throw new Error('PDF library is not available.');
+                            }
+                            const pdf = new jsPDFCtor({
+                                orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait',
+                                unit: 'px',
+                                format: [canvas.width, canvas.height],
+                            });
+                            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+                            pdf.save(buildExportName('pdf'));
+                        }
+                    }
+                } catch (error) {
+                    alert((error && error.message) ? error.message : 'Unable to export schedule right now.');
+                } finally {
+                    exportingNow = false;
+                    exportOptions.forEach(function (btn) { btn.disabled = false; });
+                    if (exportBtn) {
+                        exportBtn.innerHTML = originalLabel;
+                    }
+                    setExportMenuOpen(false);
+                }
+            }
+
+            exportBtn?.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                const shouldOpen = exportMenu ? exportMenu.classList.contains('hidden') : false;
+                setExportMenuOpen(shouldOpen);
+            });
+
+            exportOptions.forEach(function (optionBtn) {
+                optionBtn.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const fmt = String(optionBtn.getAttribute('data-export-format') || '').toLowerCase();
+                    if (fmt === 'excel' || fmt === 'pdf' || fmt === 'png' || fmt === 'jpeg') {
+                        exportSchedule(fmt);
+                    }
+                });
+            });
+
+            document.addEventListener('click', function (event) {
+                const target = event.target;
+                if (!(target instanceof Element)) {
+                    return;
+                }
+                if (exportMenu?.contains(target) || exportBtn?.contains(target)) {
+                    return;
+                }
+                setExportMenuOpen(false);
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    setExportMenuOpen(false);
+                }
+            });
         })();
 
         (function () {
@@ -770,6 +1108,7 @@ $nav_items = [
             const courseCodeEl = document.getElementById('scheduleModalCourseCode');
             const dayEl = document.getElementById('scheduleModalDay');
             const timeEl = document.getElementById('scheduleModalTime');
+            const durationEl = document.getElementById('scheduleModalDuration');
             const roomEl = document.getElementById('scheduleModalRoom');
             const roomTypeEl = document.getElementById('scheduleModalRoomType');
             const enrollmentEl = document.getElementById('scheduleModalEnrollment');
@@ -801,6 +1140,7 @@ $nav_items = [
                 courseCodeEl.textContent = detail.course_code || 'No course code';
                 dayEl.textContent = detail.day_of_week || '-';
                 timeEl.textContent = detail.time_range || '-';
+                if (durationEl) durationEl.textContent = detail.duration_label || 'N/A';
                 roomEl.textContent = detail.room_number || 'TBA';
                 roomTypeEl.textContent = detail.room_type || '-';
                 enrollmentEl.textContent = maxStudents > 0

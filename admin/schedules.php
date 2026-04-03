@@ -26,6 +26,13 @@ if (isset($schedule_cols['end_time'])) {
     $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
 }
 
+$start_date_expr = isset($schedule_cols['start_date'])
+    ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
+    : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
+$end_date_expr = isset($schedule_cols['end_date'])
+    ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
+    : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+
 // Detect if subjects table exists (avoid fatal errors on older DBs)
 $subjects_table_exists = false;
 try {
@@ -48,7 +55,9 @@ $stmt = $conn->prepare("
            CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
            r.room_number,
            COUNT(DISTINCT e.id) as enrollment_count,
-           TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time
+            TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time,
+            {$start_date_expr} as start_date,
+            {$end_date_expr} as end_date
     FROM schedules s
     {$subjects_join}
     LEFT JOIN courses c ON (s.course_id IS NOT NULL AND s.course_id = c.id)
@@ -87,6 +96,17 @@ function fmt_time_range(string $start, string $end): string {
         return '';
     }
     return date('g:i A', strtotime($start)) . ' – ' . date('g:i A', strtotime($end));
+}
+
+function fmt_class_duration(string $start_date, string $end_date, string $start_time, string $end_time): string {
+    $sd_ts = $start_date !== '' ? strtotime($start_date) : false;
+    $ed_ts = $end_date !== '' ? strtotime($end_date) : false;
+
+    if ($sd_ts !== false && $ed_ts !== false) {
+        return date('F d, Y', $sd_ts) . ' - ' . date('F d, Y', $ed_ts);
+    }
+
+    return 'N/A';
 }
 
 // Get all subjects for the dropdown (preferred)
@@ -334,6 +354,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                                             $card_name = (string) ($s['subject_name'] ?? $s['course_name'] ?? 'Class Schedule');
                                             $card_code = (string) ($s['subject_code'] ?? $s['course_code'] ?? '');
                                             $card_time = fmt_time_range((string) ($s['start_time'] ?? ''), (string) ($s['end_time'] ?? ''));
+                                            $card_duration = fmt_class_duration((string) ($s['start_date'] ?? ''), (string) ($s['end_date'] ?? ''), (string) ($s['start_time'] ?? ''), (string) ($s['end_time'] ?? ''));
                                             $card_room = (string) ($s['room_number'] ?? '');
                                             $card_instructor = (string) ($s['instructor_name'] ?? 'Unassigned');
                                             $card_enrollment = (int) ($s['enrollment_count'] ?? 0);
@@ -346,6 +367,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                                             data-class-code="<?php echo htmlspecialchars($card_code); ?>"
                                             data-class-day="<?php echo htmlspecialchars((string) ($s['day_of_week'] ?? $day)); ?>"
                                             data-class-time="<?php echo htmlspecialchars($card_time); ?>"
+                                            data-class-duration="<?php echo htmlspecialchars($card_duration); ?>"
                                             data-class-room="<?php echo htmlspecialchars($card_room); ?>"
                                             data-class-instructor="<?php echo htmlspecialchars($card_instructor); ?>"
                                             data-class-enrollment="<?php echo (int) $card_enrollment; ?>"
@@ -359,6 +381,10 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                                             <div class="mt-1 flex items-center gap-2 text-xs text-slate-500">
                                                 <i class="bi bi-door-open"></i>
                                                 <span><?php echo htmlspecialchars($card_room); ?></span>
+                                            </div>
+                                            <div class="mt-1 flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                                                <i class="bi bi-hourglass-split"></i>
+                                                <span><?php echo htmlspecialchars($card_duration); ?></span>
                                             </div>
                                         </button>
                                     <?php endforeach; ?>
@@ -390,6 +416,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                             <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                                 <div class="text-xs font-semibold text-slate-500">TIME</div>
                                 <div id="classDetailTime" class="mt-1 text-sm font-semibold text-slate-800">-</div>
+                                <div id="classDetailDuration" class="mt-1 text-xs font-semibold text-emerald-700">-</div>
                             </div>
                             <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                                 <div class="text-xs font-semibold text-slate-500">ROOM</div>
@@ -433,6 +460,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                                 <th class="px-5 py-3 text-left font-semibold">Room</th>
                                 <th class="px-5 py-3 text-left font-semibold">Day</th>
                                 <th class="px-5 py-3 text-left font-semibold">Time</th>
+                                <th class="px-5 py-3 text-left font-semibold">Class Duration</th>
                                 <th class="px-5 py-3 text-left font-semibold">Subject</th>
                                 <th class="px-5 py-3 text-left font-semibold">Status</th>
                                 <th class="px-5 py-3 text-right font-semibold">Actions</th>
@@ -450,6 +478,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                                     <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($s['room_number'] ?? ''); ?></td>
                                     <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($s['day_of_week'] ?? ''); ?></td>
                                     <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars(fmt_time_range((string)($s['start_time'] ?? ''), (string)($s['end_time'] ?? ''))); ?></td>
+                                    <td class="px-5 py-4 text-sm font-semibold text-emerald-700"><?php echo htmlspecialchars(fmt_class_duration((string)($s['start_date'] ?? ''), (string)($s['end_date'] ?? ''), (string)($s['start_time'] ?? ''), (string)($s['end_time'] ?? ''))); ?></td>
                                     <td class="px-5 py-4">
                                         <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"><?php echo htmlspecialchars($s['course_code'] ?? ''); ?></span>
                                     </td>
@@ -481,7 +510,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
 
                             <?php if (empty($schedules)): ?>
                                 <tr>
-                                    <td colspan="8" class="px-5 py-10 text-center text-slate-500">No schedules found</td>
+                                    <td colspan="9" class="px-5 py-10 text-center text-slate-500">No schedules found</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -811,6 +840,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
         code: document.getElementById('classDetailCode'),
         day: document.getElementById('classDetailDay'),
         time: document.getElementById('classDetailTime'),
+        duration: document.getElementById('classDetailDuration'),
         room: document.getElementById('classDetailRoom'),
         instructor: document.getElementById('classDetailInstructor'),
         enrollment: document.getElementById('classDetailEnrollment'),
@@ -831,6 +861,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
         if (detailFields.code) detailFields.code.textContent = classCode;
         if (detailFields.day) detailFields.day.textContent = getCardValue(card, 'classDay', '-');
         if (detailFields.time) detailFields.time.textContent = getCardValue(card, 'classTime', '-');
+        if (detailFields.duration) detailFields.duration.textContent = getCardValue(card, 'classDuration', 'N/A');
         if (detailFields.room) detailFields.room.textContent = getCardValue(card, 'classRoom', '-');
         if (detailFields.instructor) detailFields.instructor.textContent = getCardValue(card, 'classInstructor', '-');
         if (detailFields.enrollment) detailFields.enrollment.textContent = getCardValue(card, 'classEnrollment', '0') + ' student(s)';

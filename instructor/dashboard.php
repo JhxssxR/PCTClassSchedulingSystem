@@ -253,7 +253,6 @@ $nav_items = [
     ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'bi-grid'],
     ['key' => 'schedule', 'label' => 'My Schedule', 'href' => 'my_schedule.php', 'icon' => 'bi-calendar3'],
     ['key' => 'classes', 'label' => 'My Classes', 'href' => 'my_classes.php', 'icon' => 'bi-book'],
-    ['key' => 'profile', 'label' => 'Update Profile', 'href' => 'profile.php', 'icon' => 'bi-person-circle'],
 ];
 
 ?>
@@ -509,10 +508,6 @@ $nav_items = [
                             <a href="my_classes.php" class="inline-flex items-center gap-2 rounded-xl bg-white/10 border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20">
                                 <i class="bi bi-book"></i>
                                 <span>My Classes</span>
-                            </a>
-                            <a href="profile.php" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600/70 border border-white/15 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500/80">
-                                <i class="bi bi-person-gear"></i>
-                                <span>Update Profile</span>
                             </a>
                         </div>
                     </div>

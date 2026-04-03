@@ -99,9 +99,19 @@ try {
         $course_cols = [];
     }
 
+    $subjects_table_exists = false;
+    try {
+        $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+        $subjects_exists_stmt->execute();
+        $subjects_table_exists = ((int)$subjects_exists_stmt->fetchColumn() > 0);
+    } catch (Throwable $e) {
+        $subjects_table_exists = false;
+    }
+
     $has_end_time = isset($schedule_cols['end_time']);
     $has_duration_minutes = isset($schedule_cols['duration_minutes']);
     $has_units = isset($course_cols['units']);
+    $subjects_enabled = ($subjects_table_exists && isset($schedule_cols['subject_id']));
 
     if ($has_end_time) {
         $end_expr = 's.end_time';
@@ -112,12 +122,21 @@ try {
     }
 
     $units_expr = $has_units ? 'COALESCE(c.units, 3)' : '3';
+    $subject_code_expr = $subjects_enabled
+        ? "COALESCE(subj.subject_code, 'N/A')"
+        : "COALESCE(c.course_code, 'N/A')";
+    $subject_name_expr = $subjects_enabled
+        ? "COALESCE(subj.subject_name, 'Untitled Subject')"
+        : "COALESCE(c.course_name, 'Untitled Subject')";
+    $subject_join_sql = $subjects_enabled
+        ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
+        : '';
 
     $sql = "
         SELECT
             s.id AS schedule_id,
-            COALESCE(c.course_code, 'N/A') AS subject_code,
-            COALESCE(c.course_name, 'Untitled Subject') AS subject_name,
+            {$subject_code_expr} AS subject_code,
+            {$subject_name_expr} AS subject_name,
             s.day_of_week AS schedule_day,
             TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
             TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,
@@ -127,6 +146,7 @@ try {
         FROM enrollments e
         JOIN schedules s ON e.schedule_id = s.id
         LEFT JOIN courses c ON s.course_id = c.id
+        {$subject_join_sql}
         LEFT JOIN classrooms cr ON s.classroom_id = cr.id
         LEFT JOIN users i ON s.instructor_id = i.id
         WHERE e.student_id = :student_id
@@ -421,7 +441,7 @@ $user_initials = student_initials($first_name, $last_name, $username);
                 </section>
 
                 <section class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+                    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300">
                         <div class="flex items-center justify-between">
                             <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><i class="bi bi-grid"></i></span>
                             <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-200"><i class="bi bi-arrow-up-right mr-1"></i>Active</span>
@@ -431,7 +451,7 @@ $user_initials = student_initials($first_name, $last_name, $username);
                         <div class="text-xs text-slate-400">This semester</div>
                     </div>
 
-                    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+                    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300">
                         <div class="flex items-center justify-between">
                             <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><i class="bi bi-bullseye"></i></span>
                             <span class="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 ring-1 ring-inset ring-indigo-200"><i class="bi bi-arrow-up-right mr-1"></i>+ <?php echo (int)$total_units; ?> units</span>
