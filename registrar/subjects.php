@@ -10,7 +10,6 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 $page_title = 'Subjects';
 $breadcrumbs = 'Registrar / Subjects';
 $active_page = 'subjects';
-require_once __DIR__ . '/includes/layout_top.php';
 
 $subject_sections = [
     [
@@ -127,6 +126,141 @@ $subject_sections = [
     ],
 ];
 
+$default_subject_map = [];
+foreach ($subject_sections as $section_seed) {
+    foreach (($section_seed['items'] ?? []) as $item_seed) {
+        $seed_code = trim((string)($item_seed['code'] ?? ''));
+        if ($seed_code === '') {
+            continue;
+        }
+        $default_subject_map[strtoupper($seed_code)] = [
+            'code' => $seed_code,
+            'name' => trim((string)($item_seed['name'] ?? '')),
+            'year_level' => (int)($section_seed['year'] ?? 0),
+            'units' => max(1, (int)($item_seed['units'] ?? 3)),
+        ];
+    }
+}
+
+// Schema compatibility for subject unit management.
+try {
+    $conn->exec("CREATE TABLE IF NOT EXISTS subjects (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        subject_code VARCHAR(50) NOT NULL UNIQUE,
+        subject_name VARCHAR(255) NOT NULL,
+        year_level TINYINT NULL,
+        units INT NOT NULL DEFAULT 3,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+} catch (Throwable $e) {
+    error_log('Could not ensure subjects table (registrar subjects): ' . $e->getMessage());
+}
+
+try {
+    $conn->exec("ALTER TABLE subjects ADD COLUMN year_level TINYINT NULL AFTER subject_name");
+} catch (Throwable $e) {
+    // ignore if column already exists
+}
+try {
+    $conn->exec("ALTER TABLE subjects ADD COLUMN units INT NOT NULL DEFAULT 3 AFTER year_level");
+} catch (Throwable $e) {
+    // ignore if column already exists
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'update_subject_units') {
+    try {
+        $subject_id = (int)($_POST['subject_id'] ?? 0);
+        $units = (int)($_POST['units'] ?? 0);
+
+        if ($subject_id <= 0) {
+            throw new Exception('Please select a valid subject.');
+        }
+        if ($units < 1 || $units > 10) {
+            throw new Exception('Units must be between 1 and 10.');
+        }
+
+        $stmt = $conn->prepare('UPDATE subjects SET units = :units WHERE id = :id');
+        $stmt->execute([
+            'units' => $units,
+            'id' => $subject_id,
+        ]);
+
+        if ($stmt->rowCount() === 0) {
+            $check_stmt = $conn->prepare('SELECT id FROM subjects WHERE id = :id LIMIT 1');
+            $check_stmt->execute(['id' => $subject_id]);
+            if (!$check_stmt->fetch(PDO::FETCH_ASSOC)) {
+                throw new Exception('Selected subject was not found.');
+            }
+        }
+
+        $_SESSION['success'] = 'Subject units updated successfully.';
+    } catch (Throwable $e) {
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    header('Location: subjects.php');
+    exit();
+}
+
+// Ensure DB has all reference subjects while preserving manually changed units.
+try {
+    $find_stmt = $conn->prepare('SELECT id, units FROM subjects WHERE subject_code = :code LIMIT 1');
+    $insert_stmt = $conn->prepare('INSERT INTO subjects (subject_code, subject_name, year_level, units) VALUES (:code, :name, :year_level, :units)');
+    $update_stmt = $conn->prepare('UPDATE subjects SET subject_name = :name, year_level = COALESCE(year_level, :year_level), units = COALESCE(NULLIF(units, 0), :units) WHERE id = :id');
+
+    foreach ($default_subject_map as $seed_meta) {
+        $find_stmt->execute(['code' => $seed_meta['code']]);
+        $existing_subject = $find_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($existing_subject) {
+            $update_stmt->execute([
+                'id' => (int)$existing_subject['id'],
+                'name' => $seed_meta['name'],
+                'year_level' => $seed_meta['year_level'] > 0 ? $seed_meta['year_level'] : null,
+                'units' => $seed_meta['units'],
+            ]);
+            continue;
+        }
+
+        $insert_stmt->execute([
+            'code' => $seed_meta['code'],
+            'name' => $seed_meta['name'],
+            'year_level' => $seed_meta['year_level'] > 0 ? $seed_meta['year_level'] : null,
+            'units' => $seed_meta['units'],
+        ]);
+    }
+} catch (Throwable $e) {
+    error_log('Subject seed sync warning (registrar subjects): ' . $e->getMessage());
+}
+
+$db_units_by_code = [];
+$all_subject_options = [];
+try {
+    $subjects_stmt = $conn->query('SELECT id, subject_code, subject_name, year_level, COALESCE(NULLIF(units, 0), 3) AS units FROM subjects ORDER BY subject_code, subject_name');
+    $all_subject_options = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($all_subject_options as $subject_row) {
+        $subject_code_key = strtoupper(trim((string)($subject_row['subject_code'] ?? '')));
+        if ($subject_code_key === '') {
+            continue;
+        }
+        $db_units_by_code[$subject_code_key] = (int)($subject_row['units'] ?? 3);
+    }
+} catch (Throwable $e) {
+    error_log('Could not load subjects with units (registrar subjects): ' . $e->getMessage());
+}
+
+foreach ($subject_sections as &$section_ref) {
+    foreach ($section_ref['items'] as &$item_ref) {
+        $item_code_key = strtoupper(trim((string)($item_ref['code'] ?? '')));
+        if ($item_code_key !== '' && isset($db_units_by_code[$item_code_key])) {
+            $item_ref['units'] = (int)$db_units_by_code[$item_code_key];
+        }
+    }
+    unset($item_ref);
+}
+unset($section_ref);
+
 $category_order = ['GE', 'Core', 'Elective', 'NSTP', 'PE', 'Capstone'];
 $category_meta = [
     'GE' => ['dot' => 'bg-blue-500', 'pill' => 'bg-sky-100 text-sky-700', 'chip_active' => 'border-blue-300 bg-blue-50 text-blue-700'],
@@ -185,18 +319,44 @@ unset($section);
 
 $core_subjects = (int)($category_counts['Core'] ?? 0);
 $ge_subjects = (int)($category_counts['GE'] ?? 0);
+
+require_once __DIR__ . '/includes/layout_top.php';
 ?>
 
 <div class="mx-auto max-w-[1280px] space-y-5">
+    <?php if (isset($_SESSION['success'])): ?>
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            <?php
+                echo htmlspecialchars((string)$_SESSION['success']);
+                unset($_SESSION['success']);
+            ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if (isset($_SESSION['error'])): ?>
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+            <?php
+                echo htmlspecialchars((string)$_SESSION['error']);
+                unset($_SESSION['error']);
+            ?>
+        </div>
+    <?php endif; ?>
+
     <div class="flex items-start justify-between gap-4">
         <div>
             <h1 class="text-[2.05rem] leading-tight font-semibold text-slate-900">Subjects</h1>
             <p class="text-base text-slate-500">Reference list of curriculum subjects.</p>
         </div>
-        <button type="button" id="collapseAllBtn" class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">
-            <i class="bi bi-chevron-down text-xs"></i>
-            <span>Collapse All</span>
-        </button>
+        <div class="flex items-center gap-2">
+            <button type="button" id="openEditUnitsModalBtn" class="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100">
+                <i class="bi bi-pencil-square"></i>
+                <span>Edit Subject Units</span>
+            </button>
+            <button type="button" id="collapseAllBtn" class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">
+                <i class="bi bi-chevron-down text-xs"></i>
+                <span>Collapse All</span>
+            </button>
+        </div>
     </div>
 
     <div class="grid grid-cols-1 gap-4 xl:grid-cols-4">
@@ -355,9 +515,94 @@ $ge_subjects = (int)($category_counts['GE'] ?? 0);
             <span id="subjectsFilterSummaryBadge" class="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-4 py-1.5 text-sm font-semibold text-rose-600"></span>
         </div>
     </div>
+
+    <div id="editUnitsModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/50" data-edit-units-close="1"></div>
+        <div class="relative mx-auto mt-16 w-full max-w-lg px-4">
+            <div class="rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-900">Edit Subject Units</h2>
+                        <p class="text-sm text-slate-500">Select any subject and update its units.</p>
+                    </div>
+                    <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100" data-edit-units-close="1" aria-label="Close">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+
+                <form method="POST" action="subjects.php" class="space-y-4 px-5 py-5">
+                    <input type="hidden" name="action" value="update_subject_units" />
+
+                    <div>
+                        <label for="unitSubjectSelect" class="block text-sm font-semibold text-slate-700">Subject</label>
+                        <select id="unitSubjectSelect" name="subject_id" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-200/50">
+                            <?php foreach ($all_subject_options as $subject_option): ?>
+                                <option value="<?php echo (int)$subject_option['id']; ?>" data-current-units="<?php echo (int)$subject_option['units']; ?>">
+                                    <?php echo htmlspecialchars((string)$subject_option['subject_code'] . ' - ' . (string)$subject_option['subject_name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="unitValueInput" class="block text-sm font-semibold text-slate-700">Units</label>
+                        <input id="unitValueInput" type="number" name="units" min="1" max="10" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-200/50" />
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2 pt-1">
+                        <button type="button" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" data-edit-units-close="1">Cancel</button>
+                        <button type="submit" class="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Save Units</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
+    (function () {
+        const openBtn = document.getElementById('openEditUnitsModalBtn');
+        const modal = document.getElementById('editUnitsModal');
+        const closeEls = Array.from(document.querySelectorAll('[data-edit-units-close]'));
+        const subjectSelect = document.getElementById('unitSubjectSelect');
+        const unitsInput = document.getElementById('unitValueInput');
+
+        if (!openBtn || !modal || !subjectSelect || !unitsInput) {
+            return;
+        }
+
+        function syncUnitsFromSelection() {
+            const selectedOption = subjectSelect.options[subjectSelect.selectedIndex];
+            const selectedUnits = parseInt(selectedOption?.getAttribute('data-current-units') || '3', 10) || 3;
+            unitsInput.value = String(selectedUnits);
+        }
+
+        function openModal() {
+            syncUnitsFromSelection();
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        openBtn.addEventListener('click', openModal);
+        closeEls.forEach(function (el) {
+            el.addEventListener('click', closeModal);
+        });
+        subjectSelect.addEventListener('change', syncUnitsFromSelection);
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+    })();
+
     (function () {
         const sectionCards = Array.from(document.querySelectorAll('[data-section-card]'));
         const searchInput = document.getElementById('subjectSearch');
