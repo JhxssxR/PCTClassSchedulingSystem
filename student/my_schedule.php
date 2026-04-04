@@ -182,6 +182,7 @@ if ($full_name === '') {
 $user_initials = student_initials($first_name, $last_name, $username);
 
 $selected_day = in_array(date('l'), $week_days, true) ? date('l') : 'Monday';
+$today = in_array(date('l'), $week_days, true) ? date('l') : '';
 $day_counts = [];
 foreach ($week_days as $dayName) {
     $day_counts[$dayName] = count($schedule_by_day[$dayName] ?? []);
@@ -267,10 +268,18 @@ $palette = [
         }
 
         .schedule-export-mode {
-            width: 1440px !important;
+            width: 1500px !important;
             max-width: none !important;
             margin: 0 auto !important;
             padding: 1.5rem !important;
+        }
+
+        .schedule-export-mode > section {
+            display: none !important;
+        }
+
+        .schedule-export-mode > section.export-full-week-section {
+            display: block !important;
         }
 
         .schedule-export-mode .export-controls,
@@ -286,6 +295,10 @@ $palette = [
             margin-top: 0.85rem;
         }
 
+        .schedule-export-mode .weekly-export-grid {
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        }
+
         .schedule-export-mode .export-day-heading {
             margin-bottom: 0.65rem;
             font-size: 0.95rem;
@@ -293,6 +306,12 @@ $palette = [
             color: #0f172a;
             text-transform: uppercase;
             letter-spacing: 0.04em;
+        }
+
+        .schedule-export-mode .export-full-week-section .truncate {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
         }
     </style>
 </head>
@@ -512,6 +531,43 @@ $palette = [
                             <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
+                </section>
+
+                <section class="export-full-week-section rounded-3xl border border-slate-200 bg-white p-5">
+                    <div>
+                        <div class="text-[30px] font-semibold leading-tight text-slate-700">Full Week Overview</div>
+                        <div class="text-sm text-slate-400">All scheduled classes</div>
+                    </div>
+
+                    <div class="weekly-export-grid mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 border border-slate-200 rounded-2xl overflow-hidden">
+                        <?php foreach ($week_days as $dayName): ?>
+                            <?php $is_today_col = ($today === $dayName); ?>
+                            <div class="p-3 border-r border-slate-200 last:border-r-0 <?php echo $is_today_col ? 'bg-emerald-50/50' : 'bg-white'; ?>">
+                                <div class="text-sm font-semibold <?php echo $is_today_col ? 'text-emerald-600' : 'text-slate-500'; ?>"><?php echo htmlspecialchars($dayName); ?></div>
+                                <div class="mt-3 space-y-2 min-h-[130px]">
+                                    <?php if (empty($schedule_by_day[$dayName])): ?>
+                                        <div class="text-sm italic text-slate-300">No classes</div>
+                                    <?php else: ?>
+                                        <?php foreach ($schedule_by_day[$dayName] as $item): ?>
+                                            <?php
+                                                $overviewStart = (string)($item['start_time'] ?? '');
+                                                $overviewEnd = (string)($item['end_time'] ?? '');
+                                                if ($overviewEnd === '') {
+                                                    $overviewEnd = student_time_add_minutes($overviewStart, 120);
+                                                }
+                                                $overviewDuration = student_class_duration((string)($item['start_date'] ?? ''), (string)($item['end_date'] ?? ''), $overviewStart, $overviewEnd);
+                                            ?>
+                                            <button type="button" class="js-open-schedule-modal block w-full text-left rounded-xl px-2.5 py-2 text-xs border hover:opacity-90 transition <?php echo $is_today_col ? 'bg-emerald-100/70 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'; ?>" data-schedule-id="<?php echo (int)($item['schedule_id'] ?? 0); ?>">
+                                                <div class="font-semibold truncate"><?php echo htmlspecialchars((string)($item['subject_name'] ?? 'Subject')); ?></div>
+                                                <div class="mt-0.5"><?php echo htmlspecialchars(student_time_display($overviewStart)); ?></div>
+                                                <div class="mt-0.5 font-semibold"><?php echo htmlspecialchars($overviewDuration); ?></div>
+                                            </button>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 </section>
             </main>
         </div>
@@ -795,20 +851,14 @@ $palette = [
                 const margin = 20;
                 const printableWidth = pageWidth - (margin * 2);
                 const printableHeight = pageHeight - (margin * 2);
-                const imageHeight = (canvas.height * printableWidth) / canvas.width;
                 const imageData = canvas.toDataURL('image/png');
+                const scale = Math.min(printableWidth / canvas.width, printableHeight / canvas.height);
+                const renderWidth = canvas.width * scale;
+                const renderHeight = canvas.height * scale;
+                const renderX = (pageWidth - renderWidth) / 2;
+                const renderY = (pageHeight - renderHeight) / 2;
 
-                let remainingHeight = imageHeight;
-                let offsetY = margin;
-                pdf.addImage(imageData, 'PNG', margin, offsetY, printableWidth, imageHeight, undefined, 'FAST');
-                remainingHeight -= printableHeight;
-
-                while (remainingHeight > 0) {
-                    pdf.addPage();
-                    offsetY = margin - (imageHeight - remainingHeight);
-                    pdf.addImage(imageData, 'PNG', margin, offsetY, printableWidth, imageHeight, undefined, 'FAST');
-                    remainingHeight -= printableHeight;
-                }
+                pdf.addImage(imageData, 'PNG', renderX, renderY, renderWidth, renderHeight, undefined, 'FAST');
 
                 pdf.save(filename);
             }
@@ -831,7 +881,7 @@ $palette = [
                     useCORS: true,
                     scrollX: 0,
                     scrollY: 0,
-                    windowWidth: 1480,
+                    windowWidth: 1540,
                     windowHeight: Math.max(document.documentElement.clientHeight, target.scrollHeight),
                     onclone: function (doc) {
                         prepareClonedScheduleForExport(doc);
