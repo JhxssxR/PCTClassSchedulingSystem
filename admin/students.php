@@ -53,13 +53,15 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
     header('Content-Disposition: attachment; filename="students_export.csv"');
 
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Student Name', 'Username', 'Email', 'Status', 'Enrollments', 'Courses']);
+    fputcsv($out, ['Student Name', 'Username', 'Email', 'Department', 'Phone', 'Status', 'Enrollments', 'Courses']);
     foreach ($students as $s) {
         $name = trim(($s['first_name'] ?? '') . ' ' . ($s['last_name'] ?? ''));
         fputcsv($out, [
             $name,
             $s['username'] ?? '',
             $s['email'] ?? '',
+            $s['department'] ?? '',
+            $s['phone_number'] ?? '',
             $s['status'] ?? 'active',
             (int)($s['enrollment_count'] ?? 0),
             $s['enrolled_courses'] ?? ''
@@ -353,6 +355,8 @@ function student_public_id($id) {
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Student ID</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Course</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Year</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Phone</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                                 </tr>
@@ -374,7 +378,11 @@ function student_public_id($id) {
                                         $courses_str = (string)($s['enrolled_courses'] ?? '');
                                         $course_codes = array_values(array_filter(array_map('trim', explode(',', $courses_str))));
                                         $primary_course = !empty($course_codes) ? $course_codes[0] : '—';
-                                        $search_blob = strtolower(trim($name . ' ' . $email . ' ' . $sid . ' ' . $primary_course));
+                                        $department = trim((string)($s['department'] ?? ''));
+                                        $phone_number = trim((string)($s['phone_number'] ?? ''));
+                                        $department_display = ($department !== '') ? $department : '—';
+                                        $phone_display = ($phone_number !== '') ? $phone_number : '—';
+                                        $search_blob = strtolower(trim($name . ' ' . $email . ' ' . $sid . ' ' . $primary_course . ' ' . $department_display . ' ' . $phone_display));
                                         $q = urlencode($email !== '' ? $email : $name);
                                     ?>
                                     <tr class="student-row" data-course="<?php echo htmlspecialchars($primary_course); ?>" data-search="<?php echo htmlspecialchars($search_blob); ?>">
@@ -400,6 +408,8 @@ function student_public_id($id) {
                                             <?php endif; ?>
                                         </td>
                                         <td class="px-4 py-3 text-sm text-slate-600"><?php echo ($year_level >= 1 && $year_level <= 4) ? ('Year ' . $year_level) : '—'; ?></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600"><?php echo htmlspecialchars($department_display); ?></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600"><?php echo htmlspecialchars($phone_display); ?></td>
                                         <td class="px-4 py-3">
                                             <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold <?php echo htmlspecialchars($status_classes); ?>">
                                                 <?php echo htmlspecialchars($status_label); ?>
@@ -423,7 +433,7 @@ function student_public_id($id) {
 
                                 <?php if (empty($students)): ?>
                                     <tr>
-                                        <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">No students found</td>
+                                        <td colspan="8" class="px-4 py-10 text-center text-sm text-slate-500">No students found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>

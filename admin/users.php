@@ -15,22 +15,84 @@ function normalize_year_level_value($value): ?int {
     return ($y >= 1 && $y <= 4) ? $y : null;
 }
 
+function normalize_user_role_value($value): string {
+    $role = strtolower(trim((string)$value));
+    switch ($role) {
+        case 'student':
+        case 'students':
+            return 'student';
+        case 'instructor':
+        case 'instructors':
+            return 'instructor';
+        case 'registrar':
+        case 'registrars':
+            return 'registrar';
+        case 'admin':
+        case 'admins':
+        case 'super_admin':
+        case 'super admin':
+        case 'super-admin':
+            return 'super_admin';
+        default:
+            return $role;
+    }
+}
+
+function normalize_user_role_filter($value): string {
+    $normalized = normalize_user_role_value($value);
+    return ($normalized === '') ? 'all' : $normalized;
+}
+
+function role_uses_contact_details($role): bool {
+    $normalized = normalize_user_role_value($role);
+    return in_array($normalized, ['student', 'instructor'], true);
+}
+
+function role_filter_db_values(string $role_filter): array {
+    switch ($role_filter) {
+        case 'student':
+            return ['student', 'students'];
+        case 'instructor':
+            return ['instructor', 'instructors'];
+        case 'registrar':
+            return ['registrar', 'registrars'];
+        case 'super_admin':
+            return ['super_admin', 'super admin', 'super-admin', 'admin', 'admins'];
+        case 'all':
+        default:
+            return [];
+    }
+}
+
 // Schema compatibility: add users.year_level if missing.
 try {
     $has_year_level = false;
+    $has_phone_number = false;
+    $has_department = false;
     $cols_stmt = $conn->prepare('DESCRIBE users');
     $cols_stmt->execute();
     foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         if (($r['Field'] ?? '') === 'year_level') {
             $has_year_level = true;
-            break;
+        }
+        if (($r['Field'] ?? '') === 'phone_number') {
+            $has_phone_number = true;
+        }
+        if (($r['Field'] ?? '') === 'department') {
+            $has_department = true;
         }
     }
     if (!$has_year_level) {
         $conn->exec('ALTER TABLE users ADD COLUMN year_level TINYINT NULL AFTER role');
     }
+    if (!$has_phone_number) {
+        $conn->exec('ALTER TABLE users ADD COLUMN phone_number VARCHAR(30) NULL AFTER email');
+    }
+    if (!$has_department) {
+        $conn->exec('ALTER TABLE users ADD COLUMN department VARCHAR(100) NULL AFTER last_name');
+    }
 } catch (Throwable $e) {
-    error_log('Could not ensure users.year_level column: ' . $e->getMessage());
+    error_log('Could not ensure users compatibility columns: ' . $e->getMessage());
 }
 
 // Handle form submissions
@@ -86,6 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $params['role'] = $role;
                     $year_level = normalize_year_level_value($_POST['year_level'] ?? null);
+                    $phone_number = trim((string)($_POST['phone_number'] ?? ''));
+                    $department = role_uses_contact_details($role) ? 'Information of Technology Education' : null;
                     if ($role === 'student' && $year_level === null) {
                         throw new Exception('Year level is required for students.');
                     }
@@ -100,6 +164,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $insert_cols[] = 'status';
                         $insert_vals[] = ':status';
                         $params['status'] = 'active';
+                    }
+
+                    if (isset($user_cols['phone_number'])) {
+                        $insert_cols[] = 'phone_number';
+                        $insert_vals[] = ':phone_number';
+                        $params['phone_number'] = (role_uses_contact_details($role) && $phone_number !== '') ? $phone_number : null;
+                    }
+
+                    if (isset($user_cols['department'])) {
+                        $insert_cols[] = 'department';
+                        $insert_vals[] = ':department';
+                        $params['department'] = $department;
                     }
 
                     if (isset($user_cols['created_at'])) {
@@ -148,6 +224,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $params['role'] = $role;
                     $year_level = normalize_year_level_value($_POST['year_level'] ?? null);
+                    $phone_number = trim((string)($_POST['phone_number'] ?? ''));
+                    $department = role_uses_contact_details($role) ? 'Information of Technology Education' : null;
                     if ($role === 'student' && $year_level === null) {
                         throw new Exception('Year level is required for students.');
                     }
@@ -162,17 +240,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Optionally update updated_at for compatibility
                     $updatedAtSql = '';
                     $yearLevelSql = '';
+                    $phoneNumberSql = '';
+                    $departmentSql = '';
                     try {
                         $cols_stmt = $conn->prepare('DESCRIBE users');
                         $cols_stmt->execute();
                         $has_updated_at = false;
                         $has_year_level = false;
+                        $has_phone_number = false;
+                        $has_department = false;
                         foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
                             if (($r['Field'] ?? null) === 'updated_at') {
                                 $has_updated_at = true;
                             }
                             if (($r['Field'] ?? null) === 'year_level') {
                                 $has_year_level = true;
+                            }
+                            if (($r['Field'] ?? null) === 'phone_number') {
+                                $has_phone_number = true;
+                            }
+                            if (($r['Field'] ?? null) === 'department') {
+                                $has_department = true;
                             }
                         }
                         if ($has_updated_at) {
@@ -182,6 +270,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($has_year_level) {
                             $params['year_level'] = ($role === 'student') ? $year_level : null;
                             $yearLevelSql = ', year_level = :year_level';
+                        }
+                        if ($has_phone_number) {
+                            $params['phone_number'] = (role_uses_contact_details($role) && $phone_number !== '') ? $phone_number : null;
+                            $phoneNumberSql = ', phone_number = :phone_number';
+                        }
+                        if ($has_department) {
+                            $params['department'] = $department;
+                            $departmentSql = ', department = :department';
                         }
                     } catch (Throwable $e) {
                         // ignore
@@ -194,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             email = :email,
                             role = :role,
                             first_name = :first_name,
-                            last_name = :last_name" . $passwordSql . $yearLevelSql . $updatedAtSql . "
+                            last_name = :last_name" . $passwordSql . $yearLevelSql . $phoneNumberSql . $departmentSql . $updatedAtSql . "
                         WHERE id = :id
                     ");
                     $stmt->execute($params);
@@ -328,8 +424,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $per_page = 10;
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $offset = ($page - 1) * $per_page;
+$active_role_filter = normalize_user_role_filter($_GET['filter_role'] ?? 'all');
+$role_filter_values = role_filter_db_values($active_role_filter);
 
-$count_stmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE 1=1");
+$count_sql = "SELECT COUNT(*) FROM users WHERE 1=1";
+$count_params = [];
+if (!empty($role_filter_values)) {
+    $placeholders = [];
+    foreach ($role_filter_values as $idx => $value) {
+        $key = ':role_count_' . $idx;
+        $placeholders[] = $key;
+        $count_params[$key] = $value;
+    }
+    $count_sql .= " AND LOWER(TRIM(role)) IN (" . implode(', ', $placeholders) . ")";
+}
+
+$count_stmt = $conn->prepare($count_sql);
+foreach ($count_params as $key => $value) {
+    $count_stmt->bindValue($key, $value, PDO::PARAM_STR);
+}
 $count_stmt->execute();
 $total_users = (int)$count_stmt->fetchColumn();
 $total_pages = max(1, (int)ceil($total_users / $per_page));
@@ -340,17 +453,17 @@ if ($page > $total_pages) {
 }
 
 // Get paginated users with dependencies
-$stmt = $conn->prepare(" 
+$users_sql = " 
     SELECT DISTINCT u.*,
            COALESCE(
                CASE 
-                   WHEN u.role = 'instructor' THEN (
+                   WHEN LOWER(TRIM(u.role)) IN ('instructor', 'instructors') THEN (
                        SELECT COUNT(*) 
                        FROM schedules 
                        WHERE instructor_id = u.id 
                        AND status = 'active'
                    )
-                   WHEN u.role = 'student' THEN (
+                   WHEN LOWER(TRIM(u.role)) IN ('student', 'students') THEN (
                        SELECT COUNT(*) 
                        FROM enrollments 
                        WHERE student_id = u.id 
@@ -361,10 +474,29 @@ $stmt = $conn->prepare("
                0
            ) as dependencies
     FROM users u 
-    WHERE 1=1
-    ORDER BY u.role, u.last_name, u.first_name
+    WHERE 1=1";
+
+$users_params = [];
+if (!empty($role_filter_values)) {
+    $placeholders = [];
+    foreach ($role_filter_values as $idx => $value) {
+        $key = ':role_users_' . $idx;
+        $placeholders[] = $key;
+        $users_params[$key] = $value;
+    }
+    $users_sql .= "\n    AND LOWER(TRIM(u.role)) IN (" . implode(', ', $placeholders) . ")";
+}
+
+$users_sql .= "
+    ORDER BY u.last_name, u.first_name, u.id
     LIMIT :limit OFFSET :offset
-");
+";
+
+$stmt = $conn->prepare($users_sql);
+
+foreach ($users_params as $key => $value) {
+    $stmt->bindValue($key, $value, PDO::PARAM_STR);
+}
 
 $stmt->bindValue(':limit', (int)$per_page, PDO::PARAM_INT);
 $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
@@ -383,6 +515,18 @@ $pagination_url = function (int $target_page) use ($query_params): string {
     return 'users.php' . ($qs !== '' ? ('?' . $qs) : '');
 };
 
+$role_filter_url = function (string $target_role) use ($query_params): string {
+    $params = $query_params;
+    unset($params['page']);
+    if ($target_role === 'all') {
+        unset($params['filter_role']);
+    } else {
+        $params['filter_role'] = $target_role;
+    }
+    $qs = http_build_query($params);
+    return 'users.php' . ($qs !== '' ? ('?' . $qs) : '');
+};
+
 $pagination_window = 2;
 $pagination_start = max(1, $page - $pagination_window);
 $pagination_end = min($total_pages, $page + $pagination_window);
@@ -394,26 +538,23 @@ foreach ($users as $user) {
 }
 
 function role_label($role) {
-    switch ($role) {
+    switch (normalize_user_role_value($role)) {
         case 'super_admin':
             return 'Super Admin';
         case 'registrar':
             return 'Registrar';
-        case 'admin':
-            return 'Super Admin';
         case 'instructor':
             return 'Instructor';
         case 'student':
             return 'Student';
         default:
-            return ucfirst((string)$role);
+            return ucfirst((string)normalize_user_role_value($role));
     }
 }
 
 function role_badge_classes($role) {
-    switch ($role) {
+    switch (normalize_user_role_value($role)) {
         case 'super_admin':
-        case 'admin':
             return 'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200';
         case 'registrar':
             return 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200';
@@ -423,6 +564,13 @@ function role_badge_classes($role) {
         default:
             return 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200';
     }
+}
+
+function role_pill_classes(string $pill_role, string $active_role): string {
+    if ($pill_role === $active_role) {
+        return 'bg-emerald-600 text-white';
+    }
+    return 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50';
 }
 ?>
 
@@ -666,11 +814,11 @@ function role_badge_classes($role) {
                         </div>
 
                         <div class="flex flex-wrap gap-2">
-                            <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold bg-emerald-600 text-white" data-role="all">All</button>
-                            <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="student">Students</button>
-                            <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="instructor">Instructors</button>
-                            <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="registrar">Registrar</button>
-                            <button type="button" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" data-role="super_admin">Super Admin</button>
+                            <a href="<?php echo htmlspecialchars($role_filter_url('all')); ?>" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold <?php echo htmlspecialchars(role_pill_classes('all', $active_role_filter)); ?>">All</a>
+                            <a href="<?php echo htmlspecialchars($role_filter_url('student')); ?>" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold <?php echo htmlspecialchars(role_pill_classes('student', $active_role_filter)); ?>">Students</a>
+                            <a href="<?php echo htmlspecialchars($role_filter_url('instructor')); ?>" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold <?php echo htmlspecialchars(role_pill_classes('instructor', $active_role_filter)); ?>">Instructors</a>
+                            <a href="<?php echo htmlspecialchars($role_filter_url('registrar')); ?>" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold <?php echo htmlspecialchars(role_pill_classes('registrar', $active_role_filter)); ?>">Registrar</a>
+                            <a href="<?php echo htmlspecialchars($role_filter_url('super_admin')); ?>" class="role-pill inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold <?php echo htmlspecialchars(role_pill_classes('super_admin', $active_role_filter)); ?>">Super Admin</a>
                         </div>
                     </div>
 
@@ -681,6 +829,8 @@ function role_badge_classes($role) {
                                     <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">User</th>
                                     <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Email</th>
                                     <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Role</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Phone</th>
                                     <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Dependencies</th>
                                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                                 </tr>
@@ -692,10 +842,7 @@ function role_badge_classes($role) {
                                         $last_name = (string)($user['last_name'] ?? '');
                                         $username = (string)($user['username'] ?? '');
                                         $email = (string)($user['email'] ?? '');
-                                        $role = (string)($user['role'] ?? '');
-                                        if ($role === 'admin') {
-                                            $role = 'super_admin';
-                                        }
+                                        $role = normalize_user_role_value($user['role'] ?? '');
 
                                         $full = trim($first_name . ' ' . $last_name);
                                         if ($full === '') {
@@ -724,7 +871,15 @@ function role_badge_classes($role) {
                                             }
                                         }
 
-                                        $search_blob = strtolower(trim($full . ' ' . $username . ' ' . $email . ' ' . $role));
+                                        $department_value = trim((string)($user['department'] ?? ''));
+                                        if (role_uses_contact_details($role) && $department_value === '') {
+                                            $department_value = 'Information of Technology Education';
+                                        }
+                                        $phone_value = trim((string)($user['phone_number'] ?? ''));
+                                        $department_display = ($department_value !== '') ? $department_value : '—';
+                                        $phone_display = ($phone_value !== '') ? $phone_value : '—';
+
+                                        $search_blob = strtolower(trim($full . ' ' . $username . ' ' . $email . ' ' . $role . ' ' . $department_display . ' ' . $phone_display));
                                         $user_payload = [
                                             'id' => $user['id'],
                                             'role' => $role,
@@ -732,7 +887,9 @@ function role_badge_classes($role) {
                                             'last_name' => $last_name,
                                             'username' => $username,
                                             'email' => $email,
-                                            'year_level' => (string)($user['year_level'] ?? '')
+                                            'year_level' => (string)($user['year_level'] ?? ''),
+                                            'phone_number' => (string)($user['phone_number'] ?? ''),
+                                            'department' => (string)($user['department'] ?? '')
                                         ];
 
                                         $can_manage = ($role !== 'super_admin' || (int)$user['id'] !== (int)($_SESSION['user_id'] ?? 0));
@@ -755,6 +912,8 @@ function role_badge_classes($role) {
                                                 <?php echo htmlspecialchars(role_label($role)); ?>
                                             </span>
                                         </td>
+                                        <td class="px-4 py-3 text-sm text-slate-700"><?php echo htmlspecialchars($department_display); ?></td>
+                                        <td class="px-4 py-3 text-sm text-slate-700"><?php echo htmlspecialchars($phone_display); ?></td>
                                         <td class="px-4 py-3">
                                             <?php if ($dependencies > 0): ?>
                                                 <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold bg-slate-900 text-white">
@@ -937,6 +1096,17 @@ function role_badge_classes($role) {
                         </select>
                     </div>
 
+                    <div id="edit_role_contact_fields" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Phone Number</label>
+                            <input type="text" name="phone_number" id="edit_phone_number" placeholder="Enter contact phone number" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-300" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Department</label>
+                            <input type="text" id="edit_department" value="Information of Technology Education" readonly class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700" />
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-slate-700">First Name</label>
@@ -1079,6 +1249,9 @@ function role_badge_classes($role) {
             const editRole = document.getElementById('edit_role');
             const editYearGroup = document.getElementById('edit_year_level_group');
             const editYear = document.getElementById('edit_year_level');
+            const editRoleContactFields = document.getElementById('edit_role_contact_fields');
+            const editPhoneNumber = document.getElementById('edit_phone_number');
+            const editDepartment = document.getElementById('edit_department');
 
             function syncYearLevelVisibility(roleSelect, groupEl, yearSelect) {
                 if (!roleSelect || !groupEl || !yearSelect) return;
@@ -1090,16 +1263,31 @@ function role_badge_classes($role) {
                 }
             }
 
+            function syncRoleContactFieldsVisibility(roleSelect, fieldsEl, phoneInput, departmentInput) {
+                if (!roleSelect || !fieldsEl || !phoneInput || !departmentInput) return;
+                const role = (roleSelect.value || '').toLowerCase();
+                const showContactFields = (role === 'instructor' || role === 'student');
+                fieldsEl.classList.toggle('hidden', !showContactFields);
+                if (showContactFields) {
+                    departmentInput.value = 'Information of Technology Education';
+                    return;
+                }
+                phoneInput.value = '';
+                departmentInput.value = 'Information of Technology Education';
+            }
+
             addRole?.addEventListener('change', function () {
                 syncYearLevelVisibility(addRole, addYearGroup, addYear);
             });
 
             editRole?.addEventListener('change', function () {
                 syncYearLevelVisibility(editRole, editYearGroup, editYear);
+                syncRoleContactFieldsVisibility(editRole, editRoleContactFields, editPhoneNumber, editDepartment);
             });
 
             syncYearLevelVisibility(addRole, addYearGroup, addYear);
             syncYearLevelVisibility(editRole, editYearGroup, editYear);
+            syncRoleContactFieldsVisibility(editRole, editRoleContactFields, editPhoneNumber, editDepartment);
 
             document.querySelectorAll('[data-modal-close]')?.forEach(function (btn) {
                 btn.addEventListener('click', function () {
@@ -1113,11 +1301,18 @@ function role_badge_classes($role) {
                 const normalizedRole = (userData.role === 'admin') ? 'super_admin' : userData.role;
                 document.getElementById('edit_role').value = normalizedRole;
                 document.getElementById('edit_year_level').value = userData.year_level || '';
+                if (editPhoneNumber) {
+                    editPhoneNumber.value = userData.phone_number || '';
+                }
+                if (editDepartment) {
+                    editDepartment.value = userData.department || 'Information of Technology Education';
+                }
                 document.getElementById('edit_first_name').value = userData.first_name;
                 document.getElementById('edit_last_name').value = userData.last_name;
                 document.getElementById('edit_username').value = userData.username;
                 document.getElementById('edit_email').value = userData.email;
                 syncYearLevelVisibility(editRole, editYearGroup, editYear);
+                syncRoleContactFieldsVisibility(editRole, editRoleContactFields, editPhoneNumber, editDepartment);
                 openModal('editUserModal');
             }
 
@@ -1151,33 +1346,16 @@ function role_badge_classes($role) {
             }
 
             const searchInput = document.getElementById('userSearch');
-            const rolePills = Array.from(document.querySelectorAll('.role-pill'));
             const rows = Array.from(document.querySelectorAll('.user-row'));
-            let activeRole = 'all';
 
             function applyFilters() {
                 const q = (searchInput?.value || '').trim().toLowerCase();
                 rows.forEach(function (row) {
-                    const role = (row.getAttribute('data-role') || '').toLowerCase();
                     const blob = (row.getAttribute('data-search') || '').toLowerCase();
-                    const matchRole = activeRole === 'all' || role === activeRole;
                     const matchSearch = q === '' || blob.includes(q);
-                    row.hidden = !(matchRole && matchSearch);
+                    row.hidden = !matchSearch;
                 });
             }
-
-            rolePills.forEach(function (pill) {
-                pill.addEventListener('click', function () {
-                    activeRole = pill.getAttribute('data-role') || 'all';
-                    rolePills.forEach(function (p) {
-                        p.classList.remove('bg-emerald-600', 'text-white');
-                        p.classList.add('border', 'border-slate-200', 'bg-white', 'text-slate-700');
-                    });
-                    pill.classList.add('bg-emerald-600', 'text-white');
-                    pill.classList.remove('border', 'border-slate-200', 'bg-white', 'text-slate-700');
-                    applyFilters();
-                });
-            });
 
             searchInput?.addEventListener('input', applyFilters);
             applyFilters();

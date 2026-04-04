@@ -296,6 +296,12 @@ function instructor_status_classes($status) {
                             $class_count = (int)($ins['class_count'] ?? 0);
                             $student_count = (int)($ins['student_count'] ?? 0);
                             $email = (string)($ins['email'] ?? '');
+                            $department = trim((string)($ins['department'] ?? ''));
+                            if ($department === '') {
+                                $department = 'Information of Technology Education';
+                            }
+                            $phone_number = trim((string)($ins['phone_number'] ?? ''));
+                            $phone_display = ($phone_number !== '') ? $phone_number : '—';
                             $q = urlencode($email !== '' ? $email : $name);
                         ?>
                         <article class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden transition duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-emerald-200">
@@ -318,7 +324,7 @@ function instructor_status_classes($status) {
 
                                 <div class="mt-4 space-y-2 text-sm text-slate-600">
                                     <div class="text-xs font-medium text-slate-500">Department</div>
-                                    <div class="text-sm text-slate-700">—</div>
+                                    <div class="text-sm text-slate-700"><?php echo htmlspecialchars($department); ?></div>
                                     <div class="pt-2 space-y-1">
                                         <div class="flex items-center gap-2 text-sm">
                                             <i class="bi bi-envelope text-slate-400"></i>
@@ -326,7 +332,7 @@ function instructor_status_classes($status) {
                                         </div>
                                         <div class="flex items-center gap-2 text-sm">
                                             <i class="bi bi-telephone text-slate-400"></i>
-                                            <span>—</span>
+                                            <span><?php echo htmlspecialchars($phone_display); ?></span>
                                         </div>
                                     </div>
                                 </div>
@@ -373,6 +379,7 @@ function instructor_status_classes($status) {
                                 <tr>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Instructor</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Phone</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Courses</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Students</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
@@ -397,6 +404,12 @@ function instructor_status_classes($status) {
                                         $course_preview = array_slice($course_codes, 0, 2);
                                         $course_more = max(0, count($course_codes) - count($course_preview));
                                         $email = (string)($ins['email'] ?? '');
+                                        $department = trim((string)($ins['department'] ?? ''));
+                                        if ($department === '') {
+                                            $department = 'Information of Technology Education';
+                                        }
+                                        $phone_number = trim((string)($ins['phone_number'] ?? ''));
+                                        $phone_display = ($phone_number !== '') ? $phone_number : '—';
                                         $q = urlencode($email !== '' ? $email : $name);
                                     ?>
                                     <tr>
@@ -411,7 +424,8 @@ function instructor_status_classes($status) {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td class="px-4 py-3 text-sm text-slate-600">—</td>
+                                        <td class="px-4 py-3 text-sm text-slate-600"><?php echo htmlspecialchars($department); ?></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600"><?php echo htmlspecialchars($phone_display); ?></td>
                                         <td class="px-4 py-3">
                                             <div class="flex flex-wrap gap-2">
                                                 <?php if (!empty($course_preview)): ?>
@@ -450,7 +464,7 @@ function instructor_status_classes($status) {
 
                                 <?php if (empty($instructors)): ?>
                                     <tr>
-                                        <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">No instructors found</td>
+                                        <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">No instructors found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
