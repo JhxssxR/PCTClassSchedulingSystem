@@ -261,6 +261,53 @@ $nav_items = [
         .day-panel.active {
             display: block;
         }
+
+        .schedule-export-mode {
+            width: 1500px !important;
+            max-width: none !important;
+            margin: 0 auto !important;
+            padding: 1.5rem !important;
+        }
+
+        .schedule-export-mode > section {
+            display: none !important;
+        }
+
+        .schedule-export-mode > section.export-full-week-section {
+            display: block !important;
+        }
+
+        .schedule-export-mode .export-controls,
+        .schedule-export-mode #exportMenu,
+        .schedule-export-mode .day-tab,
+        .schedule-export-mode #weeklyPrevBtn,
+        .schedule-export-mode #weeklyNextBtn {
+            display: none !important;
+        }
+
+        .schedule-export-mode .day-panel {
+            display: block !important;
+            margin-top: 0.85rem;
+        }
+
+        .schedule-export-mode .weekly-export-grid {
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        }
+
+        .schedule-export-mode .export-day-heading {
+            margin-bottom: 0.65rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #0f172a;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .schedule-export-mode .export-full-week-section .truncate {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+        }
     </style>
 </head>
 <body class="font-sans text-slate-900">
@@ -531,13 +578,13 @@ $nav_items = [
                     </div>
                 </section>
 
-                <section class="rounded-3xl border border-slate-200 bg-white p-5">
+                <section class="export-full-week-section rounded-3xl border border-slate-200 bg-white p-5">
                     <div>
                         <div class="text-[30px] font-semibold leading-tight text-slate-700">Full Week Overview</div>
                         <div class="text-sm text-slate-400">All scheduled classes</div>
                     </div>
 
-                    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 border border-slate-200 rounded-2xl overflow-hidden">
+                    <div class="weekly-export-grid mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 border border-slate-200 rounded-2xl overflow-hidden">
                         <?php foreach ($week_days as $day): ?>
                             <?php $is_today_col = ($today === $day); ?>
                             <div class="p-3 border-r border-slate-200 last:border-r-0 <?php echo $is_today_col ? 'bg-emerald-50/50' : 'bg-white'; ?>">
@@ -805,6 +852,67 @@ $nav_items = [
                 triggerDownload('data:text/csv;charset=utf-8,' + encodeURIComponent(csv), buildExportName('csv'));
             }
 
+            function prepareClonedScheduleForExport(doc) {
+                const clonedTarget = doc.getElementById('scheduleExportArea');
+                if (!clonedTarget) {
+                    return;
+                }
+
+                clonedTarget.classList.add('schedule-export-mode');
+                if (doc.body) {
+                    doc.body.style.background = '#f8fafc';
+                }
+
+                doc.querySelectorAll('.export-controls, #exportMenu').forEach(function (el) {
+                    el.style.display = 'none';
+                });
+
+                const dayPanels = Array.from(doc.querySelectorAll('[data-day-panel]'));
+                dayPanels.forEach(function (panel) {
+                    panel.classList.remove('hidden');
+                    panel.classList.add('active');
+                    panel.style.display = 'block';
+
+                    const dayName = String(panel.getAttribute('data-day-panel') || '').trim();
+                    if (dayName !== '' && !panel.querySelector('.export-day-heading')) {
+                        const heading = doc.createElement('div');
+                        heading.className = 'export-day-heading';
+                        heading.textContent = dayName;
+                        panel.insertBefore(heading, panel.firstChild);
+                    }
+                });
+            }
+
+            function saveCanvasAsPdf(canvas, filename) {
+                const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+                if (!jsPDFCtor) {
+                    throw new Error('PDF library is not available.');
+                }
+
+                const pdf = new jsPDFCtor({
+                    orientation: 'landscape',
+                    unit: 'pt',
+                    format: 'a4',
+                    compress: true,
+                });
+
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 20;
+                const printableWidth = pageWidth - (margin * 2);
+                const printableHeight = pageHeight - (margin * 2);
+                const imageData = canvas.toDataURL('image/png');
+                const scale = Math.min(printableWidth / canvas.width, printableHeight / canvas.height);
+                const renderWidth = canvas.width * scale;
+                const renderHeight = canvas.height * scale;
+                const renderX = (pageWidth - renderWidth) / 2;
+                const renderY = (pageHeight - renderHeight) / 2;
+
+                pdf.addImage(imageData, 'PNG', renderX, renderY, renderWidth, renderHeight, undefined, 'FAST');
+
+                pdf.save(filename);
+            }
+
             async function captureScheduleCanvas() {
                 const target = document.getElementById('scheduleExportArea');
                 if (!target || typeof window.html2canvas !== 'function') {
@@ -818,16 +926,15 @@ $nav_items = [
                 });
 
                 return window.html2canvas(target, {
-                    backgroundColor: '#f1f5f9',
-                    scale: 2,
+                    backgroundColor: '#f8fafc',
+                    scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 1)),
                     useCORS: true,
                     scrollX: 0,
-                    scrollY: -window.scrollY,
-                    windowWidth: document.documentElement.clientWidth,
+                    scrollY: 0,
+                    windowWidth: 1540,
+                    windowHeight: Math.max(document.documentElement.clientHeight, target.scrollHeight),
                     onclone: function (doc) {
-                        doc.querySelectorAll('.export-controls').forEach(function (el) {
-                            el.style.display = 'none';
-                        });
+                        prepareClonedScheduleForExport(doc);
                     },
                 });
             }
@@ -856,17 +963,7 @@ $nav_items = [
                         } else if (format === 'jpeg') {
                             triggerDownload(canvas.toDataURL('image/jpeg', 0.95), buildExportName('jpg'));
                         } else if (format === 'pdf') {
-                            const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
-                            if (!jsPDFCtor) {
-                                throw new Error('PDF library is not available.');
-                            }
-                            const pdf = new jsPDFCtor({
-                                orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait',
-                                unit: 'px',
-                                format: [canvas.width, canvas.height],
-                            });
-                            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
-                            pdf.save(buildExportName('pdf'));
+                            saveCanvasAsPdf(canvas, buildExportName('pdf'));
                         }
                     }
                 } catch (error) {

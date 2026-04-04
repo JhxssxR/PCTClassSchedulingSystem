@@ -265,6 +265,35 @@ $palette = [
         .sidebar-compact .sidebar-nav-link i {
             font-size: 1.38rem;
         }
+
+        .schedule-export-mode {
+            width: 1440px !important;
+            max-width: none !important;
+            margin: 0 auto !important;
+            padding: 1.5rem !important;
+        }
+
+        .schedule-export-mode .export-controls,
+        .schedule-export-mode #exportMenu,
+        .schedule-export-mode #dayPrevBtn,
+        .schedule-export-mode #dayNextBtn,
+        .schedule-export-mode .day-pill {
+            display: none !important;
+        }
+
+        .schedule-export-mode .day-panel {
+            display: block !important;
+            margin-top: 0.85rem;
+        }
+
+        .schedule-export-mode .export-day-heading {
+            margin-bottom: 0.65rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #0f172a;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased">
@@ -380,7 +409,7 @@ $palette = [
                         <h1 class="text-4xl leading-tight font-semibold text-slate-800">My Schedule</h1>
                         <p class="mt-1 text-xl text-slate-400"><?php echo htmlspecialchars($semester_label); ?> &middot; Weekly View</p>
                     </div>
-                    <div class="relative">
+                    <div class="relative export-controls">
                         <button id="exportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu">
                             <i class="bi bi-download"></i>
                             Export
@@ -711,6 +740,79 @@ $palette = [
                 triggerDownload('data:text/csv;charset=utf-8,' + encodeURIComponent(csv), buildExportName('csv'));
             }
 
+            function prepareClonedScheduleForExport(doc) {
+                const clonedTarget = doc.getElementById('scheduleExportArea');
+                if (!clonedTarget) {
+                    return;
+                }
+
+                clonedTarget.classList.add('schedule-export-mode');
+                if (doc.body) {
+                    doc.body.style.background = '#f8fafc';
+                }
+
+                doc.querySelectorAll('.export-controls, #exportMenu').forEach(function (el) {
+                    el.style.display = 'none';
+                });
+
+                const dayNavButton = doc.getElementById('dayPrevBtn');
+                const dayNavSection = dayNavButton ? dayNavButton.closest('section') : null;
+                if (dayNavSection) {
+                    dayNavSection.style.display = 'none';
+                }
+
+                const dayPanels = Array.from(doc.querySelectorAll('[data-day-panel]'));
+                dayPanels.forEach(function (panel) {
+                    panel.classList.remove('hidden');
+                    panel.classList.add('active');
+                    panel.style.display = 'block';
+
+                    const dayName = String(panel.getAttribute('data-day-panel') || '').trim();
+                    if (dayName !== '' && !panel.querySelector('.export-day-heading')) {
+                        const heading = doc.createElement('div');
+                        heading.className = 'export-day-heading';
+                        heading.textContent = dayName;
+                        panel.insertBefore(heading, panel.firstChild);
+                    }
+                });
+            }
+
+            function saveCanvasAsPdf(canvas, filename) {
+                const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+                if (!jsPDFCtor) {
+                    throw new Error('PDF library is not available.');
+                }
+
+                const pdf = new jsPDFCtor({
+                    orientation: 'landscape',
+                    unit: 'pt',
+                    format: 'a4',
+                    compress: true,
+                });
+
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 20;
+                const printableWidth = pageWidth - (margin * 2);
+                const printableHeight = pageHeight - (margin * 2);
+                const imageHeight = (canvas.height * printableWidth) / canvas.width;
+                const imageData = canvas.toDataURL('image/png');
+
+                let remainingHeight = imageHeight;
+                let offsetY = margin;
+                pdf.addImage(imageData, 'PNG', margin, offsetY, printableWidth, imageHeight, undefined, 'FAST');
+                remainingHeight -= printableHeight;
+
+                while (remainingHeight > 0) {
+                    pdf.addPage();
+                    offsetY = margin - (imageHeight - remainingHeight);
+                    pdf.addImage(imageData, 'PNG', margin, offsetY, printableWidth, imageHeight, undefined, 'FAST');
+                    remainingHeight -= printableHeight;
+                }
+
+                pdf.save(filename);
+            }
+
             async function captureScheduleCanvas() {
                 const target = document.getElementById('scheduleExportArea');
                 if (!target || typeof window.html2canvas !== 'function') {
@@ -724,12 +826,16 @@ $palette = [
                 });
 
                 return window.html2canvas(target, {
-                    backgroundColor: '#f1f5f9',
-                    scale: 2,
+                    backgroundColor: '#f8fafc',
+                    scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 1)),
                     useCORS: true,
                     scrollX: 0,
-                    scrollY: -window.scrollY,
-                    windowWidth: document.documentElement.clientWidth,
+                    scrollY: 0,
+                    windowWidth: 1480,
+                    windowHeight: Math.max(document.documentElement.clientHeight, target.scrollHeight),
+                    onclone: function (doc) {
+                        prepareClonedScheduleForExport(doc);
+                    },
                 });
             }
 
@@ -747,26 +853,18 @@ $palette = [
                 }
 
                 try {
-                    const canvas = await captureScheduleCanvas();
-
-                    if (format === 'png') {
-                        triggerDownload(canvas.toDataURL('image/png'), buildExportName('png'));
-                    } else if (format === 'jpeg') {
-                        triggerDownload(canvas.toDataURL('image/jpeg', 0.95), buildExportName('jpg'));
-                    } else if (format === 'pdf') {
-                        const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
-                        if (!jsPDFCtor) {
-                            throw new Error('PDF library is not available.');
-                        }
-                        const pdf = new jsPDFCtor({
-                            orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait',
-                            unit: 'px',
-                            format: [canvas.width, canvas.height],
-                        });
-                        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
-                        pdf.save(buildExportName('pdf'));
-                    } else if (format === 'excel') {
+                    if (format === 'excel') {
                         exportExcelFile();
+                    } else {
+                        const canvas = await captureScheduleCanvas();
+
+                        if (format === 'png') {
+                            triggerDownload(canvas.toDataURL('image/png'), buildExportName('png'));
+                        } else if (format === 'jpeg') {
+                            triggerDownload(canvas.toDataURL('image/jpeg', 0.95), buildExportName('jpg'));
+                        } else if (format === 'pdf') {
+                            saveCanvasAsPdf(canvas, buildExportName('pdf'));
+                        }
                     }
                 } catch (error) {
                     alert((error && error.message) ? error.message : 'Unable to export schedule right now.');
