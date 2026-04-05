@@ -213,6 +213,30 @@ try {
         redirect_with_message('success', 'Enrollment status updated successfully.');
     }
 
+    if ($action === 'delete') {
+        $enrollment_id = (int)($_POST['enrollment_id'] ?? 0);
+        if ($enrollment_id <= 0) {
+            redirect_with_message('error', 'Invalid enrollment selected.');
+        }
+
+        $stmt = $conn->prepare('SELECT id, status FROM enrollments WHERE id = ? LIMIT 1');
+        $stmt->execute([$enrollment_id]);
+        $enrollment = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$enrollment) {
+            redirect_with_message('error', 'Enrollment not found.');
+        }
+
+        $current_status = strtolower((string)($enrollment['status'] ?? ''));
+        if ($current_status !== 'dropped' && $current_status !== 'rejected') {
+            redirect_with_message('error', 'Only dropped enrollments can be removed.');
+        }
+
+        $stmt = $conn->prepare('DELETE FROM enrollments WHERE id = ? LIMIT 1');
+        $stmt->execute([$enrollment_id]);
+
+        redirect_with_message('success', 'Enrollment record removed successfully.');
+    }
+
 
     redirect_with_message('error', 'Invalid action.');
 } catch (PDOException $e) {

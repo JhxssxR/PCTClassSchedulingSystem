@@ -226,6 +226,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['success'] = 'Enrollment status updated successfully';
                 break;
 
+            case 'delete':
+                if (empty($_POST['enrollment_id'])) {
+                    throw new Exception('Enrollment ID is required');
+                }
+
+                $enrollment_id = (int)$_POST['enrollment_id'];
+                $stmt = $conn->prepare('SELECT id, status FROM enrollments WHERE id = ? LIMIT 1');
+                $stmt->execute([$enrollment_id]);
+                $enrollment = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$enrollment) {
+                    throw new Exception('Enrollment not found');
+                }
+
+                $current_status = strtolower((string)($enrollment['status'] ?? ''));
+                if ($current_status !== 'dropped' && $current_status !== 'rejected') {
+                    throw new Exception('Only dropped enrollments can be removed');
+                }
+
+                $stmt = $conn->prepare('DELETE FROM enrollments WHERE id = ? LIMIT 1');
+                $stmt->execute([$enrollment_id]);
+
+                $_SESSION['success'] = 'Enrollment record removed successfully';
+                break;
+
 
             default:
                 throw new Exception('Invalid action');

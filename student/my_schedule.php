@@ -313,6 +313,24 @@ $palette = [
             overflow: visible !important;
             text-overflow: clip !important;
         }
+
+        .schedule-pdf-mode {
+            width: 1280px !important;
+            max-width: none !important;
+            margin: 0 auto !important;
+            padding: 1rem !important;
+        }
+
+        .schedule-pdf-mode .export-controls,
+        .schedule-pdf-mode #exportMenu {
+            display: none !important;
+        }
+
+        .schedule-pdf-mode .truncate {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased">
@@ -833,6 +851,22 @@ $palette = [
                 });
             }
 
+            function prepareClonedScheduleForPdf(doc) {
+                const clonedTarget = doc.getElementById('scheduleExportArea');
+                if (!clonedTarget) {
+                    return;
+                }
+
+                clonedTarget.classList.add('schedule-pdf-mode');
+                if (doc.body) {
+                    doc.body.style.background = '#f8fafc';
+                }
+
+                doc.querySelectorAll('.export-controls, #exportMenu').forEach(function (el) {
+                    el.style.display = 'none';
+                });
+            }
+
             function saveCanvasAsPdf(canvas, filename) {
                 const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
                 if (!jsPDFCtor) {
@@ -840,7 +874,7 @@ $palette = [
                 }
 
                 const pdf = new jsPDFCtor({
-                    orientation: 'landscape',
+                    orientation: 'portrait',
                     unit: 'pt',
                     format: 'a4',
                     compress: true,
@@ -848,22 +882,66 @@ $palette = [
 
                 const pageWidth = pdf.internal.pageSize.getWidth();
                 const pageHeight = pdf.internal.pageSize.getHeight();
-                const margin = 20;
+                const margin = 22;
                 const printableWidth = pageWidth - (margin * 2);
                 const printableHeight = pageHeight - (margin * 2);
-                const imageData = canvas.toDataURL('image/png');
-                const scale = Math.min(printableWidth / canvas.width, printableHeight / canvas.height);
-                const renderWidth = canvas.width * scale;
-                const renderHeight = canvas.height * scale;
-                const renderX = (pageWidth - renderWidth) / 2;
-                const renderY = (pageHeight - renderHeight) / 2;
 
-                pdf.addImage(imageData, 'PNG', renderX, renderY, renderWidth, renderHeight, undefined, 'FAST');
+                const widthScale = printableWidth / canvas.width;
+                const scaledHeight = canvas.height * widthScale;
+
+                if (scaledHeight <= printableHeight) {
+                    const imageData = canvas.toDataURL('image/png');
+                    const renderX = margin;
+                    const renderY = (pageHeight - scaledHeight) / 2;
+                    pdf.addImage(imageData, 'PNG', renderX, renderY, printableWidth, scaledHeight, undefined, 'FAST');
+                    pdf.save(filename);
+                    return;
+                }
+
+                const sliceHeightPx = Math.max(1, Math.floor(printableHeight / widthScale));
+                const pageCanvas = document.createElement('canvas');
+                const pageCtx = pageCanvas.getContext('2d');
+                if (!pageCtx) {
+                    throw new Error('Unable to build PDF pages.');
+                }
+
+                let offsetY = 0;
+                let pageIndex = 0;
+
+                while (offsetY < canvas.height) {
+                    const currentSliceHeight = Math.min(sliceHeightPx, canvas.height - offsetY);
+                    pageCanvas.width = canvas.width;
+                    pageCanvas.height = currentSliceHeight;
+
+                    pageCtx.clearRect(0, 0, pageCanvas.width, pageCanvas.height);
+                    pageCtx.drawImage(
+                        canvas,
+                        0,
+                        offsetY,
+                        canvas.width,
+                        currentSliceHeight,
+                        0,
+                        0,
+                        pageCanvas.width,
+                        pageCanvas.height
+                    );
+
+                    if (pageIndex > 0) {
+                        pdf.addPage('a4', 'portrait');
+                    }
+
+                    const imageData = pageCanvas.toDataURL('image/png');
+                    const renderHeight = currentSliceHeight * widthScale;
+                    pdf.addImage(imageData, 'PNG', margin, margin, printableWidth, renderHeight, undefined, 'FAST');
+
+                    offsetY += currentSliceHeight;
+                    pageIndex += 1;
+                }
 
                 pdf.save(filename);
             }
 
-            async function captureScheduleCanvas() {
+            async function captureScheduleCanvas(mode) {
                 const target = document.getElementById('scheduleExportArea');
                 if (!target || typeof window.html2canvas !== 'function') {
                     throw new Error('Export library is not available.');
@@ -881,10 +959,14 @@ $palette = [
                     useCORS: true,
                     scrollX: 0,
                     scrollY: 0,
-                    windowWidth: 1540,
+                    windowWidth: mode === 'pdf' ? 1320 : 1540,
                     windowHeight: Math.max(document.documentElement.clientHeight, target.scrollHeight),
                     onclone: function (doc) {
-                        prepareClonedScheduleForExport(doc);
+                        if (mode === 'pdf') {
+                            prepareClonedScheduleForPdf(doc);
+                        } else {
+                            prepareClonedScheduleForExport(doc);
+                        }
                     },
                 });
             }
@@ -905,15 +987,16 @@ $palette = [
                 try {
                     if (format === 'excel') {
                         exportExcelFile();
+                    } else if (format === 'pdf') {
+                        const pdfCanvas = await captureScheduleCanvas('pdf');
+                        saveCanvasAsPdf(pdfCanvas, buildExportName('pdf'));
                     } else {
-                        const canvas = await captureScheduleCanvas();
+                        const canvas = await captureScheduleCanvas('image');
 
                         if (format === 'png') {
                             triggerDownload(canvas.toDataURL('image/png'), buildExportName('png'));
                         } else if (format === 'jpeg') {
                             triggerDownload(canvas.toDataURL('image/jpeg', 0.95), buildExportName('jpg'));
-                        } else if (format === 'pdf') {
-                            saveCanvasAsPdf(canvas, buildExportName('pdf'));
                         }
                     }
                 } catch (error) {

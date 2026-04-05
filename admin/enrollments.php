@@ -596,7 +596,7 @@ function status_badge(string $status): array {
                                             <button type="button" class="hover:text-slate-600" onclick="openEditStatusModal(<?php echo (int)$enrollment['id']; ?>, '<?php echo htmlspecialchars($disp_status); ?>')" aria-label="Edit enrollment">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button type="button" class="<?php echo $disp_status === 'dropped' ? 'opacity-40 cursor-not-allowed' : 'hover:text-rose-500'; ?>" <?php echo $disp_status === 'dropped' ? 'disabled' : ''; ?> onclick="quickDropEnrollment(<?php echo (int)$enrollment['id']; ?>, '<?php echo htmlspecialchars($disp_status); ?>')" aria-label="Drop enrollment">
+                                            <button type="button" class="hover:text-rose-500" onclick="quickDropEnrollment(<?php echo (int)$enrollment['id']; ?>, '<?php echo htmlspecialchars($disp_status); ?>')" aria-label="Drop enrollment">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
@@ -1012,6 +1012,27 @@ function status_badge(string $status): array {
         form.submit();
     }
 
+    function submitDeleteEnrollment(enrollmentId) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'process_enrollment.php';
+
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'delete';
+
+        const enrollmentIdInput = document.createElement('input');
+        enrollmentIdInput.type = 'hidden';
+        enrollmentIdInput.name = 'enrollment_id';
+        enrollmentIdInput.value = String(enrollmentId);
+
+        form.appendChild(actionInput);
+        form.appendChild(enrollmentIdInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+
     window.updateEnrollmentStatus = function (enrollmentId, status) {
         submitStatusUpdate(enrollmentId, status);
     }
@@ -1031,7 +1052,11 @@ function status_badge(string $status): array {
     }
 
     window.quickDropEnrollment = function (enrollmentId, currentStatus) {
-        if (currentStatus === 'dropped') return;
+        if (currentStatus === 'dropped') {
+            if (!confirm('This enrollment is already dropped. Remove this record permanently?')) return;
+            submitDeleteEnrollment(enrollmentId);
+            return;
+        }
         if (!confirm('Are you sure you want to drop this enrollment?')) return;
         submitStatusUpdate(enrollmentId, '<?php echo htmlspecialchars($drop_target_status); ?>');
     }
