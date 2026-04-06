@@ -21,6 +21,101 @@ function student_day_short(string $day): string {
     return $map[$day] ?? $day;
 }
 
+function student_day_token_to_name(string $token): string {
+    $normalized = strtolower(trim($token));
+    $normalized = preg_replace('/[^a-z]/', '', $normalized ?? '');
+
+    $map = [
+        'monday' => 'Monday',
+        'mon' => 'Monday',
+        'tuesday' => 'Tuesday',
+        'tue' => 'Tuesday',
+        'tues' => 'Tuesday',
+        'wednesday' => 'Wednesday',
+        'wed' => 'Wednesday',
+        'thursday' => 'Thursday',
+        'thu' => 'Thursday',
+        'thur' => 'Thursday',
+        'thurs' => 'Thursday',
+        'friday' => 'Friday',
+        'fri' => 'Friday',
+        'saturday' => 'Saturday',
+        'sat' => 'Saturday',
+        'sunday' => 'Sunday',
+        'sun' => 'Sunday',
+    ];
+
+    return $map[$normalized] ?? '';
+}
+
+function student_expand_schedule_days(string $rawDayValue): array {
+    $raw = trim($rawDayValue);
+    if ($raw === '') {
+        return [];
+    }
+
+    $order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    $order_map = array_flip($order);
+    $expanded = [];
+
+    $normalized = preg_replace('/\s+/', ' ', $raw);
+    $normalized = str_replace(['&', ';'], ',', $normalized ?? '');
+    $parts = preg_split('/\s*,\s*|\s*\/\s*/', (string)$normalized);
+    if (!$parts) {
+        $parts = [(string)$normalized];
+    }
+
+    foreach ($parts as $part) {
+        $part = trim((string)$part);
+        if ($part === '') {
+            continue;
+        }
+
+        if (preg_match('/^([A-Za-z]+)\s*(?:-|to)\s*([A-Za-z]+)$/i', $part, $m)) {
+            $start_day = student_day_token_to_name((string)$m[1]);
+            $end_day = student_day_token_to_name((string)$m[2]);
+            $start_index = $order_map[$start_day] ?? -1;
+            $end_index = $order_map[$end_day] ?? -1;
+
+            if ($start_index >= 0 && $end_index >= 0) {
+                if ($start_index <= $end_index) {
+                    for ($i = $start_index; $i <= $end_index; $i++) {
+                        $expanded[] = $order[$i];
+                    }
+                } else {
+                    for ($i = $start_index; $i < count($order); $i++) {
+                        $expanded[] = $order[$i];
+                    }
+                    for ($i = 0; $i <= $end_index; $i++) {
+                        $expanded[] = $order[$i];
+                    }
+                }
+                continue;
+            }
+        }
+
+        $single_day = student_day_token_to_name($part);
+        if ($single_day !== '') {
+            $expanded[] = $single_day;
+            continue;
+        }
+
+        foreach (preg_split('/\s+/', $part) as $token) {
+            $token_day = student_day_token_to_name((string)$token);
+            if ($token_day !== '') {
+                $expanded[] = $token_day;
+            }
+        }
+    }
+
+    $expanded = array_values(array_unique($expanded));
+    usort($expanded, function ($a, $b) use ($order_map) {
+        return (($order_map[$a] ?? 99) <=> ($order_map[$b] ?? 99));
+    });
+
+    return $expanded;
+}
+
 function student_time_display(string $time): string {
     if ($time === '') {
         return '';
@@ -38,6 +133,16 @@ function student_time_add_minutes(string $time, int $minutes): string {
         return '';
     }
     return date('H:i:s', $ts + ($minutes * 60));
+}
+
+function student_schedule_end_expr(array $schedule_cols, string $alias): string {
+    if (isset($schedule_cols['end_time'])) {
+        return $alias . '.end_time';
+    }
+    if (isset($schedule_cols['duration_minutes'])) {
+        return "ADDTIME({$alias}.start_time, SEC_TO_TIME(COALESCE({$alias}.duration_minutes, 120) * 60))";
+    }
+    return "ADDTIME({$alias}.start_time, SEC_TO_TIME(120 * 60))";
 }
 
 function student_class_duration(string $start_date, string $end_date, string $start_time, string $end_time): string {
@@ -107,13 +212,8 @@ try {
     $has_duration_minutes = isset($schedule_cols['duration_minutes']);
     $subjects_enabled = ($subjects_table_exists && isset($schedule_cols['subject_id']));
 
-    if ($has_end_time) {
-        $end_expr = 's.end_time';
-    } elseif ($has_duration_minutes) {
-        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
-    } else {
-        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
-    }
+    $end_expr = student_schedule_end_expr($schedule_cols, 's');
+    $linked_end_expr = student_schedule_end_expr($schedule_cols, 'se');
 
     $start_date_expr = isset($schedule_cols['start_date'])
         ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
@@ -132,8 +232,21 @@ try {
         ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
         : '';
 
+    $subject_link_predicate = $subjects_enabled
+        ? 'COALESCE(s.subject_id, 0) = COALESCE(se.subject_id, 0)'
+        : '1=1';
+    $year_level_link_predicate = isset($schedule_cols['year_level'])
+        ? "(COALESCE(se.year_level, '') = '' OR COALESCE(s.year_level, '') = COALESCE(se.year_level, ''))"
+        : '1=1';
+    $semester_link_predicate = isset($schedule_cols['semester'])
+        ? "(COALESCE(se.semester, '') = '' OR COALESCE(s.semester, '') = COALESCE(se.semester, ''))"
+        : '1=1';
+    $academic_year_link_predicate = isset($schedule_cols['academic_year'])
+        ? "(COALESCE(se.academic_year, '') = '' OR COALESCE(s.academic_year, '') = COALESCE(se.academic_year, ''))"
+        : '1=1';
+
     $sql = "
-        SELECT
+        SELECT DISTINCT
             s.id AS schedule_id,
             {$subject_code_expr} AS subject_code,
             {$subject_name_expr} AS subject_name,
@@ -144,21 +257,68 @@ try {
             {$end_date_expr} AS end_date,
             COALESCE(cr.room_number, 'TBA') AS room_number,
             TRIM(CONCAT(COALESCE(i.first_name, ''), ' ', COALESCE(i.last_name, ''))) AS instructor_name
-        FROM enrollments e
-        JOIN schedules s ON e.schedule_id = s.id
+                FROM (
+                        SELECT DISTINCT e.schedule_id
+                        FROM enrollments e
+                        JOIN schedules es ON es.id = e.schedule_id
+                        WHERE e.student_id = :student_id
+                            AND e.status IN ('approved', 'enrolled')
+                            AND es.status = 'active'
+                ) enrolled
+                JOIN schedules se ON se.id = enrolled.schedule_id
+                JOIN schedules s ON s.status = 'active'
+                        AND COALESCE(s.course_id, 0) = COALESCE(se.course_id, 0)
+                        AND {$subject_link_predicate}
+                        AND COALESCE(s.instructor_id, 0) = COALESCE(se.instructor_id, 0)
+                        AND COALESCE(s.classroom_id, 0) = COALESCE(se.classroom_id, 0)
+                        AND TIME_FORMAT(s.start_time, '%H:%i:%s') = TIME_FORMAT(se.start_time, '%H:%i:%s')
+                        AND TIME_FORMAT({$end_expr}, '%H:%i:%s') = TIME_FORMAT({$linked_end_expr}, '%H:%i:%s')
+                    AND {$semester_link_predicate}
+                    AND {$academic_year_link_predicate}
+                        AND {$year_level_link_predicate}
         LEFT JOIN courses c ON s.course_id = c.id
         {$subject_join_sql}
         LEFT JOIN classrooms cr ON s.classroom_id = cr.id
         LEFT JOIN users i ON s.instructor_id = i.id
-        WHERE e.student_id = :student_id
-          AND e.status IN ('approved', 'enrolled')
-          AND s.status = 'active'
         ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time
     ";
 
     $stmt = $conn->prepare($sql);
     $stmt->execute(['student_id' => (int)$_SESSION['user_id']]);
-    $schedule = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $schedule_rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $schedule = [];
+    $schedule_days_by_id = [];
+    foreach ($schedule_rows as $row) {
+        $schedule_id = (int)($row['schedule_id'] ?? 0);
+        $expanded_days = student_expand_schedule_days((string)($row['schedule_day'] ?? ''));
+
+        if (empty($expanded_days)) {
+            $single_day = student_day_token_to_name((string)($row['schedule_day'] ?? ''));
+            if ($single_day !== '') {
+                $expanded_days = [$single_day];
+            }
+        }
+
+        foreach ($expanded_days as $day_name) {
+            if (!in_array($day_name, $week_days, true)) {
+                continue;
+            }
+
+            $expanded_row = $row;
+            $expanded_row['schedule_day'] = $day_name;
+            $schedule[] = $expanded_row;
+
+            if ($schedule_id > 0) {
+                if (!isset($schedule_days_by_id[$schedule_id])) {
+                    $schedule_days_by_id[$schedule_id] = [];
+                }
+                if (!in_array($day_name, $schedule_days_by_id[$schedule_id], true)) {
+                    $schedule_days_by_id[$schedule_id][] = $day_name;
+                }
+            }
+        }
+    }
 
     foreach ($schedule as $row) {
         $d = (string)($row['schedule_day'] ?? '');
@@ -202,10 +362,13 @@ foreach ($schedule as $row) {
     }
     $duration_label = student_class_duration((string)($row['start_date'] ?? ''), (string)($row['end_date'] ?? ''), $start_time, $end_time);
 
+    $modal_days = $schedule_days_by_id[$schedule_id] ?? [];
+    $modal_day_label = !empty($modal_days) ? implode(', ', $modal_days) : (string)($row['schedule_day'] ?? '');
+
     $schedule_modal_map[$schedule_id] = [
         'subject_name' => (string)($row['subject_name'] ?? ''),
         'subject_code' => (string)($row['subject_code'] ?? ''),
-        'schedule_day' => (string)($row['schedule_day'] ?? ''),
+        'schedule_day' => $modal_day_label,
         'time_range' => student_time_display($start_time) . ' - ' . student_time_display($end_time),
         'duration_label' => $duration_label,
         'room_number' => (string)($row['room_number'] ?? 'TBA'),

@@ -426,6 +426,8 @@ $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $offset = ($page - 1) * $per_page;
 $active_role_filter = normalize_user_role_filter($_GET['filter_role'] ?? 'all');
 $role_filter_values = role_filter_db_values($active_role_filter);
+$active_search_query = trim((string)($_GET['q'] ?? ''));
+$active_search_query_lc = strtolower($active_search_query);
 
 $count_sql = "SELECT COUNT(*) FROM users WHERE 1=1";
 $count_params = [];
@@ -437,6 +439,10 @@ if (!empty($role_filter_values)) {
         $count_params[$key] = $value;
     }
     $count_sql .= " AND LOWER(TRIM(role)) IN (" . implode(', ', $placeholders) . ")";
+}
+if ($active_search_query_lc !== '') {
+    $count_sql .= " AND LOWER(CONCAT_WS(' ', first_name, last_name, username, email, role, COALESCE(department, ''), COALESCE(phone_number, ''))) LIKE :search_count";
+    $count_params[':search_count'] = '%' . $active_search_query_lc . '%';
 }
 
 $count_stmt = $conn->prepare($count_sql);
@@ -485,6 +491,10 @@ if (!empty($role_filter_values)) {
         $users_params[$key] = $value;
     }
     $users_sql .= "\n    AND LOWER(TRIM(u.role)) IN (" . implode(', ', $placeholders) . ")";
+}
+if ($active_search_query_lc !== '') {
+    $users_sql .= "\n    AND LOWER(CONCAT_WS(' ', u.first_name, u.last_name, u.username, u.email, u.role, COALESCE(u.department, ''), COALESCE(u.phone_number, ''))) LIKE :search_users";
+    $users_params[':search_users'] = '%' . $active_search_query_lc . '%';
 }
 
 $users_sql .= "
@@ -807,10 +817,13 @@ function role_pill_classes(string $pill_role, string $active_role): string {
                     <div class="p-4 flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
                         <div class="w-full lg:max-w-md">
                             <label class="sr-only" for="userSearch">Search users</label>
-                            <div class="relative">
+                            <form method="GET" action="users.php" class="relative">
+                                <?php if ($active_role_filter !== 'all'): ?>
+                                    <input type="hidden" name="filter_role" value="<?php echo htmlspecialchars($active_role_filter); ?>" />
+                                <?php endif; ?>
                                 <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                                <input id="userSearch" type="text" placeholder="Search name, username, email…" class="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-300" />
-                            </div>
+                                <input id="userSearch" name="q" type="text" value="<?php echo htmlspecialchars($active_search_query); ?>" placeholder="Search name, username, email..." class="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-300" />
+                            </form>
                         </div>
 
                         <div class="flex flex-wrap gap-2">

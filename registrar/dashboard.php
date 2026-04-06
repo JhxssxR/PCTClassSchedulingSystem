@@ -34,6 +34,64 @@ function registrar_has_column(PDO $conn, string $table, string $column): bool {
     }
 }
 
+function registrar_count_grouped_active_classes(PDO $conn): int {
+    $fallback = 0;
+    try {
+        $fallback = (int)$conn->query("SELECT COUNT(*) FROM schedules WHERE status = 'active'")->fetchColumn();
+
+        $has_subject_id = registrar_has_column($conn, 'schedules', 'subject_id');
+        $has_end_time = registrar_has_column($conn, 'schedules', 'end_time');
+        $has_duration_minutes = registrar_has_column($conn, 'schedules', 'duration_minutes');
+        $has_year_level = registrar_has_column($conn, 'schedules', 'year_level');
+
+        $subject_expr = $has_subject_id ? 'COALESCE(s.subject_id, 0)' : '0';
+        $year_level_expr = $has_year_level ? "COALESCE(s.year_level, '')" : "''";
+
+        if ($has_end_time) {
+            $end_time_expr = 's.end_time';
+        } elseif ($has_duration_minutes) {
+            $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+        } else {
+            $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+        }
+
+        $sql = "
+            SELECT COUNT(*)
+            FROM (
+                SELECT
+                    s.course_id,
+                    {$subject_expr} AS subject_group,
+                    s.instructor_id,
+                    s.classroom_id,
+                    s.start_time,
+                    {$end_time_expr} AS end_time_group,
+                    s.max_students,
+                    s.semester,
+                    s.academic_year,
+                    {$year_level_expr} AS year_level_group
+                FROM schedules s
+                WHERE s.status = 'active'
+                GROUP BY
+                    s.course_id,
+                    subject_group,
+                    s.instructor_id,
+                    s.classroom_id,
+                    s.start_time,
+                    end_time_group,
+                    s.max_students,
+                    s.semester,
+                    s.academic_year,
+                    year_level_group
+            ) AS grouped_classes
+        ";
+
+        return (int)$conn->query($sql)->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('Registrar grouped active class count failed: ' . $e->getMessage());
+        return $fallback;
+    }
+}
+
 function registrar_month_template(int $months = 6): array {
     $template = [];
     for ($i = $months - 1; $i >= 0; $i--) {
@@ -118,9 +176,7 @@ try {
     $stmt->execute();
     $stats['total_classes'] = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
 
-    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM schedules WHERE status = 'active'");
-    $stmt->execute();
-    $stats['active_classes'] = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? $stats['total_classes'];
+    $stats['active_classes'] = registrar_count_grouped_active_classes($conn);
 
     // Total enrollments
     $stmt = $conn->prepare("SELECT COUNT(*) as count FROM enrollments");

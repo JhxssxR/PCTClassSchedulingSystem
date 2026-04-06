@@ -100,6 +100,62 @@ $stmt = $conn->prepare("
 $stmt->execute();
 $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+$classes_grouped_map = [];
+foreach ($classes as $class_row) {
+    $group_key = implode('|', [
+        (string)($class_row['course_id'] ?? ''),
+        (string)($class_row['subject_id'] ?? ''),
+        (string)($class_row['instructor_id'] ?? ''),
+        (string)($class_row['classroom_id'] ?? ''),
+        (string)($class_row['start_time'] ?? ''),
+        (string)($class_row['end_time'] ?? ''),
+        (string)($class_row['status'] ?? ''),
+        (string)($class_row['max_students'] ?? ''),
+        (string)($class_row['semester'] ?? ''),
+        (string)($class_row['academic_year'] ?? ''),
+        (string)($class_row['year_level'] ?? '')
+    ]);
+
+    if (!isset($classes_grouped_map[$group_key])) {
+        $class_row['group_size'] = 0;
+        $class_row['combined_days_label'] = '';
+        $class_row['__days'] = [];
+        $class_row['__ids'] = [];
+        $classes_grouped_map[$group_key] = $class_row;
+    }
+
+    $day_value = trim((string)($class_row['day_of_week'] ?? ''));
+    if ($day_value !== '' && !in_array($day_value, $classes_grouped_map[$group_key]['__days'], true)) {
+        $classes_grouped_map[$group_key]['__days'][] = $day_value;
+    }
+
+    $classes_grouped_map[$group_key]['__ids'][] = (int)($class_row['id'] ?? 0);
+    $classes_grouped_map[$group_key]['group_size']++;
+    $classes_grouped_map[$group_key]['enrolled_students'] = max(
+        (int)($classes_grouped_map[$group_key]['enrolled_students'] ?? 0),
+        (int)($class_row['enrolled_students'] ?? 0)
+    );
+}
+
+$classes_display = array_values($classes_grouped_map);
+foreach ($classes_display as &$class_row) {
+    usort($class_row['__days'], function ($a, $b) use ($day_order_map) {
+        return (($day_order_map[$a] ?? 99) <=> ($day_order_map[$b] ?? 99));
+    });
+
+    $class_row['combined_days_label'] = !empty($class_row['__days'])
+        ? implode(', ', $class_row['__days'])
+        : (string)($class_row['day_of_week'] ?? '');
+
+    if (!empty($class_row['__ids'])) {
+        $class_row['id'] = (int)$class_row['__ids'][0];
+    }
+
+    unset($class_row['__days'], $class_row['__ids']);
+}
+unset($class_row);
+
 // Select options for modals
 $subjects = [];
 if ($subjects_enabled) {
@@ -115,7 +171,7 @@ $classrooms = $conn->query("SELECT id, room_number, room_type FROM classrooms OR
     ->fetchAll(PDO::FETCH_ASSOC);
 
 $active_count = 0;
-foreach ($classes as $row) {
+foreach ($classes_display as $row) {
     if (($row['status'] ?? '') === 'active') {
         $active_count++;
     }
@@ -200,7 +256,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($classes as $class): ?>
+                <?php foreach ($classes_display as $class): ?>
                     <?php
                         $enrolled = (int)($class['enrolled_students'] ?? 0);
                         $max = (int)($class['max_students'] ?? 0);
@@ -210,9 +266,22 @@ require_once __DIR__ . '/includes/layout_top.php';
                             if ($pct < 0) $pct = 0;
                             if ($pct > 100) $pct = 100;
                         }
-                        $display_code = $class['subject_code'] ?? $class['course_code'] ?? '';
-                        $display_name = $class['subject_name'] ?? $class['course_name'] ?? '';
-                        $search = strtolower(($display_name) . ' ' . ($display_code) . ' ' . ($class['instructor_name'] ?? '') . ' ' . ($class['room_number'] ?? ''));
+                        $display_code = trim((string)($class['subject_code'] ?? ''));
+                        if ($display_code === '') {
+                            $display_code = trim((string)($class['course_code'] ?? ''));
+                        }
+                        if ($display_code === '') {
+                            $display_code = 'N/A';
+                        }
+
+                        $display_name = trim((string)($class['subject_name'] ?? ''));
+                        if ($display_name === '') {
+                            $display_name = trim((string)($class['course_name'] ?? ''));
+                        }
+                        if ($display_name === '') {
+                            $display_name = 'Untitled Class';
+                        }
+                        $search = strtolower(($display_name) . ' ' . ($display_code) . ' ' . ($class['instructor_name'] ?? '') . ' ' . ($class['room_number'] ?? '') . ' ' . ($class['combined_days_label'] ?? ''));
                     ?>
                     <tr class="class-row border-t border-slate-100 hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars($search); ?>">
                         <td class="px-5 py-4">
@@ -222,8 +291,11 @@ require_once __DIR__ . '/includes/layout_top.php';
                         <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($class['instructor_name'] ?? 'Not Assigned'); ?></td>
                         <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($class['room_number'] ?? ''); ?></td>
                         <td class="px-5 py-4">
-                            <div class="text-slate-700"><?php echo htmlspecialchars($class['day_of_week'] ?? ''); ?></div>
+                            <div class="text-slate-700"><?php echo htmlspecialchars($class['combined_days_label'] ?? ''); ?></div>
                             <div class="text-xs text-slate-500"><?php echo htmlspecialchars(time_range_label($class['start_time'] ?? '', $class['end_time'] ?? '')); ?></div>
+                            <?php if ((int)($class['group_size'] ?? 1) > 1): ?>
+                                <div class="text-[11px] text-slate-400"><?php echo (int)$class['group_size']; ?> linked schedules</div>
+                            <?php endif; ?>
                         </td>
                         <td class="px-5 py-4">
                             <div class="flex items-center gap-3">
@@ -256,7 +328,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                     </tr>
                 <?php endforeach; ?>
 
-                <?php if (empty($classes)): ?>
+                <?php if (empty($classes_display)): ?>
                     <tr>
                         <td colspan="7" class="px-5 py-10 text-center text-slate-500">No classes found</td>
                     </tr>
@@ -278,7 +350,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 </button>
             </div>
 
-            <form action="process_class.php" method="POST" class="p-5">
+            <form id="addClassForm" action="process_class.php" method="POST" class="p-5">
                 <input type="hidden" name="action" value="add">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -345,12 +417,16 @@ require_once __DIR__ . '/includes/layout_top.php';
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Day of week</label>
-                        <select name="day_of_week" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Days</label>
+                        <div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                             <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] as $d): ?>
-                                <option value="<?php echo htmlspecialchars($d); ?>"><?php echo htmlspecialchars($d); ?></option>
+                                <label class="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:border-emerald-300">
+                                    <input type="checkbox" name="day_of_week[]" value="<?php echo htmlspecialchars($d); ?>" class="add-day-checkbox h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span><?php echo htmlspecialchars($d); ?></span>
+                                </label>
                             <?php endforeach; ?>
-                        </select>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-500">Select one or more days for this class.</p>
                     </div>
 
                     <div>
@@ -409,7 +485,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 </button>
             </div>
 
-            <form action="process_class.php" method="POST" class="p-5">
+            <form id="editClassForm" action="process_class.php" method="POST" class="p-5">
                 <input type="hidden" name="action" value="edit">
                 <input type="hidden" name="schedule_id" id="edit_schedule_id" value="">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -468,12 +544,16 @@ require_once __DIR__ . '/includes/layout_top.php';
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Day of week</label>
-                        <select name="day_of_week" id="edit_day_of_week" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Days</label>
+                        <div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                             <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] as $d): ?>
-                                <option value="<?php echo htmlspecialchars($d); ?>"><?php echo htmlspecialchars($d); ?></option>
+                                <label class="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:border-emerald-300">
+                                    <input type="checkbox" name="day_of_week[]" value="<?php echo htmlspecialchars($d); ?>" class="edit-day-checkbox h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span><?php echo htmlspecialchars($d); ?></span>
+                                </label>
                             <?php endforeach; ?>
-                        </select>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-500">Select one or more days for this class.</p>
                     </div>
 
                     <div>
@@ -537,6 +617,11 @@ require_once __DIR__ . '/includes/layout_top.php';
             document.body.classList.remove('overflow-hidden');
         }
 
+        const addClassForm = document.getElementById('addClassForm');
+        const editClassForm = document.getElementById('editClassForm');
+        const addDayCheckboxes = Array.from(document.querySelectorAll('.add-day-checkbox'));
+        const editDayCheckboxes = Array.from(document.querySelectorAll('.edit-day-checkbox'));
+
         document.getElementById('addClassBtn')?.addEventListener('click', function () {
             openModal('addClassModal');
         });
@@ -545,6 +630,22 @@ require_once __DIR__ . '/includes/layout_top.php';
                 const target = btn.getAttribute('data-modal-close');
                 if (target) closeModal(target);
             });
+        });
+
+        addClassForm?.addEventListener('submit', function (event) {
+            const selectedCount = addDayCheckboxes.filter(function (cb) { return cb.checked; }).length;
+            if (selectedCount === 0) {
+                event.preventDefault();
+                alert('Please select at least one day.');
+            }
+        });
+
+        editClassForm?.addEventListener('submit', function (event) {
+            const selectedCount = editDayCheckboxes.filter(function (cb) { return cb.checked; }).length;
+            if (selectedCount === 0) {
+                event.preventDefault();
+                alert('Please select at least one day.');
+            }
         });
 
         function filterSubjectsByYear(selectEl, yearLevel) {
@@ -630,7 +731,14 @@ require_once __DIR__ . '/includes/layout_top.php';
             }
             document.getElementById('edit_instructor_id').value = classData.instructor_id || '';
             document.getElementById('edit_classroom_id').value = classData.classroom_id || '';
-            document.getElementById('edit_day_of_week').value = classData.day_of_week || '';
+            editDayCheckboxes.forEach(function (cb) { cb.checked = false; });
+            const rawDays = String(classData.combined_days_label || classData.day_of_week || '');
+            const selectedDays = rawDays.split(',').map(function (d) { return d.trim(); }).filter(Boolean);
+            editDayCheckboxes.forEach(function (cb) {
+                if (selectedDays.includes(cb.value)) {
+                    cb.checked = true;
+                }
+            });
             document.getElementById('edit_start_time').value = classData.start_time || '';
             document.getElementById('edit_end_time').value = classData.end_time || '';
             document.getElementById('edit_max_students').value = classData.max_students || 30;

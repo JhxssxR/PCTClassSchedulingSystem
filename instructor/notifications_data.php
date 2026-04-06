@@ -79,10 +79,10 @@ try {
 
     // New classes assigned to this instructor.
     $schedule_ts_col = '';
-    if (isset($s_cols['created_at'])) {
-        $schedule_ts_col = 'created_at';
-    } elseif (isset($s_cols['updated_at'])) {
+    if (isset($s_cols['updated_at'])) {
         $schedule_ts_col = 'updated_at';
+    } elseif (isset($s_cols['created_at'])) {
+        $schedule_ts_col = 'created_at';
     }
 
     if ($instructor_id > 0 && $schedule_ts_col !== '') {
@@ -127,7 +127,7 @@ try {
             $notif_items[] = [
                 'ts' => (string) ($r['notif_ts'] ?? ''),
                 'icon' => 'bi-calendar-plus',
-                'title' => 'New class assigned',
+                'title' => 'Class schedule updated',
                 'subtitle' => $sub !== '' ? $sub : 'New schedule assigned',
                 'href' => $schedule_id > 0 ? ('my_schedule.php?schedule_id=' . $schedule_id) : 'my_schedule.php',
             ];

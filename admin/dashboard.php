@@ -19,6 +19,64 @@ function admin_dashboard_has_column(PDO $conn, string $table, string $column): b
     }
 }
 
+function admin_dashboard_count_grouped_active_classes(PDO $conn): int {
+    $fallback = 0;
+    try {
+        $fallback = (int)$conn->query("SELECT COUNT(*) FROM schedules WHERE status = 'active'")->fetchColumn();
+
+        $has_subject_id = admin_dashboard_has_column($conn, 'schedules', 'subject_id');
+        $has_end_time = admin_dashboard_has_column($conn, 'schedules', 'end_time');
+        $has_duration_minutes = admin_dashboard_has_column($conn, 'schedules', 'duration_minutes');
+        $has_year_level = admin_dashboard_has_column($conn, 'schedules', 'year_level');
+
+        $subject_expr = $has_subject_id ? 'COALESCE(s.subject_id, 0)' : '0';
+        $year_level_expr = $has_year_level ? "COALESCE(s.year_level, '')" : "''";
+
+        if ($has_end_time) {
+            $end_time_expr = 's.end_time';
+        } elseif ($has_duration_minutes) {
+            $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+        } else {
+            $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+        }
+
+        $sql = "
+            SELECT COUNT(*)
+            FROM (
+                SELECT
+                    s.course_id,
+                    {$subject_expr} AS subject_group,
+                    s.instructor_id,
+                    s.classroom_id,
+                    s.start_time,
+                    {$end_time_expr} AS end_time_group,
+                    s.max_students,
+                    s.semester,
+                    s.academic_year,
+                    {$year_level_expr} AS year_level_group
+                FROM schedules s
+                WHERE s.status = 'active'
+                GROUP BY
+                    s.course_id,
+                    subject_group,
+                    s.instructor_id,
+                    s.classroom_id,
+                    s.start_time,
+                    end_time_group,
+                    s.max_students,
+                    s.semester,
+                    s.academic_year,
+                    year_level_group
+            ) AS grouped_classes
+        ";
+
+        return (int)$conn->query($sql)->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('Error counting grouped active classes: ' . $e->getMessage());
+        return $fallback;
+    }
+}
+
 $has_enrolled_at = admin_dashboard_has_column($conn, 'enrollments', 'enrolled_at');
 $has_created_at = admin_dashboard_has_column($conn, 'enrollments', 'created_at');
 $has_enrollment_date = admin_dashboard_has_column($conn, 'enrollments', 'enrollment_date');
@@ -46,7 +104,7 @@ try {
         'total_users' => (int)$conn->query("SELECT COUNT(*) FROM users")->fetchColumn(),
         'students' => (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn(),
         'instructors' => (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'instructor'")->fetchColumn(),
-        'active_classes' => (int)$conn->query("SELECT COUNT(*) FROM schedules WHERE status = 'active'")->fetchColumn(),
+        'active_classes' => admin_dashboard_count_grouped_active_classes($conn),
         'total_enrollments' => (int)$conn->query("SELECT COUNT(*) FROM enrollments WHERE status IN ('enrolled', 'approved')")->fetchColumn(),
         'enrolled_students' => (int)$conn->query("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE status IN ('enrolled', 'approved')")->fetchColumn(),
         'courses' => (int)$conn->query("SELECT COUNT(*) FROM courses")->fetchColumn(),

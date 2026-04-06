@@ -44,8 +44,12 @@ try {
 }
 
 // Get all schedules with their subject (preferred) / course (legacy) and instructor information
-$subject_code_expr = $subjects_table_exists ? 'COALESCE(sub.subject_code, c.course_code)' : 'c.course_code';
-$subject_name_expr = $subjects_table_exists ? 'COALESCE(sub.subject_name, c.course_name)' : 'c.course_name';
+$subject_code_expr = $subjects_table_exists
+    ? "COALESCE(NULLIF(TRIM(sub.subject_code), ''), NULLIF(TRIM(c.course_code), ''))"
+    : "NULLIF(TRIM(c.course_code), '')";
+$subject_name_expr = $subjects_table_exists
+    ? "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))"
+    : "NULLIF(TRIM(c.course_name), '')";
 $subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
 
 $stmt = $conn->prepare("
@@ -352,8 +356,21 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                                 <?php if (!empty($by_day[$day])): ?>
                                     <?php foreach ($by_day[$day] as $s): ?>
                                         <?php
-                                            $card_name = (string) ($s['subject_name'] ?? $s['course_name'] ?? 'Class Schedule');
-                                            $card_code = (string) ($s['subject_code'] ?? $s['course_code'] ?? '');
+                                            $card_name = trim((string)($s['subject_name'] ?? ''));
+                                            if ($card_name === '') {
+                                                $card_name = trim((string)($s['course_name'] ?? ''));
+                                            }
+                                            if ($card_name === '') {
+                                                $card_name = 'Class Schedule';
+                                            }
+
+                                            $card_code = trim((string)($s['subject_code'] ?? ''));
+                                            if ($card_code === '') {
+                                                $card_code = trim((string)($s['course_code'] ?? ''));
+                                            }
+                                            if ($card_code === '') {
+                                                $card_code = 'N/A';
+                                            }
                                             $card_time = fmt_time_range((string) ($s['start_time'] ?? ''), (string) ($s['end_time'] ?? ''));
                                             $card_duration = fmt_class_duration((string) ($s['start_date'] ?? ''), (string) ($s['end_date'] ?? ''), (string) ($s['start_time'] ?? ''), (string) ($s['end_time'] ?? ''));
                                             $card_room = (string) ($s['room_number'] ?? '');
@@ -469,11 +486,30 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                         </thead>
                         <tbody>
                             <?php foreach ($schedules as $s): ?>
-                                <?php $status = strtolower((string)($s['status'] ?? 'active')); ?>
-                                <tr class="schedule-row border-t border-slate-100 hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars(strtolower(($s['course_code'] ?? '') . ' ' . ($s['course_name'] ?? '') . ' ' . ($s['instructor_name'] ?? '') . ' ' . ($s['room_number'] ?? '') . ' ' . ($s['day_of_week'] ?? ''))); ?>">
+                                <?php
+                                    $status = strtolower((string)($s['status'] ?? 'active'));
+                                    $display_name = trim((string)($s['subject_name'] ?? ''));
+                                    if ($display_name === '') {
+                                        $display_name = trim((string)($s['course_name'] ?? ''));
+                                    }
+                                    if ($display_name === '') {
+                                        $display_name = 'Untitled Class';
+                                    }
+
+                                    $display_code = trim((string)($s['subject_code'] ?? ''));
+                                    if ($display_code === '') {
+                                        $display_code = trim((string)($s['course_code'] ?? ''));
+                                    }
+                                    if ($display_code === '') {
+                                        $display_code = 'N/A';
+                                    }
+
+                                    $search_blob = strtolower($display_code . ' ' . $display_name . ' ' . ($s['instructor_name'] ?? '') . ' ' . ($s['room_number'] ?? '') . ' ' . ($s['day_of_week'] ?? ''));
+                                ?>
+                                <tr class="schedule-row border-t border-slate-100 hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars($search_blob); ?>">
                                     <td class="px-5 py-4">
-                                        <div class="font-semibold text-slate-900"><?php echo htmlspecialchars($s['course_name'] ?? ''); ?></div>
-                                        <div class="text-xs text-slate-500"><?php echo htmlspecialchars($s['course_code'] ?? ''); ?></div>
+                                        <div class="font-semibold text-slate-900"><?php echo htmlspecialchars($display_name); ?></div>
+                                        <div class="text-xs text-slate-500"><?php echo htmlspecialchars($display_code); ?></div>
                                     </td>
                                     <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($s['instructor_name'] ?? ''); ?></td>
                                     <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($s['room_number'] ?? ''); ?></td>
@@ -481,7 +517,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                                     <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars(fmt_time_range((string)($s['start_time'] ?? ''), (string)($s['end_time'] ?? ''))); ?></td>
                                     <td class="px-5 py-4 text-sm font-semibold text-emerald-700"><?php echo htmlspecialchars(fmt_class_duration((string)($s['start_date'] ?? ''), (string)($s['end_date'] ?? ''), (string)($s['start_time'] ?? ''), (string)($s['end_time'] ?? ''))); ?></td>
                                     <td class="px-5 py-4">
-                                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"><?php echo htmlspecialchars($s['course_code'] ?? ''); ?></span>
+                                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"><?php echo htmlspecialchars($display_code); ?></span>
                                     </td>
                                     <td class="px-5 py-4">
                                         <?php if ($status === 'active'): ?>
@@ -576,13 +612,16 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Day</label>
-                        <select name="day_of_week" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                            <option value="" selected disabled>Select day</option>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Days</label>
+                        <div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                             <?php foreach ($days as $d): ?>
-                                <option value="<?php echo htmlspecialchars($d); ?>"><?php echo htmlspecialchars($d); ?></option>
+                                <label class="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:border-emerald-300">
+                                    <input type="checkbox" name="day_of_week[]" value="<?php echo htmlspecialchars($d); ?>" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span><?php echo htmlspecialchars($d); ?></span>
+                                </label>
                             <?php endforeach; ?>
-                        </select>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-500">Select one or more days for this subject schedule.</p>
                     </div>
 
                     <div>
@@ -618,7 +657,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                 <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" data-modal-close="editScheduleModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
             </div>
 
-            <form action="process_schedule.php" method="POST" class="p-5">
+            <form id="editScheduleForm" action="process_schedule.php" method="POST" class="p-5">
                 <input type="hidden" name="action" value="edit">
                 <input type="hidden" name="schedule_id" id="edit_schedule_id">
 
@@ -664,13 +703,16 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Day</label>
-                        <select name="day_of_week" id="edit_day_of_week" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                            <option value="" disabled>Select day</option>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Days</label>
+                        <div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                             <?php foreach ($days as $d): ?>
-                                <option value="<?php echo htmlspecialchars($d); ?>"><?php echo htmlspecialchars($d); ?></option>
+                                <label class="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:border-emerald-300">
+                                    <input type="checkbox" name="day_of_week[]" value="<?php echo htmlspecialchars($d); ?>" data-day="<?php echo htmlspecialchars($d); ?>" class="edit-day-checkbox h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                    <span><?php echo htmlspecialchars($d); ?></span>
+                                </label>
                             <?php endforeach; ?>
-                        </select>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-500">Select one or more days for this subject schedule.</p>
                     </div>
 
                     <div>
@@ -811,6 +853,9 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
         });
     });
 
+    const editScheduleForm = document.getElementById('editScheduleForm');
+    const editDayCheckboxes = Array.from(document.querySelectorAll('.edit-day-checkbox'));
+
     const weekView = document.getElementById('weekView');
     const tableView = document.getElementById('tableView');
     const weekBtn = document.getElementById('weekViewBtn');
@@ -901,6 +946,14 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
     }
     searchInput?.addEventListener('input', applySearch);
 
+    editScheduleForm?.addEventListener('submit', function (event) {
+        const selectedCount = editDayCheckboxes.filter(function (cb) { return cb.checked; }).length;
+        if (selectedCount === 0) {
+            event.preventDefault();
+            alert('Please select at least one day.');
+        }
+    });
+
     window.editSchedule = function (scheduleData) {
         document.getElementById('edit_schedule_id').value = scheduleData.id;
             const editCourse = document.getElementById('edit_course_id');
@@ -910,7 +963,14 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
             document.getElementById('edit_subject_id').value = scheduleData.subject_id || '';
         document.getElementById('edit_instructor_id').value = scheduleData.instructor_id || '';
         document.getElementById('edit_classroom_id').value = scheduleData.classroom_id || '';
-        document.getElementById('edit_day_of_week').value = scheduleData.day_of_week || '';
+            editDayCheckboxes.forEach(function (cb) { cb.checked = false; });
+            const rawDays = String(scheduleData.combined_days_label || scheduleData.day_of_week || '');
+            const selectedDays = rawDays.split(',').map(function (d) { return d.trim(); }).filter(Boolean);
+            editDayCheckboxes.forEach(function (cb) {
+                if (selectedDays.includes(cb.value)) {
+                    cb.checked = true;
+                }
+            });
         document.getElementById('edit_start_time').value = scheduleData.start_time || '';
         document.getElementById('edit_end_time').value = scheduleData.end_time || '';
         document.getElementById('edit_status').value = scheduleData.status || 'active';

@@ -131,6 +131,8 @@ $subjects_join_sched = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (sche
 $class_name_expr = $subjects_table_exists ? 'COALESCE(sub.subject_name, c.course_name)' : 'c.course_name';
 $subjects_join_s = $subjects_table_exists ? 'LEFT JOIN subjects sub_s ON (s.subject_id IS NOT NULL AND s.subject_id = sub_s.id)' : '';
 $subject_name_expr_s = $subjects_table_exists ? 'COALESCE(sub_s.subject_name, c.course_name)' : 'c.course_name';
+$subject_id_expr_s = isset($schedule_cols['subject_id']) ? 'COALESCE(s.subject_id, 0)' : '0';
+$year_level_expr_s = isset($schedule_cols['year_level']) ? "COALESCE(s.year_level, '')" : "''";
 
 $where = [];
 $params = [];
@@ -267,6 +269,13 @@ $stmt = $conn->prepare("
               c.id as course_id,
               c.course_code, c.course_name,
         {$subject_name_expr_s} as subject_name,
+           {$subject_id_expr_s} as subject_id,
+           s.instructor_id,
+           s.classroom_id,
+           s.max_students,
+           s.semester,
+           s.academic_year,
+           {$year_level_expr_s} as year_level,
            CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
            r.room_number,
            s.day_of_week,
@@ -282,6 +291,47 @@ $stmt = $conn->prepare("
 ");
 $stmt->execute();
 $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+$grouped_schedule_map = [];
+foreach ($schedules as $schedule_row) {
+    $group_key = implode('|', [
+        (string)($schedule_row['course_id'] ?? ''),
+        (string)($schedule_row['subject_id'] ?? ''),
+        (string)($schedule_row['instructor_id'] ?? ''),
+        (string)($schedule_row['classroom_id'] ?? ''),
+        (string)($schedule_row['start_time'] ?? ''),
+        (string)($schedule_row['end_time'] ?? ''),
+        (string)($schedule_row['max_students'] ?? ''),
+        (string)($schedule_row['semester'] ?? ''),
+        (string)($schedule_row['academic_year'] ?? ''),
+        (string)($schedule_row['year_level'] ?? '')
+    ]);
+
+    if (!isset($grouped_schedule_map[$group_key])) {
+        $schedule_row['combined_days_label'] = '';
+        $schedule_row['__days'] = [];
+        $grouped_schedule_map[$group_key] = $schedule_row;
+    }
+
+    $day_value = trim((string)($schedule_row['day_of_week'] ?? ''));
+    if ($day_value !== '' && !in_array($day_value, $grouped_schedule_map[$group_key]['__days'], true)) {
+        $grouped_schedule_map[$group_key]['__days'][] = $day_value;
+    }
+}
+
+$schedules = array_values($grouped_schedule_map);
+foreach ($schedules as &$schedule_row) {
+    usort($schedule_row['__days'], function ($a, $b) use ($day_order_map) {
+        return (($day_order_map[$a] ?? 99) <=> ($day_order_map[$b] ?? 99));
+    });
+    $schedule_row['combined_days_label'] = !empty($schedule_row['__days'])
+        ? implode(', ', $schedule_row['__days'])
+        : (string)($schedule_row['day_of_week'] ?? '');
+    unset($schedule_row['__days']);
+}
+unset($schedule_row);
+
 $has_schedule_options = !empty($schedules);
 
 $all_courses = [];
@@ -628,7 +678,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                                 <?php foreach ($schedules as $schedule): ?>
                                     <option value="<?php echo (int)$schedule['id']; ?>" data-course="<?php echo (int)($schedule['course_id'] ?? 0); ?>"><?php
                                         $label = ($schedule['subject_name'] ?? $schedule['course_name'] ?? '');
-                                        $label .= ' | ' . ($schedule['day_of_week'] ?? '') . ' ';
+                                        $label .= ' | ' . ($schedule['combined_days_label'] ?? ($schedule['day_of_week'] ?? '')) . ' ';
                                         $label .= fmt_time_range($schedule['start_time'] ?? null, $schedule['end_time'] ?? null);
                                         $label .= ' | Room ' . ($schedule['room_number'] ?? '');
                                         echo htmlspecialchars($label);
