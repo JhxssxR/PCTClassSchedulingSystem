@@ -98,6 +98,9 @@ $today = date('l');
 $now_time = date('H:i:s');
 $has_schedule_end_time = instructor_has_column($conn, 'schedules', 'end_time');
 $has_schedule_subject_id = instructor_has_column($conn, 'schedules', 'subject_id');
+$has_schedule_year_level = instructor_has_column($conn, 'schedules', 'year_level');
+$has_schedule_semester = instructor_has_column($conn, 'schedules', 'semester');
+$has_schedule_academic_year = instructor_has_column($conn, 'schedules', 'academic_year');
 
 $subjects_table_exists = false;
 try {
@@ -118,6 +121,18 @@ $schedule_name_expr = $subjects_enabled
 $schedule_subject_join_sql = $subjects_enabled
     ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
     : '';
+$link_subject_select = $has_schedule_subject_id
+    ? 'COALESCE(s.subject_id, 0)'
+    : '0';
+$link_year_level_select = $has_schedule_year_level
+    ? "COALESCE(s.year_level, '')"
+    : "''";
+$link_semester_select = $has_schedule_semester
+    ? "COALESCE(s.semester, '')"
+    : "''";
+$link_academic_year_select = $has_schedule_academic_year
+    ? "COALESCE(s.academic_year, '')"
+    : "''";
 
 try {
     $stmt = $conn->prepare("SELECT * FROM users WHERE id = ? AND role = 'instructor'");
@@ -134,14 +149,14 @@ try {
     $stmt->execute([$_SESSION['user_id']]);
     $total_classes = (int) $stmt->fetchColumn();
 
-    $stmt = $conn->prepare("\n        SELECT COUNT(DISTINCT e.student_id)\n        FROM enrollments e\n        JOIN schedules s ON e.schedule_id = s.id\n        WHERE s.instructor_id = ? AND e.status = 'approved'\n    ");
+    $stmt = $conn->prepare("\n        SELECT COUNT(DISTINCT e.student_id)\n        FROM enrollments e\n        JOIN schedules s ON e.schedule_id = s.id\n        WHERE s.instructor_id = ? AND e.status IN ('approved', 'enrolled')\n    ");
     $stmt->execute([$_SESSION['user_id']]);
     $total_students = (int) $stmt->fetchColumn();
 
     $end_time_select = $has_schedule_end_time
         ? "COALESCE(NULLIF(s.end_time, '00:00:00'), ADDTIME(s.start_time, '02:00:00'))"
         : "ADDTIME(s.start_time, '02:00:00')";
-    $stmt = $conn->prepare("\n        SELECT\n            s.id,\n            s.start_time,\n            $end_time_select AS end_time,\n            s.max_students,\n            s.semester,\n            s.academic_year,\n            {$schedule_code_expr} AS course_code,\n            {$schedule_name_expr} AS course_name,\n            cl.room_number,\n            (SELECT COUNT(*) FROM enrollments e WHERE e.schedule_id = s.id AND e.status = 'approved') AS enrolled_students\n        FROM schedules s\n        JOIN courses c ON s.course_id = c.id\n        {$schedule_subject_join_sql}\n        JOIN classrooms cl ON s.classroom_id = cl.id\n        WHERE s.instructor_id = ?\n          AND s.day_of_week = ?\n          AND s.status = 'active'\n        ORDER BY s.start_time ASC\n    ");
+    $stmt = $conn->prepare("\n        SELECT\n            s.id,\n            s.course_id,\n            s.instructor_id,\n            s.classroom_id,\n            {$link_subject_select} AS link_subject_id,\n            {$link_year_level_select} AS link_year_level,\n            {$link_semester_select} AS link_semester,\n            {$link_academic_year_select} AS link_academic_year,\n            s.start_time,\n            $end_time_select AS end_time,\n            s.max_students,\n            s.semester,\n            s.academic_year,\n            {$schedule_code_expr} AS course_code,\n            {$schedule_name_expr} AS course_name,\n            cl.room_number,\n            (SELECT COUNT(DISTINCT e.student_id) FROM enrollments e WHERE e.schedule_id = s.id AND e.status IN ('approved', 'enrolled')) AS enrolled_students\n        FROM schedules s\n        JOIN courses c ON s.course_id = c.id\n        {$schedule_subject_join_sql}\n        JOIN classrooms cl ON s.classroom_id = cl.id\n        WHERE s.instructor_id = ?\n          AND s.day_of_week = ?\n          AND s.status = 'active'\n        ORDER BY s.start_time ASC\n    ");
     $stmt->execute([$_SESSION['user_id'], $today]);
     $today_schedule = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -187,7 +202,7 @@ try {
     }
 
     try {
-        $stmt = $conn->prepare("\n            SELECT YEARWEEK(e.$date_column, 1) AS yw, COUNT(DISTINCT e.student_id) AS cnt\n            FROM enrollments e\n            JOIN schedules s ON e.schedule_id = s.id\n            WHERE s.instructor_id = ?\n              AND e.status = 'approved'\n            GROUP BY YEARWEEK(e.$date_column, 1)\n            ORDER BY yw DESC\n            LIMIT 6\n        ");
+        $stmt = $conn->prepare("\n            SELECT YEARWEEK(e.$date_column, 1) AS yw, COUNT(DISTINCT e.student_id) AS cnt\n            FROM enrollments e\n            JOIN schedules s ON e.schedule_id = s.id\n            WHERE s.instructor_id = ?\n              AND e.status IN ('approved', 'enrolled')\n            GROUP BY YEARWEEK(e.$date_column, 1)\n            ORDER BY yw DESC\n            LIMIT 6\n        ");
         $stmt->execute([$_SESSION['user_id']]);
         $trend_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -223,22 +238,79 @@ try {
 
 $today_schedule_students = [];
 if (!empty($today_schedule)) {
+    $build_group_key = static function (array $row): string {
+        return implode('|', [
+            (string) ($row['course_id'] ?? 0),
+            (string) ($row['link_subject_id'] ?? 0),
+            (string) ($row['instructor_id'] ?? 0),
+            (string) ($row['classroom_id'] ?? 0),
+            (string) ($row['start_time'] ?? ''),
+            (string) ($row['end_time'] ?? ''),
+            (string) ($row['link_semester'] ?? ''),
+            (string) ($row['link_academic_year'] ?? ''),
+            (string) ($row['link_year_level'] ?? ''),
+        ]);
+    };
+
     $today_schedule_ids = [];
+    $today_group_keys = [];
+    $today_group_key_by_schedule = [];
     foreach ($today_schedule as $schedule_row) {
         $sid = (int) ($schedule_row['id'] ?? 0);
-        if ($sid > 0) {
-            $today_schedule_ids[$sid] = $sid;
+        if ($sid <= 0) {
+            continue;
+        }
+
+        $group_key = $build_group_key($schedule_row);
+        $today_schedule_ids[$sid] = $sid;
+        $today_group_keys[$group_key] = true;
+        $today_group_key_by_schedule[$sid] = $group_key;
+    }
+
+    $linked_schedule_ids_by_group = [];
+    try {
+        $linked_stmt = $conn->prepare("\n            SELECT\n                s.id,\n                s.course_id,\n                s.instructor_id,\n                s.classroom_id,\n                {$link_subject_select} AS link_subject_id,\n                {$link_year_level_select} AS link_year_level,\n                {$link_semester_select} AS link_semester,\n                {$link_academic_year_select} AS link_academic_year,\n                s.start_time,\n                $end_time_select AS end_time\n            FROM schedules s\n            WHERE s.instructor_id = ?\n              AND s.status = 'active'\n        ");
+        $linked_stmt->execute([$_SESSION['user_id']]);
+
+        foreach ($linked_stmt->fetchAll(PDO::FETCH_ASSOC) as $linked_row) {
+            $group_key = $build_group_key($linked_row);
+            if (!isset($today_group_keys[$group_key])) {
+                continue;
+            }
+
+            $linked_id = (int) ($linked_row['id'] ?? 0);
+            if ($linked_id <= 0) {
+                continue;
+            }
+
+            if (!isset($linked_schedule_ids_by_group[$group_key])) {
+                $linked_schedule_ids_by_group[$group_key] = [];
+            }
+            $linked_schedule_ids_by_group[$group_key][$linked_id] = $linked_id;
+        }
+    } catch (Throwable $e) {
+        error_log('Instructor dashboard linked schedules lookup warning: ' . $e->getMessage());
+    }
+
+    $query_schedule_ids = [];
+    foreach ($today_schedule_ids as $sid) {
+        $group_key = $today_group_key_by_schedule[$sid] ?? '';
+        $group_ids = $linked_schedule_ids_by_group[$group_key] ?? [$sid => $sid];
+        foreach ($group_ids as $gid) {
+            $query_schedule_ids[$gid] = $gid;
         }
     }
 
-    if (!empty($today_schedule_ids)) {
-        $placeholders = implode(',', array_fill(0, count($today_schedule_ids), '?'));
-        $student_stmt = $conn->prepare("\n            SELECT e.schedule_id, u.first_name, u.last_name\n            FROM enrollments e\n            JOIN users u ON e.student_id = u.id\n            WHERE e.status = 'approved'\n              AND e.schedule_id IN ($placeholders)\n            ORDER BY u.last_name, u.first_name\n        ");
-        $student_stmt->execute(array_values($today_schedule_ids));
+    if (!empty($query_schedule_ids)) {
+        $students_by_schedule = [];
+        $placeholders = implode(',', array_fill(0, count($query_schedule_ids), '?'));
+        $student_stmt = $conn->prepare("\n            SELECT e.schedule_id, e.student_id, u.first_name, u.last_name\n            FROM enrollments e\n            JOIN users u ON e.student_id = u.id\n            WHERE e.status IN ('approved', 'enrolled')\n              AND e.schedule_id IN ($placeholders)\n            ORDER BY u.last_name, u.first_name\n        ");
+        $student_stmt->execute(array_values($query_schedule_ids));
 
         foreach ($student_stmt->fetchAll(PDO::FETCH_ASSOC) as $student_row) {
             $sid = (int) ($student_row['schedule_id'] ?? 0);
-            if ($sid <= 0) {
+            $student_id = (int) ($student_row['student_id'] ?? 0);
+            if ($sid <= 0 || $student_id <= 0) {
                 continue;
             }
 
@@ -247,12 +319,35 @@ if (!empty($today_schedule)) {
                 continue;
             }
 
-            if (!isset($today_schedule_students[$sid])) {
-                $today_schedule_students[$sid] = [];
+            if (!isset($students_by_schedule[$sid])) {
+                $students_by_schedule[$sid] = [];
             }
-            $today_schedule_students[$sid][] = $student_name;
+            $students_by_schedule[$sid][$student_id] = $student_name;
+        }
+
+        foreach ($today_schedule_ids as $sid) {
+            $group_key = $today_group_key_by_schedule[$sid] ?? '';
+            $group_ids = $linked_schedule_ids_by_group[$group_key] ?? [$sid => $sid];
+            $merged_students = [];
+
+            foreach ($group_ids as $gid) {
+                foreach (($students_by_schedule[$gid] ?? []) as $student_id => $student_name) {
+                    $merged_students[$student_id] = $student_name;
+                }
+            }
+
+            $today_schedule_students[$sid] = array_values($merged_students);
         }
     }
+
+    foreach ($today_schedule as &$schedule_row) {
+        $sid = (int) ($schedule_row['id'] ?? 0);
+        if ($sid <= 0) {
+            continue;
+        }
+        $schedule_row['enrolled_students'] = count($today_schedule_students[$sid] ?? []);
+    }
+    unset($schedule_row);
 }
 
 $today_schedule_modal_map = [];

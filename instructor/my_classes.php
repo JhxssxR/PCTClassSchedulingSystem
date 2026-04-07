@@ -40,7 +40,7 @@ if ($full_name === '') {
 }
 $user_initials = strtoupper(substr((string) ($instructor['first_name'] ?? 'I'), 0, 1) . substr((string) ($instructor['last_name'] ?? 'N'), 0, 1));
 
-$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        s.day_of_week,\n        s.start_time,\n        s.max_students,\n        c.course_code,\n        c.course_name,\n        cl.room_number,\n        COUNT(CASE WHEN e.status = 'approved' THEN e.id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY c.course_code, FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
+$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        s.day_of_week,\n        s.start_time,\n        s.max_students,\n        c.course_code,\n        c.course_name,\n        cl.room_number,\n        COUNT(DISTINCT CASE WHEN e.status IN ('approved', 'enrolled') THEN e.student_id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY c.course_code, FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
 $stmt->execute(['instructor_id' => $instructor_id]);
 $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

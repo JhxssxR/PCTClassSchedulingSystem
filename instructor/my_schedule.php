@@ -162,7 +162,7 @@ $students_by_schedule = [];
 
 if (!empty($schedule_ids)) {
     $placeholders = implode(',', array_fill(0, count($schedule_ids), '?'));
-    $student_stmt = $conn->prepare("\n        SELECT e.schedule_id, e.student_id, u.first_name, u.last_name\n        FROM enrollments e\n        JOIN users u ON e.student_id = u.id\n        WHERE e.status = 'approved'\n          AND e.schedule_id IN ($placeholders)\n        ORDER BY u.last_name, u.first_name\n    ");
+    $student_stmt = $conn->prepare("\n        SELECT e.schedule_id, e.student_id, u.first_name, u.last_name\n        FROM enrollments e\n        JOIN users u ON e.student_id = u.id\n        WHERE e.status IN ('approved', 'enrolled')\n          AND e.schedule_id IN ($placeholders)\n        ORDER BY u.last_name, u.first_name\n    ");
     $student_stmt->execute(array_values($schedule_ids));
 
     foreach ($student_stmt->fetchAll(PDO::FETCH_ASSOC) as $student_row) {
