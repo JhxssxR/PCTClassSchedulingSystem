@@ -72,6 +72,89 @@ $stmt = $conn->prepare("
 $stmt->execute();
 $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Merge duplicate-looking rows caused by legacy blank term metadata.
+$core_group_stats = [];
+foreach ($schedules as $row) {
+    $core_key = implode('|', [
+        (string)($row['day_of_week'] ?? ''),
+        (string)($row['course_id'] ?? ''),
+        (string)($row['subject_id'] ?? ''),
+        (string)($row['instructor_id'] ?? ''),
+        (string)($row['classroom_id'] ?? ''),
+        (string)($row['start_time'] ?? ''),
+        (string)($row['end_time'] ?? ''),
+        (string)($row['status'] ?? ''),
+        (string)($row['max_students'] ?? ''),
+    ]);
+
+    if (!isset($core_group_stats[$core_key])) {
+        $core_group_stats[$core_key] = [
+            'semester' => [],
+            'academic_year' => [],
+            'year_level' => [],
+        ];
+    }
+
+    $semester = trim((string)($row['semester'] ?? ''));
+    $academic_year = trim((string)($row['academic_year'] ?? ''));
+    $year_level = trim((string)($row['year_level'] ?? ''));
+    if ($semester !== '') {
+        $core_group_stats[$core_key]['semester'][$semester] = true;
+    }
+    if ($academic_year !== '') {
+        $core_group_stats[$core_key]['academic_year'][$academic_year] = true;
+    }
+    if ($year_level !== '') {
+        $core_group_stats[$core_key]['year_level'][$year_level] = true;
+    }
+}
+
+$grouped_schedules = [];
+foreach ($schedules as $row) {
+    $core_key = implode('|', [
+        (string)($row['day_of_week'] ?? ''),
+        (string)($row['course_id'] ?? ''),
+        (string)($row['subject_id'] ?? ''),
+        (string)($row['instructor_id'] ?? ''),
+        (string)($row['classroom_id'] ?? ''),
+        (string)($row['start_time'] ?? ''),
+        (string)($row['end_time'] ?? ''),
+        (string)($row['status'] ?? ''),
+        (string)($row['max_students'] ?? ''),
+    ]);
+
+    $stats = $core_group_stats[$core_key] ?? ['semester' => [], 'academic_year' => [], 'year_level' => []];
+    $semester = trim((string)($row['semester'] ?? ''));
+    $academic_year = trim((string)($row['academic_year'] ?? ''));
+    $year_level = trim((string)($row['year_level'] ?? ''));
+
+    if ($semester === '' && count($stats['semester']) === 1) {
+        $semester = (string)array_key_first($stats['semester']);
+        $row['semester'] = $semester;
+    }
+    if ($academic_year === '' && count($stats['academic_year']) === 1) {
+        $academic_year = (string)array_key_first($stats['academic_year']);
+        $row['academic_year'] = $academic_year;
+    }
+    if ($year_level === '' && count($stats['year_level']) === 1) {
+        $year_level = (string)array_key_first($stats['year_level']);
+        $row['year_level'] = $year_level;
+    }
+
+    $group_key = $core_key . '|' . $semester . '|' . $academic_year . '|' . $year_level;
+    if (!isset($grouped_schedules[$group_key])) {
+        $grouped_schedules[$group_key] = $row;
+        continue;
+    }
+
+    $grouped_schedules[$group_key]['enrollment_count'] = max(
+        (int)($grouped_schedules[$group_key]['enrollment_count'] ?? 0),
+        (int)($row['enrollment_count'] ?? 0)
+    );
+}
+
+$schedules = array_values($grouped_schedules);
+
 $active_count = 0;
 foreach ($schedules as $row) {
     $status = strtolower((string)($row['status'] ?? 'active'));

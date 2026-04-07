@@ -199,6 +199,20 @@ function ensure_schedule_updated_at_column(PDO $conn, array &$cols): void {
     }
 }
 
+function ensure_schedule_end_time_column(PDO $conn, array &$cols): void {
+    if (isset($cols['end_time'])) {
+        return;
+    }
+
+    try {
+        $conn->exec("ALTER TABLE schedules ADD COLUMN end_time TIME NULL AFTER start_time");
+        $cols['end_time'] = true;
+        $conn->exec("UPDATE schedules SET end_time = ADDTIME(start_time, SEC_TO_TIME(120 * 60)) WHERE end_time IS NULL OR end_time = '00:00:00'");
+    } catch (Throwable $e) {
+        // Ignore if schema cannot be altered; code will fall back to default duration behavior.
+    }
+}
+
 function is_instructor_user(PDO $conn, int $user_id): bool {
     if ($user_id <= 0) {
         return false;
@@ -230,6 +244,7 @@ $action = $_POST['action'] ?? '';
 try {
     $cols = table_columns($conn, 'schedules');
     ensure_schedule_updated_at_column($conn, $cols);
+    ensure_schedule_end_time_column($conn, $cols);
 
     $has_end_time = isset($cols['end_time']);
     $has_duration_minutes = isset($cols['duration_minutes']);
@@ -492,7 +507,6 @@ try {
                     'status' => isset($cols['status']) ? (string)($current['status'] ?? 'active') : 'active',
                 ],
                 $cols,
-                $has_subject_id,
                 $has_end_time,
                 $has_duration_minutes,
                 $default_duration
@@ -505,11 +519,108 @@ try {
                 $linked_ids[] = $row_id;
                 $row_day = (string)($row['day_of_week'] ?? '');
                 if ($row_day !== '') {
-                    $linked_by_day[$row_day] = $row;
+                    if (!isset($linked_by_day[$row_day])) {
+                        $linked_by_day[$row_day] = [];
+                    }
+                    $linked_by_day[$row_day][] = $row;
                 }
             }
             if (empty($linked_ids)) {
                 $linked_ids[] = $schedule_id;
+            }
+            $linked_ids = array_values(array_unique(array_map('intval', $linked_ids)));
+
+            $fallback_days = $selected_days;
+            if (!empty($fallback_days)) {
+                $fallback_where = ['course_id = ?'];
+                $fallback_params = [(int)($current['course_id'] ?? 0)];
+
+                if ($has_subject_id) {
+                    $fallback_where[] = 'COALESCE(subject_id, 0) = ?';
+                    $fallback_params[] = (int)($current['subject_id'] ?? 0);
+                }
+                if (isset($cols['year_level'])) {
+                    $current_year_level = normalize_year_level($current['year_level'] ?? null);
+                    if ($current_year_level > 0) {
+                        $fallback_where[] = '(COALESCE(year_level, 0) = ? OR COALESCE(year_level, 0) = 0)';
+                        $fallback_params[] = $current_year_level;
+                    }
+                }
+                if (isset($cols['semester'])) {
+                    $current_semester = trim((string)($current['semester'] ?? ''));
+                    if ($current_semester !== '') {
+                        $fallback_where[] = "(COALESCE(semester, '') = ? OR COALESCE(semester, '') = '')";
+                        $fallback_params[] = $current_semester;
+                    }
+                }
+                if (isset($cols['academic_year'])) {
+                    $current_academic_year = trim((string)($current['academic_year'] ?? ''));
+                    if ($current_academic_year !== '') {
+                        $fallback_where[] = "(COALESCE(academic_year, '') = ? OR COALESCE(academic_year, '') = '')";
+                        $fallback_params[] = $current_academic_year;
+                    }
+                }
+
+                $fallback_where[] = "TIME_FORMAT(start_time, '%H:%i:%s') = ?";
+                $fallback_params[] = $current_start_time;
+
+                if (!empty($linked_ids)) {
+                    $fallback_where[] = 'id NOT IN (' . implode(', ', array_fill(0, count($linked_ids), '?')) . ')';
+                    $fallback_params = array_merge($fallback_params, $linked_ids);
+                }
+
+                $fallback_where[] = 'day_of_week IN (' . implode(', ', array_fill(0, count($fallback_days), '?')) . ')';
+                $fallback_params = array_merge($fallback_params, $fallback_days);
+
+                $fallback_sql = 'SELECT * FROM schedules WHERE ' . implode(' AND ', $fallback_where);
+                $fallback_stmt = $conn->prepare($fallback_sql);
+                $fallback_stmt->execute($fallback_params);
+                $fallback_rows = $fallback_stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                $fallback_by_day = [];
+                foreach ($fallback_rows as $fallback_row) {
+                    $fallback_end = schedule_effective_end_time($fallback_row, $has_end_time, $has_duration_minutes, $default_duration);
+                    if ($fallback_end !== $current_end_time) {
+                        continue;
+                    }
+
+                    $fallback_day = (string)($fallback_row['day_of_week'] ?? '');
+                    if ($fallback_day === '') {
+                        continue;
+                    }
+
+                    if (!isset($fallback_by_day[$fallback_day])) {
+                        $fallback_by_day[$fallback_day] = [];
+                    }
+                    $fallback_by_day[$fallback_day][] = $fallback_row;
+                }
+
+                foreach ($fallback_days as $fallback_day_name) {
+                    if (!isset($fallback_by_day[$fallback_day_name])) {
+                        continue;
+                    }
+
+                    if (!isset($linked_by_day[$fallback_day_name])) {
+                        $linked_by_day[$fallback_day_name] = [];
+                    }
+
+                    $existing_day_ids = array_map(static function ($r) {
+                        return (int)($r['id'] ?? 0);
+                    }, $linked_by_day[$fallback_day_name]);
+
+                    foreach ($fallback_by_day[$fallback_day_name] as $fallback_row) {
+                        $fallback_id = (int)($fallback_row['id'] ?? 0);
+                        if ($fallback_id <= 0 || in_array($fallback_id, $existing_day_ids, true)) {
+                            continue;
+                        }
+
+                        $linked_by_day[$fallback_day_name][] = $fallback_row;
+                        $existing_day_ids[] = $fallback_id;
+                        $linked_ids[] = $fallback_id;
+                    }
+                }
+
+                $linked_ids = array_values(array_unique(array_map('intval', $linked_ids)));
             }
 
             $conflicts = [];
@@ -572,18 +683,31 @@ try {
                 $remove_ids = [];
                 foreach ($days_to_remove as $day) {
                     if (isset($linked_by_day[$day])) {
-                        $remove_ids[] = (int)$linked_by_day[$day]['id'];
+                        foreach ($linked_by_day[$day] as $row) {
+                            $row_id = (int)($row['id'] ?? 0);
+                            if ($row_id > 0) {
+                                $remove_ids[] = $row_id;
+                            }
+                        }
                     }
                 }
                 if (!empty($remove_ids)) {
+                    $remove_ids = array_values(array_unique(array_map('intval', $remove_ids)));
                     $active_counts = fetch_active_enrollment_counts($conn, $remove_ids);
                     $blocked_days = [];
                     foreach ($days_to_remove as $day) {
                         if (!isset($linked_by_day[$day])) {
                             continue;
                         }
-                        $row_id = (int)$linked_by_day[$day]['id'];
-                        if (($active_counts[$row_id] ?? 0) > 0) {
+                        $day_has_active = false;
+                        foreach ($linked_by_day[$day] as $row) {
+                            $row_id = (int)($row['id'] ?? 0);
+                            if ($row_id > 0 && (($active_counts[$row_id] ?? 0) > 0)) {
+                                $day_has_active = true;
+                                break;
+                            }
+                        }
+                        if ($day_has_active) {
                             $blocked_days[] = $day;
                         }
                     }
@@ -596,11 +720,23 @@ try {
             $conn->beginTransaction();
 
             $updated_days = [];
+            $duplicate_remove_ids = [];
             foreach ($selected_days as $day_of_week) {
                 if (!isset($linked_by_day[$day_of_week])) {
                     continue;
                 }
-                $target_id = (int)$linked_by_day[$day_of_week]['id'];
+
+                $target_ids = [];
+                foreach ($linked_by_day[$day_of_week] as $row) {
+                    $row_id = (int)($row['id'] ?? 0);
+                    if ($row_id > 0) {
+                        $target_ids[] = $row_id;
+                    }
+                }
+                $target_ids = array_values(array_unique(array_map('intval', $target_ids)));
+                if (empty($target_ids)) {
+                    continue;
+                }
 
                 $set = [
                     'course_id' => $course_id,
@@ -642,12 +778,45 @@ try {
                 if (isset($cols['updated_at'])) {
                     $assignments[] = 'updated_at = NOW()';
                 }
-                $values[] = $target_id;
-
                 $sql = 'UPDATE schedules SET ' . implode(', ', $assignments) . ' WHERE id = ?';
                 $stmt = $conn->prepare($sql);
-                $stmt->execute($values);
+
+                foreach ($target_ids as $target_id) {
+                    $run_values = $values;
+                    $run_values[] = $target_id;
+                    $stmt->execute($run_values);
+                }
+
+                if (count($target_ids) > 1) {
+                    $active_counts = fetch_active_enrollment_counts($conn, $target_ids);
+                    $keep_id = $target_ids[0];
+                    foreach ($target_ids as $target_id) {
+                        if (($active_counts[$target_id] ?? 0) > 0) {
+                            $keep_id = $target_id;
+                            break;
+                        }
+                    }
+
+                    foreach ($target_ids as $target_id) {
+                        if ($target_id === $keep_id) {
+                            continue;
+                        }
+                        if (($active_counts[$target_id] ?? 0) <= 0) {
+                            $duplicate_remove_ids[] = $target_id;
+                        }
+                    }
+                }
+
                 $updated_days[] = $day_of_week;
+            }
+
+            $duplicate_remove_ids = array_values(array_unique(array_map('intval', $duplicate_remove_ids)));
+            foreach ($duplicate_remove_ids as $remove_id) {
+                $stmt = $conn->prepare("DELETE FROM enrollments WHERE schedule_id = ? AND status NOT IN ('approved', 'enrolled')");
+                $stmt->execute([$remove_id]);
+
+                $stmt = $conn->prepare('DELETE FROM schedules WHERE id = ?');
+                $stmt->execute([$remove_id]);
             }
 
             $inserted_days = [];
@@ -699,14 +868,25 @@ try {
                 if (!isset($linked_by_day[$day_of_week])) {
                     continue;
                 }
-                $remove_id = (int)$linked_by_day[$day_of_week]['id'];
 
-                $stmt = $conn->prepare("DELETE FROM enrollments WHERE schedule_id = ? AND status NOT IN ('approved', 'enrolled')");
-                $stmt->execute([$remove_id]);
+                $day_removed = false;
+                foreach ($linked_by_day[$day_of_week] as $row) {
+                    $remove_id = (int)($row['id'] ?? 0);
+                    if ($remove_id <= 0) {
+                        continue;
+                    }
 
-                $stmt = $conn->prepare('DELETE FROM schedules WHERE id = ?');
-                $stmt->execute([$remove_id]);
-                $removed_days[] = $day_of_week;
+                    $stmt = $conn->prepare("DELETE FROM enrollments WHERE schedule_id = ? AND status NOT IN ('approved', 'enrolled')");
+                    $stmt->execute([$remove_id]);
+
+                    $stmt = $conn->prepare('DELETE FROM schedules WHERE id = ?');
+                    $stmt->execute([$remove_id]);
+                    $day_removed = true;
+                }
+
+                if ($day_removed) {
+                    $removed_days[] = $day_of_week;
+                }
             }
 
             $conn->commit();

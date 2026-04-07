@@ -199,6 +199,20 @@ function fetch_active_enrollment_counts(PDO $conn, array $schedule_ids): array {
     return $counts;
 }
 
+function ensure_schedule_end_time_column(PDO $conn, array &$cols): void {
+    if (isset($cols['end_time'])) {
+        return;
+    }
+
+    try {
+        $conn->exec("ALTER TABLE schedules ADD COLUMN end_time TIME NULL AFTER start_time");
+        $cols['end_time'] = true;
+        $conn->exec("UPDATE schedules SET end_time = ADDTIME(start_time, SEC_TO_TIME(120 * 60)) WHERE end_time IS NULL OR end_time = '00:00:00'");
+    } catch (Throwable $e) {
+        // Ignore if schema cannot be altered; code will fall back to default duration behavior.
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: schedules.php');
     exit();
@@ -207,6 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $action = $_POST['action'] ?? '';
 
 $cols = table_columns($conn, 'schedules');
+ensure_schedule_end_time_column($conn, $cols);
 $has_end_time = isset($cols['end_time']);
 $has_duration_minutes = isset($cols['duration_minutes']);
 $default_duration = get_setting_int($conn, 'default_class_duration', 120);

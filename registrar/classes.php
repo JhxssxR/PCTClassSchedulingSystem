@@ -101,9 +101,9 @@ $stmt->execute();
 $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
-$classes_grouped_map = [];
+$core_group_stats = [];
 foreach ($classes as $class_row) {
-    $group_key = implode('|', [
+    $core_key = implode('|', [
         (string)($class_row['course_id'] ?? ''),
         (string)($class_row['subject_id'] ?? ''),
         (string)($class_row['instructor_id'] ?? ''),
@@ -112,10 +112,63 @@ foreach ($classes as $class_row) {
         (string)($class_row['end_time'] ?? ''),
         (string)($class_row['status'] ?? ''),
         (string)($class_row['max_students'] ?? ''),
-        (string)($class_row['semester'] ?? ''),
-        (string)($class_row['academic_year'] ?? ''),
-        (string)($class_row['year_level'] ?? '')
     ]);
+
+    if (!isset($core_group_stats[$core_key])) {
+        $core_group_stats[$core_key] = [
+            'semester' => [],
+            'academic_year' => [],
+            'year_level' => [],
+        ];
+    }
+
+    $semester = trim((string)($class_row['semester'] ?? ''));
+    $academic_year = trim((string)($class_row['academic_year'] ?? ''));
+    $year_level = trim((string)($class_row['year_level'] ?? ''));
+
+    if ($semester !== '') {
+        $core_group_stats[$core_key]['semester'][$semester] = true;
+    }
+    if ($academic_year !== '') {
+        $core_group_stats[$core_key]['academic_year'][$academic_year] = true;
+    }
+    if ($year_level !== '') {
+        $core_group_stats[$core_key]['year_level'][$year_level] = true;
+    }
+}
+
+$classes_grouped_map = [];
+foreach ($classes as $class_row) {
+    $core_key = implode('|', [
+        (string)($class_row['course_id'] ?? ''),
+        (string)($class_row['subject_id'] ?? ''),
+        (string)($class_row['instructor_id'] ?? ''),
+        (string)($class_row['classroom_id'] ?? ''),
+        (string)($class_row['start_time'] ?? ''),
+        (string)($class_row['end_time'] ?? ''),
+        (string)($class_row['status'] ?? ''),
+        (string)($class_row['max_students'] ?? ''),
+    ]);
+
+    $stats = $core_group_stats[$core_key] ?? ['semester' => [], 'academic_year' => [], 'year_level' => []];
+    $semester = trim((string)($class_row['semester'] ?? ''));
+    $academic_year = trim((string)($class_row['academic_year'] ?? ''));
+    $year_level = trim((string)($class_row['year_level'] ?? ''));
+
+    if ($semester === '' && count($stats['semester']) === 1) {
+        $semester = (string)array_key_first($stats['semester']);
+        $class_row['semester'] = $semester;
+    }
+    if ($academic_year === '' && count($stats['academic_year']) === 1) {
+        $academic_year = (string)array_key_first($stats['academic_year']);
+        $class_row['academic_year'] = $academic_year;
+    }
+    if ($year_level === '' && count($stats['year_level']) === 1) {
+        $year_level = (string)array_key_first($stats['year_level']);
+        $class_row['year_level'] = $year_level;
+    }
+
+    $group_key = $core_key . '|' . $semester . '|' . $academic_year . '|' . $year_level;
 
     if (!isset($classes_grouped_map[$group_key])) {
         $class_row['group_size'] = 0;
@@ -131,7 +184,7 @@ foreach ($classes as $class_row) {
     }
 
     $classes_grouped_map[$group_key]['__ids'][] = (int)($class_row['id'] ?? 0);
-    $classes_grouped_map[$group_key]['group_size']++;
+    $classes_grouped_map[$group_key]['group_size'] = count($classes_grouped_map[$group_key]['__days']);
     $classes_grouped_map[$group_key]['enrolled_students'] = max(
         (int)($classes_grouped_map[$group_key]['enrolled_students'] ?? 0),
         (int)($class_row['enrolled_students'] ?? 0)
