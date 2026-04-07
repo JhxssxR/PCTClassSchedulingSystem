@@ -97,6 +97,27 @@ $error_message = null;
 $today = date('l');
 $now_time = date('H:i:s');
 $has_schedule_end_time = instructor_has_column($conn, 'schedules', 'end_time');
+$has_schedule_subject_id = instructor_has_column($conn, 'schedules', 'subject_id');
+
+$subjects_table_exists = false;
+try {
+    $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+    $subjects_exists_stmt->execute();
+    $subjects_table_exists = ((int) $subjects_exists_stmt->fetchColumn() > 0);
+} catch (Throwable $e) {
+    $subjects_table_exists = false;
+}
+
+$subjects_enabled = ($subjects_table_exists && $has_schedule_subject_id);
+$schedule_code_expr = $subjects_enabled
+    ? "COALESCE(subj.subject_code, c.course_code, 'N/A')"
+    : "COALESCE(c.course_code, 'N/A')";
+$schedule_name_expr = $subjects_enabled
+    ? "COALESCE(subj.subject_name, c.course_name, 'Untitled Subject')"
+    : "COALESCE(c.course_name, 'Untitled Subject')";
+$schedule_subject_join_sql = $subjects_enabled
+    ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
+    : '';
 
 try {
     $stmt = $conn->prepare("SELECT * FROM users WHERE id = ? AND role = 'instructor'");
@@ -120,7 +141,7 @@ try {
     $end_time_select = $has_schedule_end_time
         ? "COALESCE(NULLIF(s.end_time, '00:00:00'), ADDTIME(s.start_time, '02:00:00'))"
         : "ADDTIME(s.start_time, '02:00:00')";
-    $stmt = $conn->prepare("\n        SELECT\n            s.id,\n            s.start_time,\n            $end_time_select AS end_time,\n            s.max_students,\n            s.semester,\n            s.academic_year,\n            c.course_code,\n            c.course_name,\n            cl.room_number,\n            (SELECT COUNT(*) FROM enrollments e WHERE e.schedule_id = s.id AND e.status = 'approved') AS enrolled_students\n        FROM schedules s\n        JOIN courses c ON s.course_id = c.id\n        JOIN classrooms cl ON s.classroom_id = cl.id\n        WHERE s.instructor_id = ?\n          AND s.day_of_week = ?\n          AND s.status = 'active'\n        ORDER BY s.start_time ASC\n    ");
+    $stmt = $conn->prepare("\n        SELECT\n            s.id,\n            s.start_time,\n            $end_time_select AS end_time,\n            s.max_students,\n            s.semester,\n            s.academic_year,\n            {$schedule_code_expr} AS course_code,\n            {$schedule_name_expr} AS course_name,\n            cl.room_number,\n            (SELECT COUNT(*) FROM enrollments e WHERE e.schedule_id = s.id AND e.status = 'approved') AS enrolled_students\n        FROM schedules s\n        JOIN courses c ON s.course_id = c.id\n        {$schedule_subject_join_sql}\n        JOIN classrooms cl ON s.classroom_id = cl.id\n        WHERE s.instructor_id = ?\n          AND s.day_of_week = ?\n          AND s.status = 'active'\n        ORDER BY s.start_time ASC\n    ");
     $stmt->execute([$_SESSION['user_id'], $today]);
     $today_schedule = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -198,6 +219,61 @@ try {
     }
 } catch (Throwable $e) {
     error_log('Instructor dashboard error: ' . $e->getMessage());
+}
+
+$today_schedule_students = [];
+if (!empty($today_schedule)) {
+    $today_schedule_ids = [];
+    foreach ($today_schedule as $schedule_row) {
+        $sid = (int) ($schedule_row['id'] ?? 0);
+        if ($sid > 0) {
+            $today_schedule_ids[$sid] = $sid;
+        }
+    }
+
+    if (!empty($today_schedule_ids)) {
+        $placeholders = implode(',', array_fill(0, count($today_schedule_ids), '?'));
+        $student_stmt = $conn->prepare("\n            SELECT e.schedule_id, u.first_name, u.last_name\n            FROM enrollments e\n            JOIN users u ON e.student_id = u.id\n            WHERE e.status = 'approved'\n              AND e.schedule_id IN ($placeholders)\n            ORDER BY u.last_name, u.first_name\n        ");
+        $student_stmt->execute(array_values($today_schedule_ids));
+
+        foreach ($student_stmt->fetchAll(PDO::FETCH_ASSOC) as $student_row) {
+            $sid = (int) ($student_row['schedule_id'] ?? 0);
+            if ($sid <= 0) {
+                continue;
+            }
+
+            $student_name = trim((string) ($student_row['first_name'] ?? '') . ' ' . (string) ($student_row['last_name'] ?? ''));
+            if ($student_name === '') {
+                continue;
+            }
+
+            if (!isset($today_schedule_students[$sid])) {
+                $today_schedule_students[$sid] = [];
+            }
+            $today_schedule_students[$sid][] = $student_name;
+        }
+    }
+}
+
+$today_schedule_modal_map = [];
+foreach ($today_schedule as $schedule_row) {
+    $sid = (int) ($schedule_row['id'] ?? 0);
+    if ($sid <= 0) {
+        continue;
+    }
+
+    $start = (string) ($schedule_row['start_time'] ?? '');
+    $end = (string) ($schedule_row['end_time'] ?? '');
+    $today_schedule_modal_map[$sid] = [
+        'course_code' => (string) ($schedule_row['course_code'] ?? ''),
+        'course_name' => (string) ($schedule_row['course_name'] ?? ''),
+        'day_of_week' => $today,
+        'time_range' => trim(instructor_time_label($start) . ' - ' . instructor_time_label($end)),
+        'room_number' => (string) ($schedule_row['room_number'] ?? 'TBA'),
+        'enrolled_students' => (int) ($schedule_row['enrolled_students'] ?? 0),
+        'max_students' => (int) ($schedule_row['max_students'] ?? 0),
+        'students' => $today_schedule_students[$sid] ?? [],
+    ];
 }
 
 $full_name = trim((string) ($instructor['first_name'] ?? '') . ' ' . (string) ($instructor['last_name'] ?? ''));
@@ -607,7 +683,7 @@ $nav_items = [
                                             $chip_palette = ['bg-emerald-100 text-emerald-700', 'bg-indigo-100 text-indigo-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700'];
                                             $chip_color = $chip_palette[$index % count($chip_palette)];
                                         ?>
-                                        <div class="rounded-2xl border border-slate-200 px-4 py-3 hover:bg-slate-50/70 transition">
+                                        <button type="button" class="js-open-schedule-modal w-full rounded-2xl border border-slate-200 px-4 py-3 hover:bg-slate-50/70 transition text-left" data-schedule-id="<?php echo (int) ($schedule['id'] ?? 0); ?>">
                                             <div class="grid grid-cols-[78px,1fr,auto] items-center gap-3">
                                                 <div class="text-sm font-semibold text-slate-500"><?php echo htmlspecialchars(instructor_time_label($start)); ?></div>
 
@@ -625,7 +701,7 @@ $nav_items = [
 
                                                 <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold <?php echo $status_class; ?>"><?php echo $status_label; ?></span>
                                             </div>
-                                        </div>
+                                        </button>
                                     <?php endforeach; ?>
                                 </div>
                             <?php endif; ?>
@@ -648,6 +724,53 @@ $nav_items = [
                     </div>
                 </section>
             </main>
+        </div>
+    </div>
+
+    <div id="scheduleDetailModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/50" data-modal-close></div>
+        <div class="absolute inset-0 p-4 flex items-center justify-center">
+            <div class="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-semibold tracking-[0.18em] text-emerald-600">CLASS DETAILS</div>
+                        <h3 id="scheduleModalCourseName" class="mt-1 text-2xl font-semibold text-slate-900">Class</h3>
+                        <p id="scheduleModalCourseCode" class="text-sm text-slate-500"></p>
+                    </div>
+                    <button id="scheduleModalCloseBtn" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Close class details">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+
+                <div class="px-5 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">DAY</div>
+                        <div id="scheduleModalDay" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">TIME</div>
+                        <div id="scheduleModalTime" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">ROOM</div>
+                        <div id="scheduleModalRoom" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">ENROLLMENT</div>
+                        <div id="scheduleModalEnrollment" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                    <div class="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">ENROLLED STUDENTS</div>
+                        <ul id="scheduleModalStudentsList" class="mt-2 space-y-1 text-sm text-slate-700 max-h-44 overflow-auto pr-1">
+                            <li class="text-slate-500">No students enrolled yet.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="px-5 pb-5 flex justify-end">
+                    <button type="button" class="inline-flex items-center rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700" data-modal-close>Close</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -895,6 +1018,97 @@ $nav_items = [
                     }
                 });
             }
+        })();
+
+        (function () {
+            const modal = document.getElementById('scheduleDetailModal');
+            const closeBtn = document.getElementById('scheduleModalCloseBtn');
+            const closeTargets = Array.from(document.querySelectorAll('[data-modal-close]'));
+            const triggers = Array.from(document.querySelectorAll('.js-open-schedule-modal'));
+
+            const courseNameEl = document.getElementById('scheduleModalCourseName');
+            const courseCodeEl = document.getElementById('scheduleModalCourseCode');
+            const dayEl = document.getElementById('scheduleModalDay');
+            const timeEl = document.getElementById('scheduleModalTime');
+            const roomEl = document.getElementById('scheduleModalRoom');
+            const enrollmentEl = document.getElementById('scheduleModalEnrollment');
+            const studentsListEl = document.getElementById('scheduleModalStudentsList');
+
+            const scheduleDetails = <?php echo json_encode($today_schedule_modal_map, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+            if (!modal) {
+                return;
+            }
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/\"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function closeModal() {
+                modal.classList.add('hidden');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('overflow-hidden');
+            }
+
+            function openModal(scheduleId) {
+                const key = String(scheduleId || '');
+                if (key === '' || !scheduleDetails[key]) {
+                    return;
+                }
+
+                const detail = scheduleDetails[key];
+                const maxStudents = Number(detail.max_students || 0);
+                const enrolled = Number(detail.enrolled_students || 0);
+                const students = Array.isArray(detail.students) ? detail.students : [];
+
+                courseNameEl.textContent = detail.course_name || 'Class details';
+                courseCodeEl.textContent = detail.course_code || 'No subject code';
+                dayEl.textContent = detail.day_of_week || '-';
+                timeEl.textContent = detail.time_range || '-';
+                roomEl.textContent = detail.room_number || 'TBA';
+                enrollmentEl.textContent = maxStudents > 0
+                    ? (enrolled + ' / ' + maxStudents + ' students')
+                    : (enrolled + ' students');
+
+                if (studentsListEl) {
+                    if (students.length === 0) {
+                        studentsListEl.innerHTML = '<li class="text-slate-500">No students enrolled yet.</li>';
+                    } else {
+                        studentsListEl.innerHTML = students.map(function (name) {
+                            return '<li class="rounded-lg bg-white border border-slate-200 px-2.5 py-1.5">' + escapeHtml(name) + '</li>';
+                        }).join('');
+                    }
+                }
+
+                modal.classList.remove('hidden');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('overflow-hidden');
+            }
+
+            triggers.forEach(function (trigger) {
+                trigger.addEventListener('click', function () {
+                    openModal(trigger.getAttribute('data-schedule-id'));
+                });
+            });
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeModal);
+            }
+
+            closeTargets.forEach(function (target) {
+                target.addEventListener('click', closeModal);
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
         })();
     </script>
 </body>

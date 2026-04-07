@@ -89,9 +89,127 @@ $end_date_expr = isset($schedule_cols['end_date'])
     ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
     : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
 
-$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.day_of_week,\n        s.start_time,\n        TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,\n        {$start_date_expr} AS start_date,\n        {$end_date_expr} AS end_date,\n        s.max_students,\n        c.course_code,\n        c.course_name,\n        cl.room_number,\n        cl.room_type,\n        COUNT(CASE WHEN e.status = 'approved' THEN e.id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
+$subjects_table_exists = false;
+try {
+    $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+    $subjects_exists_stmt->execute();
+    $subjects_table_exists = ((int) $subjects_exists_stmt->fetchColumn() > 0);
+} catch (Throwable $e) {
+    $subjects_table_exists = false;
+}
+
+$subjects_enabled = ($subjects_table_exists && isset($schedule_cols['subject_id']));
+$course_code_expr = $subjects_enabled
+    ? "COALESCE(subj.subject_code, c.course_code, 'N/A')"
+    : "COALESCE(c.course_code, 'N/A')";
+$course_name_expr = $subjects_enabled
+    ? "COALESCE(subj.subject_name, c.course_name, 'Untitled Subject')"
+    : "COALESCE(c.course_name, 'Untitled Subject')";
+$subject_join_sql = $subjects_enabled
+    ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
+    : '';
+
+$link_subject_expr = $subjects_enabled
+    ? 'COALESCE(s.subject_id, 0)'
+    : '0';
+$link_semester_expr = isset($schedule_cols['semester'])
+    ? "COALESCE(s.semester, '')"
+    : "''";
+$link_academic_year_expr = isset($schedule_cols['academic_year'])
+    ? "COALESCE(s.academic_year, '')"
+    : "''";
+$link_year_level_expr = isset($schedule_cols['year_level'])
+    ? "COALESCE(s.year_level, '')"
+    : "''";
+
+$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        {$link_subject_expr} AS link_subject_id,\n        s.instructor_id,\n        s.classroom_id,\n        {$link_semester_expr} AS link_semester,\n        {$link_academic_year_expr} AS link_academic_year,\n        {$link_year_level_expr} AS link_year_level,\n        s.day_of_week,\n        s.start_time,\n        TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,\n        {$start_date_expr} AS start_date,\n        {$end_date_expr} AS end_date,\n        s.max_students,\n        {$course_code_expr} AS course_code,\n        {$course_name_expr} AS course_name,\n        cl.room_number,\n        cl.room_type\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    {$subject_join_sql}\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
 $stmt->execute(['instructor_id' => $instructor_id]);
 $all_schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$schedule_group_key_map = [];
+$schedule_ids = [];
+$schedule_groups = [];
+foreach ($all_schedules as $row) {
+    $schedule_id = (int) ($row['id'] ?? 0);
+    if ($schedule_id <= 0) {
+        continue;
+    }
+
+    $schedule_ids[$schedule_id] = $schedule_id;
+
+    $group_key_parts = [
+        (string) ($row['course_id'] ?? 0),
+        (string) ($row['link_subject_id'] ?? 0),
+        (string) ($row['instructor_id'] ?? 0),
+        (string) ($row['classroom_id'] ?? 0),
+        (string) ($row['start_time'] ?? ''),
+        (string) ($row['end_time'] ?? ''),
+        (string) ($row['link_semester'] ?? ''),
+        (string) ($row['link_academic_year'] ?? ''),
+        (string) ($row['link_year_level'] ?? ''),
+    ];
+    $group_key = implode('|', $group_key_parts);
+
+    $schedule_group_key_map[$schedule_id] = $group_key;
+
+    if (!isset($schedule_groups[$group_key])) {
+        $schedule_groups[$group_key] = [];
+    }
+    $schedule_groups[$group_key][$schedule_id] = $schedule_id;
+}
+
+$students_by_schedule = [];
+
+if (!empty($schedule_ids)) {
+    $placeholders = implode(',', array_fill(0, count($schedule_ids), '?'));
+    $student_stmt = $conn->prepare("\n        SELECT e.schedule_id, e.student_id, u.first_name, u.last_name\n        FROM enrollments e\n        JOIN users u ON e.student_id = u.id\n        WHERE e.status = 'approved'\n          AND e.schedule_id IN ($placeholders)\n        ORDER BY u.last_name, u.first_name\n    ");
+    $student_stmt->execute(array_values($schedule_ids));
+
+    foreach ($student_stmt->fetchAll(PDO::FETCH_ASSOC) as $student_row) {
+        $sid = (int) ($student_row['schedule_id'] ?? 0);
+        $student_id = (int) ($student_row['student_id'] ?? 0);
+        if ($sid <= 0) {
+            continue;
+        }
+
+        $student_name = trim((string) ($student_row['first_name'] ?? '') . ' ' . (string) ($student_row['last_name'] ?? ''));
+        if ($student_name === '' || $student_id <= 0) {
+            continue;
+        }
+
+        if (!isset($students_by_schedule[$sid])) {
+            $students_by_schedule[$sid] = [];
+        }
+        $students_by_schedule[$sid][$student_id] = $student_name;
+    }
+}
+
+$students_by_group = [];
+foreach ($schedule_groups as $group_key => $group_schedule_ids) {
+    if (!isset($students_by_group[$group_key])) {
+        $students_by_group[$group_key] = [];
+    }
+
+    foreach ($group_schedule_ids as $group_schedule_id) {
+        foreach (($students_by_schedule[$group_schedule_id] ?? []) as $student_id => $student_name) {
+            $students_by_group[$group_key][$student_id] = $student_name;
+        }
+    }
+}
+
+$schedule_students_map = [];
+foreach ($all_schedules as &$row) {
+    $schedule_id = (int) ($row['id'] ?? 0);
+    if ($schedule_id <= 0) {
+        continue;
+    }
+
+    $group_key = $schedule_group_key_map[$schedule_id] ?? '';
+    $students = array_values($students_by_group[$group_key] ?? []);
+    $row['enrolled_students'] = count($students);
+    $schedule_students_map[$schedule_id] = $students;
+}
+unset($row);
 
 $today = date('l');
 $today_schedule = [];
@@ -145,6 +263,7 @@ foreach ($all_schedules as $row) {
         'room_type' => ins_type_label((string) ($row['room_type'] ?? 'lecture')),
         'enrolled_students' => (int) ($row['enrolled_students'] ?? 0),
         'max_students' => (int) ($row['max_students'] ?? 0),
+        'students' => $schedule_students_map[$schedule_id] ?? [],
     ];
 }
 
@@ -669,6 +788,12 @@ $nav_items = [
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div class="text-xs font-semibold tracking-wide text-slate-500">ENROLLMENT</div>
                         <div id="scheduleModalEnrollment" class="mt-1 text-base font-semibold text-slate-800">-</div>
+                    </div>
+                    <div class="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="text-xs font-semibold tracking-wide text-slate-500">ENROLLED STUDENTS</div>
+                        <ul id="scheduleModalStudentsList" class="mt-2 space-y-1 text-sm text-slate-700 max-h-44 overflow-auto pr-1">
+                            <li class="text-slate-500">No students enrolled yet.</li>
+                        </ul>
                     </div>
                 </div>
 
@@ -1293,12 +1418,22 @@ $nav_items = [
             const roomEl = document.getElementById('scheduleModalRoom');
             const roomTypeEl = document.getElementById('scheduleModalRoomType');
             const enrollmentEl = document.getElementById('scheduleModalEnrollment');
+            const studentsListEl = document.getElementById('scheduleModalStudentsList');
 
             const scheduleDetails = <?php echo json_encode($schedule_modal_map, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
             const requestedScheduleId = <?php echo isset($_GET['schedule_id']) ? (int) $_GET['schedule_id'] : 0; ?>;
 
             if (!modal) {
                 return;
+            }
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
             }
 
             function closeModal() {
@@ -1316,6 +1451,7 @@ $nav_items = [
                 const detail = scheduleDetails[key];
                 const maxStudents = Number(detail.max_students || 0);
                 const enrolled = Number(detail.enrolled_students || 0);
+                const students = Array.isArray(detail.students) ? detail.students : [];
 
                 courseNameEl.textContent = detail.course_name || 'Class details';
                 courseCodeEl.textContent = detail.course_code || 'No course code';
@@ -1327,6 +1463,16 @@ $nav_items = [
                 enrollmentEl.textContent = maxStudents > 0
                     ? (enrolled + ' / ' + maxStudents + ' students')
                     : (enrolled + ' students');
+
+                if (studentsListEl) {
+                    if (students.length === 0) {
+                        studentsListEl.innerHTML = '<li class="text-slate-500">No students enrolled yet.</li>';
+                    } else {
+                        studentsListEl.innerHTML = students.map(function (name) {
+                            return '<li class="rounded-lg bg-white border border-slate-200 px-2.5 py-1.5">' + escapeHtml(name) + '</li>';
+                        }).join('');
+                    }
+                }
 
                 modal.classList.remove('hidden');
                 modal.setAttribute('aria-hidden', 'false');
