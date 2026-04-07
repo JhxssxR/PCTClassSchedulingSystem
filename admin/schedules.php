@@ -74,6 +74,53 @@ $stmt = $conn->prepare("
 $stmt->execute();
 $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Final guard: collapse exact duplicate cards that may still exist in legacy data.
+$card_dedup_map = [];
+foreach ($schedules as $row) {
+    $card_key = implode('|', [
+        (string)($row['day_of_week'] ?? ''),
+        (string)($row['course_id'] ?? ''),
+        (string)($row['subject_id'] ?? ''),
+        (string)($row['instructor_id'] ?? ''),
+        (string)($row['classroom_id'] ?? ''),
+        (string)($row['start_time'] ?? ''),
+        (string)($row['end_time'] ?? ''),
+        (string)($row['status'] ?? ''),
+        (string)($row['semester'] ?? ''),
+        (string)($row['academic_year'] ?? ''),
+        (string)($row['year_level'] ?? ''),
+    ]);
+
+    if (!isset($card_dedup_map[$card_key])) {
+        $card_dedup_map[$card_key] = $row;
+        continue;
+    }
+
+    $existing = $card_dedup_map[$card_key];
+    $existing_enrolled = (int)($existing['enrollment_count'] ?? 0);
+    $incoming_enrolled = (int)($row['enrollment_count'] ?? 0);
+
+    $existing_has_dates = (trim((string)($existing['start_date'] ?? '')) !== '' && trim((string)($existing['end_date'] ?? '')) !== '');
+    $incoming_has_dates = (trim((string)($row['start_date'] ?? '')) !== '' && trim((string)($row['end_date'] ?? '')) !== '');
+
+    if ($incoming_enrolled > $existing_enrolled || (!$existing_has_dates && $incoming_has_dates)) {
+        $card_dedup_map[$card_key] = $row;
+        $existing = $row;
+    }
+
+    if (trim((string)($card_dedup_map[$card_key]['start_date'] ?? '')) === '' && trim((string)($row['start_date'] ?? '')) !== '') {
+        $card_dedup_map[$card_key]['start_date'] = $row['start_date'];
+    }
+    if (trim((string)($card_dedup_map[$card_key]['end_date'] ?? '')) === '' && trim((string)($row['end_date'] ?? '')) !== '') {
+        $card_dedup_map[$card_key]['end_date'] = $row['end_date'];
+    }
+    $card_dedup_map[$card_key]['enrollment_count'] = max(
+        (int)($card_dedup_map[$card_key]['enrollment_count'] ?? 0),
+        (int)($row['enrollment_count'] ?? 0)
+    );
+}
+$schedules = array_values($card_dedup_map);
+
 $active_count = 0;
 foreach ($schedules as $row) {
     $status = strtolower((string)($row['status'] ?? 'active'));
@@ -94,6 +141,10 @@ foreach ($schedules as $s) {
     }
     $by_day[$d][] = $s;
 }
+
+$has_schedule_date_columns = isset($schedule_cols['start_date']) && isset($schedule_cols['end_date']);
+$default_start_date = date('Y-m-d');
+$default_end_date = date('Y-m-d', strtotime('+17 days'));
 
 function fmt_time_range(string $start, string $end): string {
     if ($start === '' || $end === '') {
@@ -624,16 +675,30 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                         <p class="mt-1 text-xs text-slate-500">Select one or more days for this subject schedule.</p>
                     </div>
 
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Start time</label>
-                        <input type="time" name="start_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                    <div class="sm:col-start-2 space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Start time</label>
+                            <input type="time" name="start_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">End time</label>
+                            <input type="time" name="end_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo isset($schedule_cols['end_time']) ? 'required' : ''; ?>>
+                            <?php if (!isset($schedule_cols['end_time'])): ?>
+                                <p class="mt-1 text-xs text-slate-500">Your database doesn’t store an explicit end time; it will be computed automatically.</p>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">End time</label>
-                        <input type="time" name="end_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo isset($schedule_cols['end_time']) ? 'required' : ''; ?>>
-                        <?php if (!isset($schedule_cols['end_time'])): ?>
-                            <p class="mt-1 text-xs text-slate-500">Your database doesn’t store an explicit end time; it will be computed automatically.</p>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Start date</label>
+                        <input type="date" name="start_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars($default_start_date); ?>" <?php echo $has_schedule_date_columns ? 'required' : ''; ?>>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">End date</label>
+                        <input type="date" name="end_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars($default_end_date); ?>" <?php echo $has_schedule_date_columns ? 'required' : ''; ?>>
+                        <?php if (!$has_schedule_date_columns): ?>
+                            <p class="mt-1 text-xs text-slate-500">Your database schema does not include schedule date range columns yet.</p>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -715,16 +780,30 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                         <p class="mt-1 text-xs text-slate-500">Select one or more days for this subject schedule.</p>
                     </div>
 
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Start time</label>
-                        <input type="time" name="start_time" id="edit_start_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                    <div class="sm:col-start-2 space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Start time</label>
+                            <input type="time" name="start_time" id="edit_start_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">End time</label>
+                            <input type="time" name="end_time" id="edit_end_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo isset($schedule_cols['end_time']) ? 'required' : ''; ?>>
+                            <?php if (!isset($schedule_cols['end_time'])): ?>
+                                <p class="mt-1 text-xs text-slate-500">Your database doesn’t store an explicit end time; it will be computed automatically.</p>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">End time</label>
-                        <input type="time" name="end_time" id="edit_end_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo isset($schedule_cols['end_time']) ? 'required' : ''; ?>>
-                        <?php if (!isset($schedule_cols['end_time'])): ?>
-                            <p class="mt-1 text-xs text-slate-500">Your database doesn’t store an explicit end time; it will be computed automatically.</p>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Start date</label>
+                        <input type="date" name="start_date" id="edit_start_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo $has_schedule_date_columns ? 'required' : ''; ?>>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">End date</label>
+                        <input type="date" name="end_date" id="edit_end_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo $has_schedule_date_columns ? 'required' : ''; ?>>
+                        <?php if (!$has_schedule_date_columns): ?>
+                            <p class="mt-1 text-xs text-slate-500">Your database schema does not include schedule date range columns yet.</p>
                         <?php endif; ?>
                     </div>
 
@@ -973,6 +1052,14 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
             });
         document.getElementById('edit_start_time').value = scheduleData.start_time || '';
         document.getElementById('edit_end_time').value = scheduleData.end_time || '';
+        const editStartDate = document.getElementById('edit_start_date');
+        const editEndDate = document.getElementById('edit_end_date');
+        if (editStartDate) {
+            editStartDate.value = scheduleData.start_date || '<?php echo htmlspecialchars($default_start_date); ?>';
+        }
+        if (editEndDate) {
+            editEndDate.value = scheduleData.end_date || '<?php echo htmlspecialchars($default_end_date); ?>';
+        }
         document.getElementById('edit_status').value = scheduleData.status || 'active';
         openModal('editScheduleModal');
     }

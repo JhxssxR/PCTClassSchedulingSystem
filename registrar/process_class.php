@@ -71,6 +71,18 @@ function normalize_time_his(string $time): string {
     return date('H:i:s', $ts);
 }
 
+function normalize_date_ymd(string $date): string {
+    $date = trim($date);
+    if ($date === '') {
+        return '';
+    }
+    $ts = strtotime($date);
+    if ($ts === false) {
+        return '';
+    }
+    return date('Y-m-d', $ts);
+}
+
 function normalize_selected_days($submitted_days, array $allowed_days): array {
     if (!is_array($submitted_days)) {
         $submitted_days = [$submitted_days];
@@ -248,6 +260,8 @@ try {
 
     $has_end_time = isset($cols['end_time']);
     $has_duration_minutes = isset($cols['duration_minutes']);
+    $has_start_date = isset($cols['start_date']);
+    $has_end_date = isset($cols['end_date']);
     $default_duration = get_setting_int($conn, 'default_class_duration', 120);
     if ($default_duration < 30) {
         $default_duration = 120;
@@ -294,6 +308,8 @@ try {
             $max_students = isset($_POST['max_students']) ? (int)$_POST['max_students'] : 30;
             $semester = trim((string)($_POST['semester'] ?? ''));
             $academic_year = trim((string)($_POST['academic_year'] ?? ''));
+            $start_date = $has_start_date ? normalize_date_ymd((string)($_POST['start_date'] ?? '')) : '';
+            $end_date = $has_end_date ? normalize_date_ymd((string)($_POST['end_date'] ?? '')) : '';
             $status = normalize_status((string)($_POST['status'] ?? 'active'));
 
             if ($semester === '') {
@@ -301,6 +317,16 @@ try {
             }
             if ($academic_year === '') {
                 $academic_year = default_academic_year();
+            }
+            if ($has_start_date && $start_date === '') {
+                $start_date = date('Y-m-d');
+            }
+            if ($has_end_date && $end_date === '') {
+                $base_start = $start_date !== '' ? $start_date : date('Y-m-d');
+                $end_date = date('Y-m-d', strtotime($base_start . ' +17 days'));
+            }
+            if ($start_date !== '' && $end_date !== '' && strtotime($start_date) > strtotime($end_date)) {
+                throw new Exception('End date must be on or after start date.');
             }
 
             if (!record_exists($conn, 'courses', $course_id)) {
@@ -390,6 +416,12 @@ try {
                 if (isset($cols['academic_year'])) {
                     $fields['academic_year'] = $academic_year;
                 }
+                if ($has_start_date) {
+                    $fields['start_date'] = $start_date;
+                }
+                if ($has_end_date) {
+                    $fields['end_date'] = $end_date;
+                }
                 if (isset($cols['status'])) {
                     $fields['status'] = $status;
                 }
@@ -452,6 +484,8 @@ try {
             $max_students = isset($_POST['max_students']) ? (int)$_POST['max_students'] : 30;
             $semester = trim((string)($_POST['semester'] ?? ''));
             $academic_year = trim((string)($_POST['academic_year'] ?? ''));
+            $start_date = $has_start_date ? normalize_date_ymd((string)($_POST['start_date'] ?? '')) : '';
+            $end_date = $has_end_date ? normalize_date_ymd((string)($_POST['end_date'] ?? '')) : '';
             $status = normalize_status((string)($_POST['status'] ?? 'active'));
 
             if ($semester === '') {
@@ -459,6 +493,16 @@ try {
             }
             if ($academic_year === '') {
                 $academic_year = default_academic_year();
+            }
+            if ($has_start_date && $start_date === '') {
+                $start_date = date('Y-m-d');
+            }
+            if ($has_end_date && $end_date === '') {
+                $base_start = $start_date !== '' ? $start_date : date('Y-m-d');
+                $end_date = date('Y-m-d', strtotime($base_start . ' +17 days'));
+            }
+            if ($start_date !== '' && $end_date !== '' && strtotime($start_date) > strtotime($end_date)) {
+                throw new Exception('End date must be on or after start date.');
             }
 
             if (!record_exists($conn, 'schedules', $schedule_id)) {
@@ -530,10 +574,16 @@ try {
             }
             $linked_ids = array_values(array_unique(array_map('intval', $linked_ids)));
 
-            $fallback_days = $selected_days;
+            $fallback_days = $allowed_days;
             if (!empty($fallback_days)) {
                 $fallback_where = ['course_id = ?'];
                 $fallback_params = [(int)($current['course_id'] ?? 0)];
+
+                $fallback_where[] = 'COALESCE(instructor_id, 0) = ?';
+                $fallback_params[] = (int)($current['instructor_id'] ?? 0);
+
+                $fallback_where[] = 'COALESCE(classroom_id, 0) = ?';
+                $fallback_params[] = (int)($current['classroom_id'] ?? 0);
 
                 if ($has_subject_id) {
                     $fallback_where[] = 'COALESCE(subject_id, 0) = ?';
@@ -558,6 +608,20 @@ try {
                     if ($current_academic_year !== '') {
                         $fallback_where[] = "(COALESCE(academic_year, '') = ? OR COALESCE(academic_year, '') = '')";
                         $fallback_params[] = $current_academic_year;
+                    }
+                }
+                if ($has_start_date) {
+                    $current_start_date = trim((string)($current['start_date'] ?? ''));
+                    if ($current_start_date !== '') {
+                        $fallback_where[] = "(COALESCE(start_date, '') = ? OR COALESCE(start_date, '') = '')";
+                        $fallback_params[] = $current_start_date;
+                    }
+                }
+                if ($has_end_date) {
+                    $current_end_date = trim((string)($current['end_date'] ?? ''));
+                    if ($current_end_date !== '') {
+                        $fallback_where[] = "(COALESCE(end_date, '') = ? OR COALESCE(end_date, '') = '')";
+                        $fallback_params[] = $current_end_date;
                     }
                 }
 
@@ -765,6 +829,12 @@ try {
                 if (isset($cols['academic_year'])) {
                     $set['academic_year'] = $academic_year;
                 }
+                if ($has_start_date) {
+                    $set['start_date'] = $start_date;
+                }
+                if ($has_end_date) {
+                    $set['end_date'] = $end_date;
+                }
                 if (isset($cols['status'])) {
                     $set['status'] = $status;
                 }
@@ -848,11 +918,66 @@ try {
                 if (isset($cols['academic_year'])) {
                     $fields['academic_year'] = $academic_year;
                 }
+                if ($has_start_date) {
+                    $fields['start_date'] = $start_date;
+                }
+                if ($has_end_date) {
+                    $fields['end_date'] = $end_date;
+                }
                 if (isset($cols['status'])) {
                     $fields['status'] = $status;
                 }
                 if (isset($cols['created_by'])) {
                     $fields['created_by'] = (int)$_SESSION['user_id'];
+                }
+
+                // Reuse a pre-existing matching row for this day (legacy/unlinked row) instead of creating a duplicate.
+                $reuse_where = [
+                    'day_of_week = ?',
+                    'course_id = ?',
+                    'instructor_id = ?',
+                    'classroom_id = ?',
+                    "TIME_FORMAT(start_time, '%H:%i:%s') = ?",
+                    "TIME_FORMAT({$end_time_compare_expr}, '%H:%i:%s') = ?",
+                ];
+                $reuse_params = [$day_of_week, $course_id, $instructor_id, $classroom_id, $start_time, $end_time];
+
+                if ($has_subject_id) {
+                    $reuse_where[] = 'COALESCE(subject_id, 0) = ?';
+                    $reuse_params[] = $subject_id;
+                }
+                if (isset($cols['status'])) {
+                    $reuse_where[] = 'COALESCE(status, ?) = ?';
+                    $reuse_params[] = $status;
+                    $reuse_params[] = $status;
+                }
+
+                $reuse_sql = 'SELECT id FROM schedules WHERE ' . implode(' AND ', $reuse_where) . ' ORDER BY id LIMIT 1';
+                $reuse_stmt = $conn->prepare($reuse_sql);
+                $reuse_stmt->execute($reuse_params);
+                $reuse_id = (int)$reuse_stmt->fetchColumn();
+
+                if ($reuse_id > 0) {
+                    $set_parts = [];
+                    $set_values = [];
+                    foreach ($fields as $k => $v) {
+                        if ($k === 'created_by') {
+                            continue;
+                        }
+                        $set_parts[] = "$k = ?";
+                        $set_values[] = $v;
+                    }
+                    if (isset($cols['updated_at'])) {
+                        $set_parts[] = 'updated_at = NOW()';
+                    }
+                    $set_values[] = $reuse_id;
+
+                    $reuse_update_sql = 'UPDATE schedules SET ' . implode(', ', $set_parts) . ' WHERE id = ?';
+                    $reuse_update_stmt = $conn->prepare($reuse_update_sql);
+                    $reuse_update_stmt->execute($set_values);
+
+                    $inserted_days[] = $day_of_week;
+                    continue;
                 }
 
                 $col_names = array_keys($fields);

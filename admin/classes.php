@@ -32,6 +32,15 @@ if (isset($schedule_cols['end_time'])) {
 } else {
     $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
 }
+$has_start_date = isset($schedule_cols['start_date']);
+$has_end_date = isset($schedule_cols['end_date']);
+$date_fields_select = '';
+if ($has_start_date) {
+    $date_fields_select .= 's.start_date, ';
+}
+if ($has_end_date) {
+    $date_fields_select .= 's.end_date, ';
+}
 
 // Fetch schedules as "Classes" (matches view_class.php)
 $subjects_enabled = ($subjects_table_exists && isset($schedule_cols['subject_id']));
@@ -54,6 +63,7 @@ $stmt = $conn->prepare("
         s.day_of_week,
         s.start_time,
         {$end_time_expr} AS end_time,
+        {$date_fields_select}
         s.max_students,
         s.semester,
         s.academic_year,
@@ -77,9 +87,10 @@ $stmt->execute();
 $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
-$classes_grouped_map = [];
+
+$core_group_stats = [];
 foreach ($classes as $class_row) {
-    $group_key = implode('|', [
+    $core_key = implode('|', [
         (string)($class_row['course_id'] ?? ''),
         (string)($class_row['subject_id'] ?? ''),
         (string)($class_row['instructor_id'] ?? ''),
@@ -88,10 +99,90 @@ foreach ($classes as $class_row) {
         (string)($class_row['end_time'] ?? ''),
         (string)($class_row['status'] ?? ''),
         (string)($class_row['max_students'] ?? ''),
-        (string)($class_row['semester'] ?? ''),
-        (string)($class_row['academic_year'] ?? ''),
-        (string)($class_row['year_level'] ?? '')
     ]);
+
+    if (!isset($core_group_stats[$core_key])) {
+        $core_group_stats[$core_key] = [
+            'semester' => [],
+            'academic_year' => [],
+            'year_level' => [],
+            'start_date' => [],
+            'end_date' => [],
+        ];
+    }
+
+    $semester = trim((string)($class_row['semester'] ?? ''));
+    $academic_year = trim((string)($class_row['academic_year'] ?? ''));
+    $year_level = trim((string)($class_row['year_level'] ?? ''));
+    $start_date = trim((string)($class_row['start_date'] ?? ''));
+    $end_date = trim((string)($class_row['end_date'] ?? ''));
+
+    if ($semester !== '') {
+        $core_group_stats[$core_key]['semester'][$semester] = true;
+    }
+    if ($academic_year !== '') {
+        $core_group_stats[$core_key]['academic_year'][$academic_year] = true;
+    }
+    if ($year_level !== '') {
+        $core_group_stats[$core_key]['year_level'][$year_level] = true;
+    }
+    if ($start_date !== '') {
+        $core_group_stats[$core_key]['start_date'][$start_date] = true;
+    }
+    if ($end_date !== '') {
+        $core_group_stats[$core_key]['end_date'][$end_date] = true;
+    }
+}
+
+$classes_grouped_map = [];
+foreach ($classes as $class_row) {
+    $core_key = implode('|', [
+        (string)($class_row['course_id'] ?? ''),
+        (string)($class_row['subject_id'] ?? ''),
+        (string)($class_row['instructor_id'] ?? ''),
+        (string)($class_row['classroom_id'] ?? ''),
+        (string)($class_row['start_time'] ?? ''),
+        (string)($class_row['end_time'] ?? ''),
+        (string)($class_row['status'] ?? ''),
+        (string)($class_row['max_students'] ?? ''),
+    ]);
+
+    $stats = $core_group_stats[$core_key] ?? [
+        'semester' => [],
+        'academic_year' => [],
+        'year_level' => [],
+        'start_date' => [],
+        'end_date' => [],
+    ];
+
+    $semester = trim((string)($class_row['semester'] ?? ''));
+    $academic_year = trim((string)($class_row['academic_year'] ?? ''));
+    $year_level = trim((string)($class_row['year_level'] ?? ''));
+    $start_date = trim((string)($class_row['start_date'] ?? ''));
+    $end_date = trim((string)($class_row['end_date'] ?? ''));
+
+    if ($semester === '' && count($stats['semester']) === 1) {
+        $semester = (string)array_key_first($stats['semester']);
+        $class_row['semester'] = $semester;
+    }
+    if ($academic_year === '' && count($stats['academic_year']) === 1) {
+        $academic_year = (string)array_key_first($stats['academic_year']);
+        $class_row['academic_year'] = $academic_year;
+    }
+    if ($year_level === '' && count($stats['year_level']) === 1) {
+        $year_level = (string)array_key_first($stats['year_level']);
+        $class_row['year_level'] = $year_level;
+    }
+    if ($start_date === '' && count($stats['start_date']) === 1) {
+        $start_date = (string)array_key_first($stats['start_date']);
+        $class_row['start_date'] = $start_date;
+    }
+    if ($end_date === '' && count($stats['end_date']) === 1) {
+        $end_date = (string)array_key_first($stats['end_date']);
+        $class_row['end_date'] = $end_date;
+    }
+
+    $group_key = $core_key . '|' . $semester . '|' . $academic_year . '|' . $year_level . '|' . $start_date . '|' . $end_date;
 
     if (!isset($classes_grouped_map[$group_key])) {
         $class_row['group_size'] = 0;
@@ -107,7 +198,7 @@ foreach ($classes as $class_row) {
     }
 
     $classes_grouped_map[$group_key]['__ids'][] = (int)($class_row['id'] ?? 0);
-    $classes_grouped_map[$group_key]['group_size']++;
+    $classes_grouped_map[$group_key]['group_size'] = count($classes_grouped_map[$group_key]['__days']);
     $classes_grouped_map[$group_key]['enrolled_students'] = max(
         (int)($classes_grouped_map[$group_key]['enrolled_students'] ?? 0),
         (int)($class_row['enrolled_students'] ?? 0)
@@ -123,6 +214,80 @@ foreach ($classes_display as &$class_row) {
     $class_row['combined_days_label'] = !empty($class_row['__days'])
         ? implode(', ', $class_row['__days'])
         : (string)($class_row['day_of_week'] ?? '');
+
+    if (!empty($class_row['__ids'])) {
+        $class_row['id'] = (int)$class_row['__ids'][0];
+    }
+
+    unset($class_row['__days'], $class_row['__ids']);
+}
+unset($class_row);
+
+// Final guard: merge rows that are the same class but split by legacy metadata drift.
+$merged_display_map = [];
+foreach ($classes_display as $class_row) {
+    $merge_key = implode('|', [
+        (string)($class_row['course_id'] ?? ''),
+        (string)($class_row['subject_id'] ?? ''),
+        (string)($class_row['instructor_id'] ?? ''),
+        (string)($class_row['classroom_id'] ?? ''),
+        (string)($class_row['start_time'] ?? ''),
+        (string)($class_row['end_time'] ?? ''),
+        (string)($class_row['status'] ?? ''),
+        (string)($class_row['max_students'] ?? ''),
+    ]);
+
+    $days = array_filter(array_map('trim', explode(',', (string)($class_row['combined_days_label'] ?? ''))));
+    $ids = [];
+    if (!empty($class_row['id'])) {
+        $ids[] = (int)$class_row['id'];
+    }
+
+    if (!isset($merged_display_map[$merge_key])) {
+        $class_row['__days'] = array_values(array_unique($days));
+        $class_row['__ids'] = $ids;
+        $merged_display_map[$merge_key] = $class_row;
+        continue;
+    }
+
+    $existing = &$merged_display_map[$merge_key];
+    $existing['__days'] = array_values(array_unique(array_merge($existing['__days'] ?? [], $days)));
+    $existing['__ids'] = array_values(array_unique(array_merge($existing['__ids'] ?? [], $ids)));
+    $existing['enrolled_students'] = max(
+        (int)($existing['enrolled_students'] ?? 0),
+        (int)($class_row['enrolled_students'] ?? 0)
+    );
+
+    foreach (['semester', 'academic_year', 'year_level'] as $f) {
+        if (trim((string)($existing[$f] ?? '')) === '' && trim((string)($class_row[$f] ?? '')) !== '') {
+            $existing[$f] = $class_row[$f];
+        }
+    }
+
+    $existing_start = trim((string)($existing['start_date'] ?? ''));
+    $new_start = trim((string)($class_row['start_date'] ?? ''));
+    if ($new_start !== '' && ($existing_start === '' || strtotime($new_start) < strtotime($existing_start))) {
+        $existing['start_date'] = $new_start;
+    }
+
+    $existing_end = trim((string)($existing['end_date'] ?? ''));
+    $new_end = trim((string)($class_row['end_date'] ?? ''));
+    if ($new_end !== '' && ($existing_end === '' || strtotime($new_end) > strtotime($existing_end))) {
+        $existing['end_date'] = $new_end;
+    }
+    unset($existing);
+}
+
+$classes_display = array_values($merged_display_map);
+foreach ($classes_display as &$class_row) {
+    usort($class_row['__days'], function ($a, $b) use ($day_order_map) {
+        return (($day_order_map[$a] ?? 99) <=> ($day_order_map[$b] ?? 99));
+    });
+
+    $class_row['combined_days_label'] = !empty($class_row['__days'])
+        ? implode(', ', $class_row['__days'])
+        : (string)($class_row['day_of_week'] ?? '');
+    $class_row['group_size'] = count($class_row['__days']);
 
     if (!empty($class_row['__ids'])) {
         $class_row['id'] = (int)$class_row['__ids'][0];
@@ -157,6 +322,19 @@ foreach ($classes_display as $row) {
 function time_range_label($start, $end) {
     if (!$start || !$end) return '';
     return date('g:i A', strtotime($start)) . ' - ' . date('g:i A', strtotime($end));
+}
+
+function date_range_label($start_date, $end_date) {
+    $start = trim((string)$start_date);
+    $end = trim((string)$end_date);
+    if ($start === '' && $end === '') return '';
+    if ($start !== '' && $end !== '') {
+        return date('M j, Y', strtotime($start)) . ' - ' . date('M j, Y', strtotime($end));
+    }
+    if ($start !== '') {
+        return 'Starts ' . date('M j, Y', strtotime($start));
+    }
+    return 'Ends ' . date('M j, Y', strtotime($end));
 }
 
 function status_badge_classes($status) {
@@ -401,15 +579,14 @@ function status_badge_classes($status) {
                     </div>
 
                     <div class="overflow-x-auto">
-                        <table class="min-w-full text-sm">
+                        <table class="min-w-full table-fixed text-sm">
                             <thead class="text-xs uppercase tracking-wider text-slate-500 bg-slate-50">
                                 <tr>
                                     <th class="px-5 py-3 text-left font-semibold">Subject</th>
-                                    <th class="px-5 py-3 text-left font-semibold">Subject</th>
                                     <th class="px-5 py-3 text-left font-semibold">Instructor</th>
                                     <th class="px-5 py-3 text-left font-semibold">Room</th>
-                                    <th class="px-5 py-3 text-left font-semibold">Schedule</th>
-                                    <th class="px-5 py-3 text-left font-semibold">Enrollment</th>
+                                    <th class="px-5 py-3 text-left font-semibold w-[38%]">Schedule</th>
+                                    <th class="px-5 py-3 text-left font-semibold w-[10%]">Enrollment</th>
                                     <th class="px-5 py-3 text-left font-semibold">Status</th>
                                     <th class="px-5 py-3 text-right font-semibold">Actions</th>
                                 </tr>
@@ -442,33 +619,32 @@ function status_badge_classes($status) {
                                         }
                                     ?>
                                     <tr class="class-row border-t border-slate-100 hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars(strtolower(($display_name) . ' ' . ($display_code) . ' ' . ($class['instructor_name'] ?? '') . ' ' . ($class['room_number'] ?? '') . ' ' . ($class['combined_days_label'] ?? ''))); ?>">
-                                        <td class="px-5 py-4">
+                                        <td class="px-5 py-4 w-[38%] align-top">
                                             <div class="font-semibold text-slate-900"><?php echo htmlspecialchars($display_name); ?></div>
                                             <div class="text-xs text-slate-500"><?php echo htmlspecialchars($display_code); ?></div>
-                                        </td>
-                                        <td class="px-5 py-4">
-                                            <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                                                <?php echo htmlspecialchars($display_code); ?>
-                                            </span>
                                         </td>
                                         <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($class['instructor_name'] ?? ''); ?></td>
                                         <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($class['room_number'] ?? ''); ?></td>
                                         <td class="px-5 py-4">
                                             <div class="text-slate-700"><?php echo htmlspecialchars($class['combined_days_label'] ?? ''); ?></div>
                                             <div class="text-xs text-slate-500"><?php echo htmlspecialchars(time_range_label($class['start_time'] ?? '', $class['end_time'] ?? '')); ?></div>
+                                            <?php $range_label = date_range_label($class['start_date'] ?? '', $class['end_date'] ?? ''); ?>
+                                            <?php if ($range_label !== ''): ?>
+                                                <div class="text-xs text-slate-500"><?php echo htmlspecialchars($range_label); ?></div>
+                                            <?php endif; ?>
                                             <?php if ((int)($class['group_size'] ?? 1) > 1): ?>
                                                 <div class="text-[11px] text-slate-400"><?php echo (int)$class['group_size']; ?> linked schedules</div>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="px-5 py-4">
-                                            <div class="flex items-center gap-3">
-                                                <div class="min-w-[76px] text-slate-700">
+                                        <td class="px-5 py-4 w-[10%]">
+                                            <div class="flex items-center gap-2.5">
+                                                <div class="min-w-[56px] text-sm text-slate-700">
                                                     <?php echo htmlspecialchars($enrolled . '/' . ($max > 0 ? $max : '—')); ?>
                                                 </div>
-                                                <div class="w-28 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                <div class="w-20 h-2 rounded-full bg-slate-100 overflow-hidden">
                                                     <div class="h-full bg-emerald-500" style="width: <?php echo (int)$pct; ?>%"></div>
                                                 </div>
-                                                <div class="w-10 text-right text-xs text-slate-500"><?php echo (int)$pct; ?>%</div>
+                                                <div class="w-8 text-right text-xs text-slate-500"><?php echo (int)$pct; ?>%</div>
                                             </div>
                                         </td>
                                         <td class="px-5 py-4">
@@ -495,7 +671,7 @@ function status_badge_classes($status) {
 
                                 <?php if (empty($classes_display)): ?>
                                     <tr>
-                                        <td colspan="8" class="px-5 py-10 text-center text-slate-500">No classes found</td>
+                                        <td colspan="7" class="px-5 py-10 text-center text-slate-500">No classes found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -509,7 +685,7 @@ function status_badge_classes($status) {
     <!-- Add Class Modal -->
     <div id="addClassModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/50" data-modal-close="addClassModal"></div>
-        <div class="relative mx-auto my-10 w-[92%] max-w-2xl">
+        <div class="relative mx-auto my-10 w-[92%] max-w-3xl">
             <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
                 <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                     <div class="text-base font-semibold text-slate-900">Add Class</div>
@@ -525,7 +701,7 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Course</label>
                             <select name="course_id" id="add_course_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" selected disabled>Select course</option>
+                                <option value="">Select course</option>
                                 <?php foreach ($courses as $c): ?>
                                     <option value="<?php echo (int)$c['id']; ?>"><?php echo htmlspecialchars(($c['course_code'] ?? '') . ' — ' . ($c['course_name'] ?? '')); ?></option>
                                 <?php endforeach; ?>
@@ -535,7 +711,7 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Year Level</label>
                             <select name="year_level" id="add_year_level" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" selected disabled>Select year level</option>
+                                <option value="">Select year level</option>
                                 <option value="1">1st Year</option>
                                 <option value="2">2nd Year</option>
                                 <option value="3">3rd Year</option>
@@ -546,7 +722,7 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Subject</label>
                             <select name="subject_id" id="add_subject_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo $subjects_enabled ? 'required' : ''; ?> <?php echo $subjects_enabled ? '' : 'disabled'; ?>>
-                                <option value="" selected disabled>Select subject</option>
+                                <option value="">Select subject</option>
                                 <?php foreach ($subjects as $s): ?>
                                     <option value="<?php echo (int)$s['id']; ?>" data-year="<?php echo htmlspecialchars((string)($s['year_level'] ?? '')); ?>"><?php echo htmlspecialchars(($s['subject_code'] ?? '') . ' — ' . ($s['subject_name'] ?? '')); ?></option>
                                 <?php endforeach; ?>
@@ -559,21 +735,30 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Instructor</label>
                             <select name="instructor_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" selected disabled>Select instructor</option>
+                                <option value="">Select instructor</option>
                                 <?php foreach ($instructors as $ins): ?>
-                                    <option value="<?php echo (int)$ins['id']; ?>"><?php echo htmlspecialchars(trim(($ins['last_name'] ?? '') . ', ' . ($ins['first_name'] ?? ''))); ?></option>
+                                    <option value="<?php echo (int)$ins['id']; ?>"><?php echo htmlspecialchars(($ins['last_name'] ?? '') . ', ' . ($ins['first_name'] ?? '') . (!empty($ins['email']) ? (' (' . $ins['email'] . ')') : '')); ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Room</label>
-                            <select name="classroom_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" selected disabled>Select room</option>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Classroom</label>
+                            <select name="classroom_id" id="add_classroom_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                                <option value="">Select room</option>
                                 <?php foreach ($classrooms as $r): ?>
-                                    <option value="<?php echo (int)$r['id']; ?>"><?php echo htmlspecialchars(($r['room_number'] ?? '') . ' (' . ($r['room_type'] ?? '') . ')'); ?></option>
+                                    <option value="<?php echo (int)$r['id']; ?>" data-room-type="<?php echo htmlspecialchars(strtolower((string)($r['room_type'] ?? 'lecture'))); ?>"><?php echo htmlspecialchars($r['room_number'] ?? ''); ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <div class="mt-2">
+                                <div id="addRoomTypeText" class="mb-2 text-xs text-slate-500">No room selected</div>
+                                <div class="flex flex-wrap gap-2">
+                                    <span data-room-type-indicator="lecture" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Lecture Room</span>
+                                    <span data-room-type-indicator="comlab" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Comlab</span>
+                                    <span data-room-type-indicator="conference" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Seminar Hall</span>
+                                    <span data-room-type-indicator="laboratory" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 transition">Laboratory</span>
+                                </div>
+                            </div>
                         </div>
 
                         <div>
@@ -600,34 +785,43 @@ function status_badge_classes($status) {
                         </div>
 
                         <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Start date</label>
+                            <input type="date" name="start_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d')); ?>">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">End date</label>
+                            <input type="date" name="end_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d', strtotime('+17 days'))); ?>">
+                        </div>
+
+                        <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Max students</label>
-                            <input type="number" name="max_students" min="1" value="30" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                            <input type="number" name="max_students" min="1" value="30" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
 
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Status</label>
                             <select name="status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
-                                <option value="active" selected>Active</option>
-                                <option value="inactive">Inactive</option>
-                                <option value="cancelled">Cancelled</option>
-                                <option value="completed">Completed</option>
+                                <?php foreach ($status_options as $s): ?>
+                                    <option value="<?php echo htmlspecialchars($s); ?>" <?php echo ($s === 'active') ? 'selected' : ''; ?>><?php echo htmlspecialchars(ucfirst($s)); ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
 
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Semester</label>
-                            <input type="text" name="semester" value="1st Semester" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                            <input type="text" name="semester" value="1st Semester" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
 
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Academic year</label>
-                            <input type="text" name="academic_year" value="<?php echo htmlspecialchars(date('Y') . '-' . (date('Y') + 1)); ?>" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                            <input type="text" name="academic_year" value="<?php echo htmlspecialchars(date('Y') . '-' . (date('Y') + 1)); ?>" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
                     </div>
 
                     <div class="mt-5 flex items-center justify-end gap-3">
                         <button type="button" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" data-modal-close="addClassModal">Cancel</button>
-                        <button type="submit" class="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Add Class</button>
+                        <button type="submit" class="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Save Class</button>
                     </div>
                 </form>
             </div>
@@ -637,7 +831,7 @@ function status_badge_classes($status) {
     <!-- Edit Class Modal -->
     <div id="editClassModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/50" data-modal-close="editClassModal"></div>
-        <div class="relative mx-auto my-10 w-[92%] max-w-2xl">
+        <div class="relative mx-auto my-10 w-[92%] max-w-3xl">
             <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
                 <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                     <div class="text-base font-semibold text-slate-900">Edit Class</div>
@@ -648,13 +842,13 @@ function status_badge_classes($status) {
 
                 <form id="editClassForm" action="process_class.php" method="POST" class="p-5">
                     <input type="hidden" name="action" value="edit">
-                    <input type="hidden" name="schedule_id" id="edit_schedule_id">
+                    <input type="hidden" name="schedule_id" id="edit_schedule_id" value="">
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Course</label>
                             <select name="course_id" id="edit_course_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" disabled>Select course</option>
+                                <option value="">Select course</option>
                                 <?php foreach ($courses as $c): ?>
                                     <option value="<?php echo (int)$c['id']; ?>"><?php echo htmlspecialchars(($c['course_code'] ?? '') . ' — ' . ($c['course_name'] ?? '')); ?></option>
                                 <?php endforeach; ?>
@@ -664,7 +858,7 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Year Level</label>
                             <select name="year_level" id="edit_year_level" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" disabled>Select year level</option>
+                                <option value="">Select year level</option>
                                 <option value="1">1st Year</option>
                                 <option value="2">2nd Year</option>
                                 <option value="3">3rd Year</option>
@@ -675,7 +869,7 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Subject</label>
                             <select name="subject_id" id="edit_subject_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" <?php echo $subjects_enabled ? 'required' : ''; ?> <?php echo $subjects_enabled ? '' : 'disabled'; ?>>
-                                <option value="" disabled>Select subject</option>
+                                <option value="">Select subject</option>
                                 <?php foreach ($subjects as $s): ?>
                                     <option value="<?php echo (int)$s['id']; ?>" data-year="<?php echo htmlspecialchars((string)($s['year_level'] ?? '')); ?>"><?php echo htmlspecialchars(($s['subject_code'] ?? '') . ' — ' . ($s['subject_name'] ?? '')); ?></option>
                                 <?php endforeach; ?>
@@ -688,19 +882,19 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Instructor</label>
                             <select name="instructor_id" id="edit_instructor_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" disabled>Select instructor</option>
+                                <option value="">Select instructor</option>
                                 <?php foreach ($instructors as $ins): ?>
-                                    <option value="<?php echo (int)$ins['id']; ?>"><?php echo htmlspecialchars(trim(($ins['last_name'] ?? '') . ', ' . ($ins['first_name'] ?? ''))); ?></option>
+                                    <option value="<?php echo (int)$ins['id']; ?>"><?php echo htmlspecialchars(($ins['last_name'] ?? '') . ', ' . ($ins['first_name'] ?? '') . (!empty($ins['email']) ? (' (' . $ins['email'] . ')') : '')); ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Room</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Classroom</label>
                             <select name="classroom_id" id="edit_classroom_id" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="" disabled>Select room</option>
+                                <option value="">Select room</option>
                                 <?php foreach ($classrooms as $r): ?>
-                                    <option value="<?php echo (int)$r['id']; ?>"><?php echo htmlspecialchars(($r['room_number'] ?? '') . ' (' . ($r['room_type'] ?? '') . ')'); ?></option>
+                                    <option value="<?php echo (int)$r['id']; ?>"><?php echo htmlspecialchars($r['room_number'] ?? ''); ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -729,28 +923,37 @@ function status_badge_classes($status) {
                         </div>
 
                         <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Start date</label>
+                            <input type="date" name="start_date" id="edit_start_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d')); ?>">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">End date</label>
+                            <input type="date" name="end_date" id="edit_end_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d', strtotime('+17 days'))); ?>">
+                        </div>
+
+                        <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Max students</label>
-                            <input type="number" name="max_students" id="edit_max_students" min="1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                            <input type="number" name="max_students" id="edit_max_students" min="1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
 
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Status</label>
                             <select name="status" id="edit_status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                                <option value="cancelled">Cancelled</option>
-                                <option value="completed">Completed</option>
+                                <?php foreach ($status_options as $s): ?>
+                                    <option value="<?php echo htmlspecialchars($s); ?>"><?php echo htmlspecialchars(ucfirst($s)); ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
 
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Semester</label>
-                            <input type="text" name="semester" id="edit_semester" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                            <input type="text" name="semester" id="edit_semester" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
 
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Academic year</label>
-                            <input type="text" name="academic_year" id="edit_academic_year" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                            <input type="text" name="academic_year" id="edit_academic_year" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         </div>
                     </div>
 
@@ -908,9 +1111,51 @@ function status_badge_classes($status) {
 
             const addYear = document.getElementById('add_year_level');
             const addSubj = document.getElementById('add_subject_id');
+            const addClassroom = document.getElementById('add_classroom_id');
+            const addRoomTypeText = document.getElementById('addRoomTypeText');
+            const addRoomTypePills = Array.from(document.querySelectorAll('[data-room-type-indicator]'));
+
+            function normalizeRoomType(type) {
+                const t = String(type || '').toLowerCase().trim();
+                if (t === 'computer') return 'comlab';
+                return t;
+            }
+
+            function roomTypeLabel(type) {
+                if (type === 'lecture') return 'Lecture Room';
+                if (type === 'comlab') return 'Comlab';
+                if (type === 'conference') return 'Seminar Hall';
+                if (type === 'laboratory') return 'Laboratory';
+                return 'Unknown';
+            }
+
+            function updateAddRoomTypeIndicator() {
+                const selectedOption = addClassroom?.options?.[addClassroom.selectedIndex] || null;
+                const selectedType = normalizeRoomType(selectedOption?.getAttribute('data-room-type') || '');
+
+                addRoomTypePills.forEach(function (pill) {
+                    const pillType = pill.getAttribute('data-room-type-indicator') || '';
+                    const isActive = selectedType !== '' && pillType === selectedType;
+                    pill.classList.toggle('bg-emerald-600', isActive);
+                    pill.classList.toggle('text-white', isActive);
+                    pill.classList.toggle('border-emerald-600', isActive);
+                    pill.classList.toggle('bg-white', !isActive);
+                    pill.classList.toggle('text-slate-700', !isActive);
+                    pill.classList.toggle('border-slate-200', !isActive);
+                });
+
+                if (addRoomTypeText) {
+                    addRoomTypeText.textContent = selectedType === ''
+                        ? 'No room selected'
+                        : ('Selected type: ' + roomTypeLabel(selectedType));
+                }
+            }
+
             addYear?.addEventListener('change', function () {
                 filterSubjectsByYear(addSubj, addYear.value);
             });
+            addClassroom?.addEventListener('change', updateAddRoomTypeIndicator);
+            updateAddRoomTypeIndicator();
 
             const editYear = document.getElementById('edit_year_level');
             const editSubj = document.getElementById('edit_subject_id');
@@ -942,6 +1187,8 @@ function status_badge_classes($status) {
                 });
                 document.getElementById('edit_start_time').value = classData.start_time || '';
                 document.getElementById('edit_end_time').value = classData.end_time || '';
+                document.getElementById('edit_start_date').value = classData.start_date || '<?php echo htmlspecialchars(date('Y-m-d')); ?>';
+                document.getElementById('edit_end_date').value = classData.end_date || '<?php echo htmlspecialchars(date('Y-m-d', strtotime('+17 days'))); ?>';
                 document.getElementById('edit_max_students').value = classData.max_students || 30;
                 document.getElementById('edit_status').value = (classData.status || 'active');
                 document.getElementById('edit_semester').value = classData.semester || '1st Semester';

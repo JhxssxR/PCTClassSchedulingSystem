@@ -51,6 +51,15 @@ if (isset($schedule_cols['end_time'])) {
 } else {
     $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
 }
+$has_start_date = isset($schedule_cols['start_date']);
+$has_end_date = isset($schedule_cols['end_date']);
+$date_fields_select = '';
+if ($has_start_date) {
+    $date_fields_select .= 's.start_date, ';
+}
+if ($has_end_date) {
+    $date_fields_select .= 's.end_date, ';
+}
 
 $status_options = __pct_enum_values_from_type($schedule_status_type);
 if (empty($status_options)) {
@@ -78,6 +87,7 @@ $stmt = $conn->prepare("
         s.day_of_week,
         s.start_time,
         {$end_time_expr} AS end_time,
+        {$date_fields_select}
         s.max_students,
         s.semester,
         s.academic_year,
@@ -93,7 +103,7 @@ $stmt = $conn->prepare("
     FROM schedules s
     JOIN courses c ON c.id = s.course_id
     {$subject_join_sql}
-    LEFT JOIN users i ON i.id = s.instructor_id
+    JOIN users i ON i.id = s.instructor_id
     JOIN classrooms cr ON cr.id = s.classroom_id
     ORDER BY (s.status = 'active') DESC, {$order_by_name}, s.day_of_week, s.start_time
 ");
@@ -119,12 +129,16 @@ foreach ($classes as $class_row) {
             'semester' => [],
             'academic_year' => [],
             'year_level' => [],
+            'start_date' => [],
+            'end_date' => [],
         ];
     }
 
     $semester = trim((string)($class_row['semester'] ?? ''));
     $academic_year = trim((string)($class_row['academic_year'] ?? ''));
     $year_level = trim((string)($class_row['year_level'] ?? ''));
+    $start_date = trim((string)($class_row['start_date'] ?? ''));
+    $end_date = trim((string)($class_row['end_date'] ?? ''));
 
     if ($semester !== '') {
         $core_group_stats[$core_key]['semester'][$semester] = true;
@@ -134,6 +148,12 @@ foreach ($classes as $class_row) {
     }
     if ($year_level !== '') {
         $core_group_stats[$core_key]['year_level'][$year_level] = true;
+    }
+    if ($start_date !== '') {
+        $core_group_stats[$core_key]['start_date'][$start_date] = true;
+    }
+    if ($end_date !== '') {
+        $core_group_stats[$core_key]['end_date'][$end_date] = true;
     }
 }
 
@@ -150,10 +170,12 @@ foreach ($classes as $class_row) {
         (string)($class_row['max_students'] ?? ''),
     ]);
 
-    $stats = $core_group_stats[$core_key] ?? ['semester' => [], 'academic_year' => [], 'year_level' => []];
+    $stats = $core_group_stats[$core_key] ?? ['semester' => [], 'academic_year' => [], 'year_level' => [], 'start_date' => [], 'end_date' => []];
     $semester = trim((string)($class_row['semester'] ?? ''));
     $academic_year = trim((string)($class_row['academic_year'] ?? ''));
     $year_level = trim((string)($class_row['year_level'] ?? ''));
+    $start_date = trim((string)($class_row['start_date'] ?? ''));
+    $end_date = trim((string)($class_row['end_date'] ?? ''));
 
     if ($semester === '' && count($stats['semester']) === 1) {
         $semester = (string)array_key_first($stats['semester']);
@@ -167,8 +189,16 @@ foreach ($classes as $class_row) {
         $year_level = (string)array_key_first($stats['year_level']);
         $class_row['year_level'] = $year_level;
     }
+    if ($start_date === '' && count($stats['start_date']) === 1) {
+        $start_date = (string)array_key_first($stats['start_date']);
+        $class_row['start_date'] = $start_date;
+    }
+    if ($end_date === '' && count($stats['end_date']) === 1) {
+        $end_date = (string)array_key_first($stats['end_date']);
+        $class_row['end_date'] = $end_date;
+    }
 
-    $group_key = $core_key . '|' . $semester . '|' . $academic_year . '|' . $year_level;
+    $group_key = $core_key . '|' . $semester . '|' . $academic_year . '|' . $year_level . '|' . $start_date . '|' . $end_date;
 
     if (!isset($classes_grouped_map[$group_key])) {
         $class_row['group_size'] = 0;
@@ -209,6 +239,80 @@ foreach ($classes_display as &$class_row) {
 }
 unset($class_row);
 
+// Final guard: merge rows that are the same class but split by legacy metadata drift.
+$merged_display_map = [];
+foreach ($classes_display as $class_row) {
+    $merge_key = implode('|', [
+        (string)($class_row['course_id'] ?? ''),
+        (string)($class_row['subject_id'] ?? ''),
+        (string)($class_row['instructor_id'] ?? ''),
+        (string)($class_row['classroom_id'] ?? ''),
+        (string)($class_row['start_time'] ?? ''),
+        (string)($class_row['end_time'] ?? ''),
+        (string)($class_row['status'] ?? ''),
+        (string)($class_row['max_students'] ?? ''),
+    ]);
+
+    $days = array_filter(array_map('trim', explode(',', (string)($class_row['combined_days_label'] ?? ''))));
+    $ids = [];
+    if (!empty($class_row['id'])) {
+        $ids[] = (int)$class_row['id'];
+    }
+
+    if (!isset($merged_display_map[$merge_key])) {
+        $class_row['__days'] = array_values(array_unique($days));
+        $class_row['__ids'] = $ids;
+        $merged_display_map[$merge_key] = $class_row;
+        continue;
+    }
+
+    $existing = &$merged_display_map[$merge_key];
+    $existing['__days'] = array_values(array_unique(array_merge($existing['__days'] ?? [], $days)));
+    $existing['__ids'] = array_values(array_unique(array_merge($existing['__ids'] ?? [], $ids)));
+    $existing['enrolled_students'] = max(
+        (int)($existing['enrolled_students'] ?? 0),
+        (int)($class_row['enrolled_students'] ?? 0)
+    );
+
+    foreach (['semester', 'academic_year', 'year_level'] as $f) {
+        if (trim((string)($existing[$f] ?? '')) === '' && trim((string)($class_row[$f] ?? '')) !== '') {
+            $existing[$f] = $class_row[$f];
+        }
+    }
+
+    $existing_start = trim((string)($existing['start_date'] ?? ''));
+    $new_start = trim((string)($class_row['start_date'] ?? ''));
+    if ($new_start !== '' && ($existing_start === '' || strtotime($new_start) < strtotime($existing_start))) {
+        $existing['start_date'] = $new_start;
+    }
+
+    $existing_end = trim((string)($existing['end_date'] ?? ''));
+    $new_end = trim((string)($class_row['end_date'] ?? ''));
+    if ($new_end !== '' && ($existing_end === '' || strtotime($new_end) > strtotime($existing_end))) {
+        $existing['end_date'] = $new_end;
+    }
+    unset($existing);
+}
+
+$classes_display = array_values($merged_display_map);
+foreach ($classes_display as &$class_row) {
+    usort($class_row['__days'], function ($a, $b) use ($day_order_map) {
+        return (($day_order_map[$a] ?? 99) <=> ($day_order_map[$b] ?? 99));
+    });
+
+    $class_row['combined_days_label'] = !empty($class_row['__days'])
+        ? implode(', ', $class_row['__days'])
+        : (string)($class_row['day_of_week'] ?? '');
+    $class_row['group_size'] = count($class_row['__days']);
+
+    if (!empty($class_row['__ids'])) {
+        $class_row['id'] = (int)$class_row['__ids'][0];
+    }
+
+    unset($class_row['__days'], $class_row['__ids']);
+}
+unset($class_row);
+
 // Select options for modals
 $subjects = [];
 if ($subjects_enabled) {
@@ -233,6 +337,19 @@ foreach ($classes_display as $row) {
 function time_range_label($start, $end) {
     if (!$start || !$end) return '';
     return date('g:i A', strtotime($start)) . ' - ' . date('g:i A', strtotime($end));
+}
+
+function date_range_label($start_date, $end_date) {
+    $start = trim((string)$start_date);
+    $end = trim((string)$end_date);
+    if ($start === '' && $end === '') return '';
+    if ($start !== '' && $end !== '') {
+        return date('M j, Y', strtotime($start)) . ' - ' . date('M j, Y', strtotime($end));
+    }
+    if ($start !== '') {
+        return 'Starts ' . date('M j, Y', strtotime($start));
+    }
+    return 'Ends ' . date('M j, Y', strtotime($end));
 }
 
 function status_badge_classes($status) {
@@ -296,7 +413,16 @@ require_once __DIR__ . '/includes/layout_top.php';
     </div>
 
     <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table class="min-w-full table-fixed text-sm">
+            <colgroup>
+                <col class="w-[22%]">
+                <col class="w-[16%]">
+                <col class="w-[8%]">
+                <col class="w-[33%]">
+                <col class="w-[7%]">
+                <col class="w-[8%]">
+                <col class="w-[6%]">
+            </colgroup>
             <thead class="text-xs uppercase tracking-wider text-slate-500 bg-slate-50">
                 <tr>
                     <th class="px-5 py-3 text-left font-semibold">Subject</th>
@@ -334,29 +460,32 @@ require_once __DIR__ . '/includes/layout_top.php';
                         if ($display_name === '') {
                             $display_name = 'Untitled Class';
                         }
-                        $search = strtolower(($display_name) . ' ' . ($display_code) . ' ' . ($class['instructor_name'] ?? '') . ' ' . ($class['room_number'] ?? '') . ' ' . ($class['combined_days_label'] ?? ''));
                     ?>
-                    <tr class="class-row border-t border-slate-100 hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars($search); ?>">
-                        <td class="px-5 py-4">
+                    <tr class="class-row border-t border-slate-100 hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars(strtolower(($display_name) . ' ' . ($display_code) . ' ' . ($class['instructor_name'] ?? '') . ' ' . ($class['room_number'] ?? '') . ' ' . ($class['combined_days_label'] ?? ''))); ?>">
+                        <td class="px-5 py-4 align-top">
                             <div class="font-semibold text-slate-900"><?php echo htmlspecialchars($display_name); ?></div>
                             <div class="text-xs text-slate-500"><?php echo htmlspecialchars($display_code); ?></div>
                         </td>
-                        <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($class['instructor_name'] ?? 'Not Assigned'); ?></td>
+                        <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($class['instructor_name'] ?? ''); ?></td>
                         <td class="px-5 py-4 text-slate-700"><?php echo htmlspecialchars($class['room_number'] ?? ''); ?></td>
                         <td class="px-5 py-4">
                             <div class="text-slate-700"><?php echo htmlspecialchars($class['combined_days_label'] ?? ''); ?></div>
                             <div class="text-xs text-slate-500"><?php echo htmlspecialchars(time_range_label($class['start_time'] ?? '', $class['end_time'] ?? '')); ?></div>
+                            <?php $range_label = date_range_label($class['start_date'] ?? '', $class['end_date'] ?? ''); ?>
+                            <?php if ($range_label !== ''): ?>
+                                <div class="text-xs text-slate-500"><?php echo htmlspecialchars($range_label); ?></div>
+                            <?php endif; ?>
                             <?php if ((int)($class['group_size'] ?? 1) > 1): ?>
                                 <div class="text-[11px] text-slate-400"><?php echo (int)$class['group_size']; ?> linked schedules</div>
                             <?php endif; ?>
                         </td>
                         <td class="px-5 py-4">
-                            <div class="flex items-center gap-3">
-                                <div class="min-w-[76px] text-slate-700"><?php echo htmlspecialchars($enrolled . '/' . ($max > 0 ? $max : '—')); ?></div>
-                                <div class="w-28 h-2 rounded-full bg-slate-100 overflow-hidden">
+                            <div class="flex items-center gap-2">
+                                <div class="min-w-[48px] text-sm text-slate-700"><?php echo htmlspecialchars($enrolled . '/' . ($max > 0 ? $max : '—')); ?></div>
+                                <div class="w-14 h-2 rounded-full bg-slate-100 overflow-hidden">
                                     <div class="h-full bg-emerald-500" style="width: <?php echo (int)$pct; ?>%"></div>
                                 </div>
-                                <div class="w-10 text-right text-xs text-slate-500"><?php echo (int)$pct; ?>%</div>
+                                <div class="w-6 text-right text-xs text-slate-500"><?php echo (int)$pct; ?>%</div>
                             </div>
                         </td>
                         <td class="px-5 py-4">
@@ -493,6 +622,16 @@ require_once __DIR__ . '/includes/layout_top.php';
                     </div>
 
                     <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Start date</label>
+                        <input type="date" name="start_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d')); ?>">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">End date</label>
+                        <input type="date" name="end_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d', strtotime('+17 days'))); ?>">
+                    </div>
+
+                    <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Max students</label>
                         <input type="number" name="max_students" min="1" value="30" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                     </div>
@@ -617,6 +756,16 @@ require_once __DIR__ . '/includes/layout_top.php';
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">End time</label>
                         <input type="time" name="end_time" id="edit_end_time" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Start date</label>
+                        <input type="date" name="start_date" id="edit_start_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d')); ?>">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">End date</label>
+                        <input type="date" name="end_date" id="edit_end_date" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" value="<?php echo htmlspecialchars(date('Y-m-d', strtotime('+17 days'))); ?>">
                     </div>
 
                     <div>
@@ -794,6 +943,8 @@ require_once __DIR__ . '/includes/layout_top.php';
             });
             document.getElementById('edit_start_time').value = classData.start_time || '';
             document.getElementById('edit_end_time').value = classData.end_time || '';
+            document.getElementById('edit_start_date').value = classData.start_date || '<?php echo htmlspecialchars(date('Y-m-d')); ?>';
+            document.getElementById('edit_end_date').value = classData.end_date || '<?php echo htmlspecialchars(date('Y-m-d', strtotime('+17 days'))); ?>';
             document.getElementById('edit_max_students').value = classData.max_students || 30;
             document.getElementById('edit_status').value = (classData.status || 'active');
             document.getElementById('edit_semester').value = classData.semester || '1st Semester';
@@ -802,7 +953,8 @@ require_once __DIR__ . '/includes/layout_top.php';
         }
 
         window.deleteClass = function (scheduleId) {
-            if (confirm('Are you sure you want to delete this class? This action cannot be undone.')) {
+            const hard = confirm('Are you sure you want to delete this class? This action cannot be undone.');
+            if (hard) {
                 const force = confirm('Use FORCE delete?\n\nOK: Remove this class and all its enrollments.\nCancel: Regular delete (will fail if active enrollments exist).');
 
                 const form = document.createElement('form');
@@ -857,7 +1009,7 @@ require_once __DIR__ . '/includes/layout_top.php';
         function applySearch() {
             const q = (searchInput?.value || '').trim().toLowerCase();
             rows.forEach(function (row) {
-                const hay = (row.getAttribute('data-search') || '').toLowerCase();
+                const hay = row.getAttribute('data-search') || '';
                 row.style.display = (!q || hay.includes(q)) ? '' : 'none';
             });
         }

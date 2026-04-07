@@ -63,6 +63,18 @@ function normalize_time_his(string $time): string {
     return date('H:i:s', $ts);
 }
 
+function normalize_date_ymd(string $date): string {
+    $date = trim($date);
+    if ($date === '') {
+        return '';
+    }
+    $ts = strtotime($date);
+    if ($ts === false) {
+        return '';
+    }
+    return date('Y-m-d', $ts);
+}
+
 function normalize_selected_days($submitted_days, array $allowed_days): array {
     if (!is_array($submitted_days)) {
         $submitted_days = [$submitted_days];
@@ -224,6 +236,8 @@ $cols = table_columns($conn, 'schedules');
 ensure_schedule_end_time_column($conn, $cols);
 $has_end_time = isset($cols['end_time']);
 $has_duration_minutes = isset($cols['duration_minutes']);
+$has_start_date = isset($cols['start_date']);
+$has_end_date = isset($cols['end_date']);
 $default_duration = get_setting_int($conn, 'default_class_duration', 120);
 if ($default_duration < 30) $default_duration = 120;
 
@@ -262,10 +276,23 @@ try {
             $classroom_id = (int)$_POST['classroom_id'];
             $course_id = $has_course_id ? (int)($_POST['course_id'] ?? 0) : 0;
             $subject_id = $has_subject_id ? (int)($_POST['subject_id'] ?? 0) : 0;
+            $start_date = $has_start_date ? normalize_date_ymd((string)($_POST['start_date'] ?? '')) : '';
+            $end_date = $has_end_date ? normalize_date_ymd((string)($_POST['end_date'] ?? '')) : '';
 
             $selected_days = normalize_selected_days($_POST['day_of_week'] ?? [], $allowed_days);
             if (empty($selected_days)) {
                 throw new Exception('Please select at least one valid day.');
+            }
+
+            if ($has_start_date && $start_date === '') {
+                $start_date = date('Y-m-d');
+            }
+            if ($has_end_date && $end_date === '') {
+                $base_start = $start_date !== '' ? $start_date : date('Y-m-d');
+                $end_date = date('Y-m-d', strtotime($base_start . ' +17 days'));
+            }
+            if ($start_date !== '' && $end_date !== '' && strtotime($start_date) > strtotime($end_date)) {
+                throw new Exception('End date must be on or after start date.');
             }
 
             if ($has_end_time) {
@@ -368,6 +395,12 @@ try {
                 } elseif ($has_duration_minutes) {
                     $fields['duration_minutes'] = $default_duration;
                 }
+                if ($has_start_date) {
+                    $fields['start_date'] = $start_date;
+                }
+                if ($has_end_date) {
+                    $fields['end_date'] = $end_date;
+                }
                 if (isset($cols['status'])) {
                     $fields['status'] = 'active';
                 }
@@ -428,6 +461,8 @@ try {
             $classroom_id = (int)$_POST['classroom_id'];
             $course_id = $has_course_id ? (int)($_POST['course_id'] ?? 0) : 0;
             $subject_id = $has_subject_id ? (int)($_POST['subject_id'] ?? 0) : 0;
+            $start_date = $has_start_date ? normalize_date_ymd((string)($_POST['start_date'] ?? '')) : '';
+            $end_date = $has_end_date ? normalize_date_ymd((string)($_POST['end_date'] ?? '')) : '';
             $selected_days = normalize_selected_days($_POST['day_of_week'] ?? [], $allowed_days);
             $target_status = isset($cols['status']) ? (string)$_POST['status'] : 'active';
 
@@ -464,6 +499,23 @@ try {
             $base_row = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$base_row) {
                 throw new Exception('Schedule record was not found. Please refresh the page and try again.');
+            }
+
+            if ($has_start_date && $start_date === '') {
+                $start_date = normalize_date_ymd((string)($base_row['start_date'] ?? ''));
+                if ($start_date === '') {
+                    $start_date = date('Y-m-d');
+                }
+            }
+            if ($has_end_date && $end_date === '') {
+                $end_date = normalize_date_ymd((string)($base_row['end_date'] ?? ''));
+                if ($end_date === '') {
+                    $base_start = $start_date !== '' ? $start_date : date('Y-m-d');
+                    $end_date = date('Y-m-d', strtotime($base_start . ' +17 days'));
+                }
+            }
+            if ($start_date !== '' && $end_date !== '' && strtotime($start_date) > strtotime($end_date)) {
+                throw new Exception('End date must be on or after start date.');
             }
 
             $linked_rows = find_linked_schedule_rows($conn, $base_row, $cols, $has_end_time, $has_duration_minutes, $default_duration);
@@ -610,6 +662,12 @@ try {
                 $base_update_set['end_time'] = $end_time;
             } elseif ($has_duration_minutes) {
                 $base_update_set['duration_minutes'] = $default_duration;
+            }
+            if ($has_start_date) {
+                $base_update_set['start_date'] = $start_date;
+            }
+            if ($has_end_date) {
+                $base_update_set['end_date'] = $end_date;
             }
             if (isset($cols['status'])) {
                 $base_update_set['status'] = $target_status;
