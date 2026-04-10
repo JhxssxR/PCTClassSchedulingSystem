@@ -54,6 +54,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/device-responsive.css" data-pct-responsive-assets="1">
   <link rel="icon" href="pctlogo.png" type="image/png" />
 
   <style>
@@ -762,6 +763,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script defer src="assets/js/device-responsive.js" data-pct-responsive-assets="1"></script>
 <script>
   // Initialize Animate On Scroll (AOS)
   AOS.init({

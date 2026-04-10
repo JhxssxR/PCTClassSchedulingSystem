@@ -1,5 +1,6 @@
     </div> <!-- End of content div -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="../assets/js/device-responsive.js" data-pct-responsive-assets="1"></script>
     <script>
         // Add active class to current page in sidebar
         document.addEventListener('DOMContentLoaded', function() {

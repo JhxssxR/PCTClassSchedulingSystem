@@ -133,6 +133,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
     <!-- Keep Bootstrap CSS available for legacy pages still using Bootstrap classes -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/device-responsive.css" data-pct-responsive-assets="1">
     <style>
         .sidebar-shell {
             width: 250px;

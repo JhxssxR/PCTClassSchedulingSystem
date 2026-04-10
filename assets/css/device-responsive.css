@@ -1,0 +1,229 @@
+/* Global device-adaptive rules for TV, desktop, laptop, tablet, and mobile. */
+:root {
+    --app-vh: 1vh;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: clamp(14px, 0.35vw + 13px, 18px);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+main,
+section,
+article,
+aside,
+header,
+footer,
+nav,
+div {
+    min-width: 0;
+}
+
+img,
+svg,
+video,
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+table {
+    width: 100%;
+}
+
+.table-responsive,
+[class*="overflow-x-auto"] {
+    -webkit-overflow-scrolling: touch;
+}
+
+button,
+.btn,
+a.btn,
+[role="button"],
+input[type="button"],
+input[type="submit"] {
+    min-height: 2.5rem;
+}
+
+/* Tailwind-style custom modals */
+[id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-4,
+[id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-3,
+[id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-2,
+[id*="modal"].fixed.inset-0 > .absolute.inset-0.p-4,
+[id*="modal"].fixed.inset-0 > .absolute.inset-0.p-3,
+[id*="modal"].fixed.inset-0 > .absolute.inset-0.p-2 {
+    overflow-y: auto;
+    align-items: flex-start;
+}
+
+[id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-4 > div,
+[id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-3 > div,
+[id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-2 > div,
+[id*="modal"].fixed.inset-0 > .absolute.inset-0.p-4 > div,
+[id*="modal"].fixed.inset-0 > .absolute.inset-0.p-3 > div,
+[id*="modal"].fixed.inset-0 > .absolute.inset-0.p-2 > div {
+    width: min(100%, 64rem);
+    max-height: calc(var(--app-vh) * 92);
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+[id*="Modal"] .overflow-auto,
+[id*="Modal"] .overflow-y-auto,
+[id*="modal"] .overflow-auto,
+[id*="modal"] .overflow-y-auto {
+    max-height: calc(var(--app-vh) * 62);
+}
+
+/* Bootstrap modals */
+.modal-dialog {
+    margin: 0.9rem auto;
+}
+
+.modal-content {
+    max-height: calc(var(--app-vh) * 96 - 1rem);
+}
+
+.modal-body {
+    overflow-y: auto;
+}
+
+@media (max-width: 991.98px) {
+    .table,
+    table.table {
+        min-width: 640px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-4,
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-3,
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-2,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-4,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-3,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-2 {
+        padding: 0.75rem;
+    }
+
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+
+    .modal-content {
+        border-radius: 1rem;
+    }
+}
+
+@media (pointer: coarse) {
+    button,
+    .btn,
+    a.btn,
+    [role="button"],
+    input[type="button"],
+    input[type="submit"] {
+        min-height: 44px;
+    }
+}
+
+@media (min-width: 1920px) and (max-width: 2559px) {
+    html {
+        font-size: 17px;
+    }
+
+    body {
+        line-height: 1.45;
+    }
+
+    [class~="px-4"] {
+        padding-left: 0.875rem;
+        padding-right: 0.875rem;
+    }
+
+    [class~="px-5"] {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    [class~="sm:px-6"] {
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+    }
+
+    [class~="py-5"] {
+        padding-top: 1.125rem;
+        padding-bottom: 1.125rem;
+    }
+
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-4 > div,
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-3 > div,
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-2 > div,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-4 > div,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-3 > div,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-2 > div {
+        width: min(100%, 68rem);
+    }
+
+    .modal-dialog {
+        margin: 1rem auto;
+    }
+
+    .modal-dialog.modal-lg {
+        max-width: min(1020px, 64vw);
+    }
+
+    .modal-dialog.modal-xl {
+        max-width: min(1280px, 74vw);
+    }
+}
+
+@media (min-width: 2560px) {
+    html {
+        font-size: 19px;
+    }
+
+    body {
+        line-height: 1.5;
+    }
+
+    [class~="px-4"] {
+        padding-left: 1.125rem;
+        padding-right: 1.125rem;
+    }
+
+    [class~="px-5"] {
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+    }
+
+    [class~="sm:px-6"] {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-4 > div,
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-3 > div,
+    [id*="Modal"].fixed.inset-0 > .absolute.inset-0.p-2 > div,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-4 > div,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-3 > div,
+    [id*="modal"].fixed.inset-0 > .absolute.inset-0.p-2 > div {
+        width: min(100%, 76rem);
+    }
+
+    .modal-dialog.modal-lg {
+        max-width: min(1180px, 52vw);
+    }
+
+    .modal-dialog.modal-xl {
+        max-width: min(1480px, 62vw);
+    }
+}

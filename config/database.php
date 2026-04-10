@@ -5,6 +5,67 @@ ini_set('display_errors', 1);
 
 require_once __DIR__ . '/app.php';
 
+/**
+ * Inject global responsive assets into HTML responses.
+ * This keeps layout and modal behavior consistent across pages
+ * without manually updating every template.
+ */
+function enable_global_responsive_assets(): void {
+    if (PHP_SAPI === 'cli' || headers_sent()) {
+        return;
+    }
+
+    static $started = false;
+    if ($started) {
+        return;
+    }
+    $started = true;
+
+    ob_start(function ($buffer) {
+        if (!is_string($buffer) || $buffer === '') {
+            return $buffer;
+        }
+
+        if (stripos($buffer, 'data-pct-responsive-assets="1"') !== false) {
+            return $buffer;
+        }
+
+        $content_type = '';
+        foreach (headers_list() as $header_line) {
+            if (stripos($header_line, 'Content-Type:') === 0) {
+                $content_type = trim(substr($header_line, strlen('Content-Type:')));
+                break;
+            }
+        }
+
+        if ($content_type !== '' && stripos($content_type, 'text/html') === false) {
+            return $buffer;
+        }
+
+        if (stripos($buffer, '<html') === false || stripos($buffer, '</head>') === false) {
+            return $buffer;
+        }
+
+        $css_url = htmlspecialchars(app_url('assets/css/device-responsive.css'), ENT_QUOTES, 'UTF-8');
+        $js_url = htmlspecialchars(app_url('assets/js/device-responsive.js'), ENT_QUOTES, 'UTF-8');
+
+        $head_injection = "\n    <link rel=\"stylesheet\" href=\"{$css_url}\" data-pct-responsive-assets=\"1\">\n";
+        $body_injection = "\n    <script defer src=\"{$js_url}\" data-pct-responsive-assets=\"1\"></script>\n";
+
+        $buffer = preg_replace('/<\/head>/i', $head_injection . '</head>', $buffer, 1);
+
+        if (stripos($buffer, '</body>') !== false) {
+            $buffer = preg_replace('/<\/body>/i', $body_injection . '</body>', $buffer, 1);
+        } else {
+            $buffer .= $body_injection;
+        }
+
+        return $buffer;
+    });
+}
+
+enable_global_responsive_assets();
+
 // Set error log path
 ini_set('error_log', __DIR__ . '/../logs/php_errors.log');
 

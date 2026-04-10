@@ -238,13 +238,6 @@ debug_to_log("Login page loaded");
                     </div>
                 <?php endif; ?>
 
-                <?php if (isset($_SESSION['register_success'])): ?>
-                    <div class="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                        <?php echo htmlspecialchars($_SESSION['register_success']); ?>
-                        <?php unset($_SESSION['register_success']); ?>
-                    </div>
-                <?php endif; ?>
-
                 <form method="POST" action="" class="mt-7 space-y-5">
                     <div>
                         <label for="login" class="mb-2 block text-sm font-semibold text-slate-700">Username or Email</label>
@@ -312,10 +305,6 @@ debug_to_log("Login page loaded");
                         <span class="text-xs uppercase tracking-[0.26em] text-slate-400">OR</span>
                         <div class="h-px flex-1 bg-slate-200"></div>
                     </div>
-
-                    <p class="text-center text-sm text-slate-500">
-                        Don't have an account? <a href="register.php" class="font-semibold text-emerald-600 hover:text-emerald-700">Register here</a>
-                    </p>
 
                     <a href="../index.php" class="block text-center text-xs text-slate-400 transition hover:text-slate-500">&larr; Back to Home</a>
                 </form>
