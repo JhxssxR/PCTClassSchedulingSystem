@@ -47,7 +47,7 @@ try {
         JOIN users u ON s.instructor_id = u.id
         WHERE e.student_id = ? AND e.status = 'enrolled'
         ORDER BY 
-            FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'),
+            FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'),
             s.start_time
     ");
     $stmt->execute([$student_id]);
@@ -117,7 +117,7 @@ try {
 
         <div class="row">
             <?php
-            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             foreach ($days as $day):
                 $day_schedules = $schedule_by_day[$day] ?? [];
             ?>

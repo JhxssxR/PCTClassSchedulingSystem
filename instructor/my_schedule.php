@@ -41,6 +41,7 @@ function ins_day_short(string $day): string {
         'Thursday' => 'Thu',
         'Friday' => 'Fri',
         'Saturday' => 'Sat',
+        'Sunday' => 'Sun',
     ];
     return $map[$day] ?? substr($day, 0, 3);
 }
@@ -122,7 +123,7 @@ $link_year_level_expr = isset($schedule_cols['year_level'])
     ? "COALESCE(s.year_level, '')"
     : "''";
 
-$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        {$link_subject_expr} AS link_subject_id,\n        s.instructor_id,\n        s.classroom_id,\n        {$link_semester_expr} AS link_semester,\n        {$link_academic_year_expr} AS link_academic_year,\n        {$link_year_level_expr} AS link_year_level,\n        s.day_of_week,\n        s.start_time,\n        TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,\n        {$start_date_expr} AS start_date,\n        {$end_date_expr} AS end_date,\n        s.max_students,\n        {$course_code_expr} AS course_code,\n        {$course_name_expr} AS course_name,\n        cl.room_number,\n        cl.room_type\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    {$subject_join_sql}\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
+$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        {$link_subject_expr} AS link_subject_id,\n        s.instructor_id,\n        s.classroom_id,\n        {$link_semester_expr} AS link_semester,\n        {$link_academic_year_expr} AS link_academic_year,\n        {$link_year_level_expr} AS link_year_level,\n        s.day_of_week,\n        s.start_time,\n        TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,\n        {$start_date_expr} AS start_date,\n        {$end_date_expr} AS end_date,\n        s.max_students,\n        {$course_code_expr} AS course_code,\n        {$course_name_expr} AS course_name,\n        cl.room_number,\n        cl.room_type\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    {$subject_join_sql}\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time\n");
 $stmt->execute(['instructor_id' => $instructor_id]);
 $all_schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -220,6 +221,7 @@ $schedule_by_day = [
     'Thursday' => [],
     'Friday' => [],
     'Saturday' => [],
+    'Sunday' => [],
 ];
 
 foreach ($all_schedules as $row) {
@@ -271,9 +273,9 @@ $week_start_ts = strtotime('monday this week');
 if ($week_start_ts === false) {
     $week_start_ts = time();
 }
-$week_end_ts = strtotime('saturday this week', $week_start_ts);
+$week_end_ts = strtotime('sunday this week', $week_start_ts);
 if ($week_end_ts === false) {
-    $week_end_ts = strtotime('+5 days', $week_start_ts);
+    $week_end_ts = strtotime('+6 days', $week_start_ts);
 }
 $week_range = date('F j', $week_start_ts) . ' - ' . date('j, Y', $week_end_ts);
 
@@ -410,7 +412,7 @@ $nav_items = [
         }
 
         .schedule-export-mode .weekly-export-grid {
-            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+            grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
         }
 
         .schedule-export-mode .export-day-heading {
@@ -721,7 +723,7 @@ $nav_items = [
                         <div class="text-sm text-slate-400">All scheduled classes</div>
                     </div>
 
-                    <div class="weekly-export-grid mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 border border-slate-200 rounded-2xl overflow-hidden">
+                    <div class="weekly-export-grid mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 border border-slate-200 rounded-2xl overflow-hidden">
                         <?php foreach ($week_days as $day): ?>
                             <?php $is_today_col = ($today === $day); ?>
                             <div class="p-3 border-r border-slate-200 last:border-r-0 <?php echo $is_today_col ? 'bg-emerald-50/50' : 'bg-white'; ?>">

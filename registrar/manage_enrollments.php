@@ -292,7 +292,7 @@ $stmt = $conn->prepare("
 $stmt->execute();
 $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+$day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
 $grouped_schedule_map = [];
 foreach ($schedules as $schedule_row) {
     $group_key = implode('|', [

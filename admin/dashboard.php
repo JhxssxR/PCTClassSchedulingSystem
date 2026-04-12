@@ -98,6 +98,26 @@ if ($has_student_id_code) {
     $student_number_expr = "COALESCE(NULLIF(s.student_id, ''), CONCAT('STU', LPAD(s.id, 6, '0')))";
 }
 
+$has_schedule_subject_id = admin_dashboard_has_column($conn, 'schedules', 'subject_id');
+$subjects_table_exists = false;
+try {
+    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+    $stmt->execute();
+    $subjects_table_exists = ((int)$stmt->fetchColumn() > 0);
+} catch (Throwable $e) {
+    $subjects_table_exists = false;
+}
+
+$recent_subject_join = ($has_schedule_subject_id && $subjects_table_exists)
+    ? 'LEFT JOIN subjects sub ON (sch.subject_id IS NOT NULL AND sch.subject_id = sub.id)'
+    : '';
+$recent_subject_code_expr = ($has_schedule_subject_id && $subjects_table_exists)
+    ? "COALESCE(NULLIF(TRIM(sub.subject_code), ''), NULLIF(TRIM(c.course_code), ''))"
+    : "NULLIF(TRIM(c.course_code), '')";
+$recent_subject_name_expr = ($has_schedule_subject_id && $subjects_table_exists)
+    ? "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))"
+    : "NULLIF(TRIM(c.course_name), '')";
+
 // Get system statistics
 try {
     $stats = [
@@ -179,7 +199,7 @@ try {
 // Recent enrollments
 $recent_activities = [];
 try {
-    $stmt = $conn->query("\n        SELECT\n            e.id,\n            " . $enrollment_date_expr . " AS activity_date,\n            CONCAT(s.first_name, ' ', s.last_name) AS student_name,\n            " . $student_number_expr . " AS student_number,\n            c.course_code,\n            c.course_name,\n            e.status\n        FROM enrollments e\n        JOIN users s ON e.student_id = s.id\n        JOIN schedules sch ON e.schedule_id = sch.id\n        JOIN courses c ON sch.course_id = c.id\n        ORDER BY activity_date DESC\n        LIMIT 5\n    ");
+    $stmt = $conn->query("\n        SELECT\n            e.id,\n            " . $enrollment_date_expr . " AS activity_date,\n            CONCAT(s.first_name, ' ', s.last_name) AS student_name,\n            " . $student_number_expr . " AS student_number,\n            " . $recent_subject_code_expr . " AS subject_code,\n            " . $recent_subject_name_expr . " AS subject_name,\n            e.status\n        FROM enrollments e\n        JOIN users s ON e.student_id = s.id\n        JOIN schedules sch ON e.schedule_id = sch.id\n        LEFT JOIN courses c ON (sch.course_id IS NOT NULL AND sch.course_id = c.id)\n        " . $recent_subject_join . "\n        ORDER BY activity_date DESC\n        LIMIT 5\n    ");
     $recent_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log('Error fetching recent activities: ' . $e->getMessage());
@@ -706,9 +726,9 @@ $mini_trend_points = [
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td class="px-3 py-3 text-slate-500"><?php echo htmlspecialchars((string)($activity['course_name'] ?? 'N/A')); ?></td>
+                                            <td class="px-3 py-3 text-slate-500"><?php echo htmlspecialchars((string)($activity['subject_name'] ?? 'N/A')); ?></td>
                                             <td class="px-3 py-3">
-                                                <span class="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500"><?php echo htmlspecialchars((string)($activity['course_code'] ?? 'N/A')); ?></span>
+                                                <span class="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500"><?php echo htmlspecialchars((string)($activity['subject_code'] ?? 'N/A')); ?></span>
                                             </td>
                                             <td class="px-3 py-3 text-slate-400"><?php echo htmlspecialchars($date_label); ?></td>
                                             <td class="px-3 py-3">

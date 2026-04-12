@@ -75,7 +75,7 @@ try {
         course_id INT NOT NULL,
         instructor_id INT NOT NULL,
         classroom_id INT NOT NULL,
-        day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday') NOT NULL,
+        day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday') NOT NULL,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
         semester VARCHAR(20) NOT NULL,

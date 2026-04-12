@@ -60,7 +60,7 @@ function student_subject_badge(string $subjectCode): string {
 
 $student = [];
 $schedule = [];
-$week_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+$week_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 $schedule_by_day = [];
 foreach ($week_days as $dayName) {
     $schedule_by_day[$dayName] = [];
@@ -146,7 +146,7 @@ try {
         WHERE e.student_id = :student_id
           AND e.status IN ('approved', 'enrolled')
           AND s.status = 'active'
-        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time
+        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time
     ";
 
     $stmt = $conn->prepare($sql);

@@ -189,6 +189,9 @@ try {
     // Enrollment schema checks (timestamp column/expression + status enum values)
     $enrollment_ts_expr = null;
     $status_enum_values = [];
+    $enrollment_subject_join_sql = '';
+    $enrollment_subject_code_expr = "NULLIF(TRIM(c.course_code), '')";
+    $enrollment_subject_name_expr = "NULLIF(TRIM(c.course_name), '')";
 
     $cols_stmt = $conn->prepare('DESCRIBE enrollments');
     $cols_stmt->execute();
@@ -216,6 +219,32 @@ try {
         $status_enum_values = __pct_enum_values_from_type($col_set['status']['Type']);
     }
 
+    // Prefer subject details when schedules.subject_id and subjects table exist.
+    try {
+        $schedules_has_subject_id = false;
+        $sched_cols_stmt = $conn->prepare('DESCRIBE schedules');
+        $sched_cols_stmt->execute();
+        foreach ($sched_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if (($r['Field'] ?? '') === 'subject_id') {
+                $schedules_has_subject_id = true;
+                break;
+            }
+        }
+
+        $subjects_table_exists = false;
+        $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+        $subjects_exists_stmt->execute();
+        $subjects_table_exists = ((int)$subjects_exists_stmt->fetchColumn() > 0);
+
+        if ($schedules_has_subject_id && $subjects_table_exists) {
+            $enrollment_subject_join_sql = 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)';
+            $enrollment_subject_code_expr = "COALESCE(NULLIF(TRIM(sub.subject_code), ''), NULLIF(TRIM(c.course_code), ''))";
+            $enrollment_subject_name_expr = "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))";
+        }
+    } catch (Throwable $e) {
+        // Keep course fallback when subject metadata is unavailable.
+    }
+
     if ($enrollment_ts_expr !== null) {
         // Any new enrollments since cutoff (any status)
         $count_sql = "
@@ -238,12 +267,13 @@ try {
                 e.status,
                 u.first_name AS student_first,
                 u.last_name AS student_last,
-                c.course_code,
-                c.course_name
+                {$enrollment_subject_code_expr} AS subject_code,
+                {$enrollment_subject_name_expr} AS subject_name
             FROM enrollments e
             JOIN users u ON u.id = e.student_id
             JOIN schedules s ON s.id = e.schedule_id
             JOIN courses c ON c.id = s.course_id
+            {$enrollment_subject_join_sql}
             WHERE $list_ts_expr > ?
               AND $list_ts_expr <= ?
             ORDER BY ts DESC
@@ -255,14 +285,14 @@ try {
 
         foreach ($latest_enrollments as $r) {
             $student = trim(($r['student_first'] ?? '') . ' ' . ($r['student_last'] ?? ''));
-            $course = trim(($r['course_code'] ?? '') . ' — ' . ($r['course_name'] ?? ''));
+            $subject = trim(($r['subject_code'] ?? '') . ' — ' . ($r['subject_name'] ?? ''));
             $status = trim((string)($r['status'] ?? ''));
             $status_label = $status !== '' ? ('Status: ' . $status) : 'Enrollment update';
             $notif_items[] = [
                 'ts' => (string)($r['ts'] ?? ''),
                 'icon' => 'bi-person-plus',
                 'title' => ($student !== '' ? $student : 'Student') . ' enrollment',
-                'subtitle' => ($course !== '' ? $course : 'Enrollment') . ' • ' . $status_label,
+                'subtitle' => ($subject !== '' ? $subject : 'Enrollment') . ' • ' . $status_label,
                 'href' => 'enrollments.php',
             ];
         }

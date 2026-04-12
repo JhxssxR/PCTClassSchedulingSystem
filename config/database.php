@@ -175,7 +175,7 @@ $tables = [
         course_id INT NOT NULL,
         instructor_id INT NOT NULL,
         classroom_id INT NOT NULL,
-        day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday') NOT NULL,
+        day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday') NOT NULL,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
         max_students INT NOT NULL DEFAULT 30,
@@ -281,6 +281,13 @@ try {
 } catch (PDOException $e) {
     // Ignore if permissions/schema prevent alteration.
     error_log("Schema repair warning (classrooms.room_type): " . $e->getMessage());
+}
+
+try {
+    $conn->exec("ALTER TABLE schedules MODIFY COLUMN day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday') NOT NULL");
+} catch (PDOException $e) {
+    // Ignore if permissions/schema prevent alteration.
+    error_log("Schema repair warning (schedules.day_of_week): " . $e->getMessage());
 }
 
 // Repair any users with missing/blank roles.

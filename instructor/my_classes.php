@@ -21,6 +21,7 @@ function ins_cls_day_abbrev(string $day): string {
         'Thursday' => 'Th',
         'Friday' => 'F',
         'Saturday' => 'Sat',
+        'Sunday' => 'Sun',
     ];
     return $map[$day] ?? substr($day, 0, 1);
 }
@@ -99,11 +100,11 @@ $link_year_level_expr = isset($schedule_cols['year_level'])
     ? "COALESCE(s.year_level, '')"
     : "''";
 
-$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        {$link_subject_expr} AS link_subject_id,\n        {$link_semester_expr} AS link_semester,\n        {$link_academic_year_expr} AS link_academic_year,\n        {$link_year_level_expr} AS link_year_level,\n        s.classroom_id,\n        s.day_of_week,\n        s.start_time,\n        {$end_expr} AS end_time,\n        s.max_students,\n        {$course_code_expr} AS course_code,\n        {$course_name_expr} AS course_name,\n        cl.room_number,\n        COUNT(DISTINCT CASE WHEN LOWER(COALESCE(e.status, '')) IN ('approved', 'enrolled', 'active') THEN e.student_id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    {$subject_join_sql}\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY course_code, FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time\n");
+$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        {$link_subject_expr} AS link_subject_id,\n        {$link_semester_expr} AS link_semester,\n        {$link_academic_year_expr} AS link_academic_year,\n        {$link_year_level_expr} AS link_year_level,\n        s.classroom_id,\n        s.day_of_week,\n        s.start_time,\n        {$end_expr} AS end_time,\n        s.max_students,\n        {$course_code_expr} AS course_code,\n        {$course_name_expr} AS course_name,\n        cl.room_number,\n        COUNT(DISTINCT CASE WHEN LOWER(COALESCE(e.status, '')) IN ('approved', 'enrolled', 'active') THEN e.student_id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    {$subject_join_sql}\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY course_code, FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time\n");
 $stmt->execute(['instructor_id' => $instructor_id]);
 $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$day_order = ['Monday' => 1, 'Tuesday' => 2, 'Wednesday' => 3, 'Thursday' => 4, 'Friday' => 5, 'Saturday' => 6];
+$day_order = ['Monday' => 1, 'Tuesday' => 2, 'Wednesday' => 3, 'Thursday' => 4, 'Friday' => 5, 'Saturday' => 6, 'Sunday' => 7];
 $classes = [];
 $schedule_ids = [];
 $schedule_group_key_map = [];

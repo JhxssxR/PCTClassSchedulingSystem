@@ -369,14 +369,14 @@ try {
     error_log('Reports page error (registrar): ' . $e->getMessage());
 }
 
-$day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+$day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 $day_classes = array_fill(0, count($day_labels), 0);
 $day_students = array_fill(0, count($day_labels), 0);
 $day_index = array_flip($day_labels);
 
 foreach ($daily_stats as $row) {
     $short = reg_reports_day_short((string)($row['day_of_week'] ?? ''));
-    if ($short === null || !isset($day_index[$short]) || $short === 'Sun') {
+    if ($short === null || !isset($day_index[$short])) {
         continue;
     }
     $idx = $day_index[$short];

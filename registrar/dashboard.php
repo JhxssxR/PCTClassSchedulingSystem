@@ -127,6 +127,26 @@ if (registrar_has_column($conn, 'enrollments', 'enrolled_at')) {
     $enrollments_date_column = 'created_at';
 }
 
+$has_schedule_subject_id = registrar_has_column($conn, 'schedules', 'subject_id');
+$subjects_table_exists = false;
+try {
+    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+    $stmt->execute();
+    $subjects_table_exists = ((int)$stmt->fetchColumn() > 0);
+} catch (Throwable $e) {
+    $subjects_table_exists = false;
+}
+
+$recent_subject_join = ($has_schedule_subject_id && $subjects_table_exists)
+    ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)'
+    : '';
+$recent_subject_code_expr = ($has_schedule_subject_id && $subjects_table_exists)
+    ? "COALESCE(NULLIF(TRIM(sub.subject_code), ''), NULLIF(TRIM(c.course_code), ''))"
+    : "NULLIF(TRIM(c.course_code), '')";
+$recent_subject_name_expr = ($has_schedule_subject_id && $subjects_table_exists)
+    ? "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))"
+    : "NULLIF(TRIM(c.course_name), '')";
+
 function format_time_ampm($time) {
     if (!$time) {
         return '';
@@ -184,16 +204,18 @@ try {
     $stats['total_enrollments'] = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
 
     // Get recent enrollments with proper JOIN and error handling
-    $stmt = $conn->prepare("
+    $stmt = $conn->prepare(" 
         SELECT e.*, 
                u.first_name as student_first_name, 
                u.last_name as student_last_name,
-               c.course_code, c.course_name,
+               {$recent_subject_code_expr} AS subject_code,
+               {$recent_subject_name_expr} AS subject_name,
                DATE_FORMAT(e.$enrollments_date_column, '%Y-%m-%d') as formatted_date
         FROM enrollments e
         JOIN users u ON e.student_id = u.id
         JOIN schedules s ON e.schedule_id = s.id
-        JOIN courses c ON s.course_id = c.id
+        LEFT JOIN courses c ON (s.course_id IS NOT NULL AND s.course_id = c.id)
+        {$recent_subject_join}
         ORDER BY e.$enrollments_date_column DESC
         LIMIT 5
     ");
@@ -205,7 +227,7 @@ try {
         SELECT day_of_week, COUNT(*) as count
         FROM schedules
         GROUP BY day_of_week
-        ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
+        ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
     ");
     $stmt->execute();
     $classes_by_day = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -292,6 +314,7 @@ $day_map = [
     'Thursday' => 0,
     'Friday' => 0,
     'Saturday' => 0,
+    'Sunday' => 0,
 ];
 foreach ($classes_by_day as $row) {
     $day = $row['day_of_week'] ?? '';
@@ -421,9 +444,9 @@ $trend_small_paths = [
             </div>
         </div>
 
-        <div id="classesByDayChart" class="mt-6 grid grid-cols-6 gap-5 items-end h-44">
+        <div id="classesByDayChart" class="mt-6 grid grid-cols-7 gap-5 items-end h-44">
             <?php
-            $short = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            $short = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             $days = array_keys($day_map);
             for ($i = 0; $i < count($days); $i++):
                 $count = (int) $day_map[$days[$i]];
@@ -529,7 +552,7 @@ $trend_small_paths = [
             <?php if (!empty($recent_enrollments)): ?>
                 <?php foreach ($recent_enrollments as $enrollment):
                     $student_name = trim(($enrollment['student_first_name'] ?? '') . ' ' . ($enrollment['student_last_name'] ?? ''));
-                    $course_label = trim(($enrollment['course_name'] ?? '') !== '' ? $enrollment['course_name'] : ($enrollment['course_code'] ?? ''));
+                    $subject_label = trim(($enrollment['subject_name'] ?? '') !== '' ? $enrollment['subject_name'] : ($enrollment['subject_code'] ?? ''));
                     $date_str = isset($enrollment['formatted_date']) ? date('M d', strtotime($enrollment['formatted_date'])) : '';
                     $status = strtolower((string) ($enrollment['status'] ?? ''));
                     $status_class = 'bg-slate-100 text-slate-700';
@@ -553,7 +576,7 @@ $trend_small_paths = [
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-medium text-slate-800 truncate"><?php echo htmlspecialchars($student_name !== '' ? $student_name : 'Student'); ?></div>
-                            <div class="text-xs text-slate-500 truncate"><?php echo htmlspecialchars($course_label); ?></div>
+                            <div class="text-xs text-slate-500 truncate"><?php echo htmlspecialchars($subject_label); ?></div>
                         </div>
                         <div class="text-xs text-slate-500 w-16 text-right"><?php echo htmlspecialchars($date_str); ?></div>
                         <div class="w-24 text-right">

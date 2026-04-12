@@ -89,6 +89,7 @@ $classes_day_map = [
     'Thursday' => 0,
     'Friday' => 0,
     'Saturday' => 0,
+    'Sunday' => 0,
 ];
 $attendance_labels = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6'];
 $attendance_values = [72, 75, 77, 76, 78, 82];
@@ -385,7 +386,7 @@ if ($user_initials === '') {
 
 $greeting_label = instructor_greeting_label();
 
-$classes_day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+$classes_day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 $classes_day_values = [
     (int) $classes_day_map['Monday'],
     (int) $classes_day_map['Tuesday'],
@@ -393,6 +394,7 @@ $classes_day_values = [
     (int) $classes_day_map['Thursday'],
     (int) $classes_day_map['Friday'],
     (int) $classes_day_map['Saturday'],
+    (int) $classes_day_map['Sunday'],
 ];
 
 $students_week_delta = 0;

@@ -210,7 +210,7 @@ foreach ($schedules as $row) {
     }
 }
 
-$days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+$days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 $by_day = [];
 foreach ($days as $d) {
     $by_day[$d] = [];
@@ -333,7 +333,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 
 <!-- Week View -->
 <section id="weekView" class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         <?php foreach ($days as $idx => $day): ?>
             <?php
                 $header_classes = ['bg-blue-600','bg-violet-600','bg-emerald-600','bg-orange-500','bg-rose-600','bg-slate-700'];

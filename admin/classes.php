@@ -86,7 +86,7 @@ $stmt = $conn->prepare("
 $stmt->execute();
 $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+$day_order_map = array_flip(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
 
 $core_group_stats = [];
 foreach ($classes as $class_row) {
@@ -685,8 +685,8 @@ function status_badge_classes($status) {
     <!-- Add Class Modal -->
     <div id="addClassModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/50" data-modal-close="addClassModal"></div>
-        <div class="relative mx-auto my-10 w-[92%] max-w-3xl">
-            <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
+        <div class="relative mx-auto my-6 w-[92%] max-w-2xl">
+            <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden max-h-[86vh] flex flex-col">
                 <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                     <div class="text-base font-semibold text-slate-900">Add Class</div>
                     <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" data-modal-close="addClassModal" aria-label="Close">
@@ -694,7 +694,7 @@ function status_badge_classes($status) {
                     </button>
                 </div>
 
-                <form id="addClassForm" action="process_class.php" method="POST" class="p-5">
+                <form id="addClassForm" action="process_class.php" method="POST" class="p-5 overflow-y-auto max-h-[calc(86vh-64px)]">
                     <input type="hidden" name="action" value="add">
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -764,7 +764,7 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-2">Days</label>
                             <div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] as $d): ?>
+                                <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as $d): ?>
                                     <label class="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:border-emerald-300">
                                         <input type="checkbox" name="day_of_week[]" value="<?php echo htmlspecialchars($d); ?>" class="add-day-checkbox h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                                         <span><?php echo htmlspecialchars($d); ?></span>
@@ -831,8 +831,8 @@ function status_badge_classes($status) {
     <!-- Edit Class Modal -->
     <div id="editClassModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/50" data-modal-close="editClassModal"></div>
-        <div class="relative mx-auto my-10 w-[92%] max-w-3xl">
-            <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
+        <div class="relative mx-auto my-6 w-[92%] max-w-2xl">
+            <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden max-h-[86vh] flex flex-col">
                 <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                     <div class="text-base font-semibold text-slate-900">Edit Class</div>
                     <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" data-modal-close="editClassModal" aria-label="Close">
@@ -840,7 +840,7 @@ function status_badge_classes($status) {
                     </button>
                 </div>
 
-                <form id="editClassForm" action="process_class.php" method="POST" class="p-5">
+                <form id="editClassForm" action="process_class.php" method="POST" class="p-5 overflow-y-auto max-h-[calc(86vh-64px)]">
                     <input type="hidden" name="action" value="edit">
                     <input type="hidden" name="schedule_id" id="edit_schedule_id" value="">
 
@@ -902,7 +902,7 @@ function status_badge_classes($status) {
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-2">Days</label>
                             <div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] as $d): ?>
+                                <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as $d): ?>
                                     <label class="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:border-emerald-300">
                                         <input type="checkbox" name="day_of_week[]" value="<?php echo htmlspecialchars($d); ?>" class="edit-day-checkbox h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                                         <span><?php echo htmlspecialchars($d); ?></span>

@@ -52,7 +52,9 @@
         syncVisibleCustomModalHeights();
     }, { passive: true });
 
-    document.addEventListener('DOMContentLoaded', syncVisibleCustomModalHeights);
+    document.addEventListener('DOMContentLoaded', function () {
+        syncVisibleCustomModalHeights();
+    });
 
     var observer = new MutationObserver(function () {
         syncVisibleCustomModalHeights();

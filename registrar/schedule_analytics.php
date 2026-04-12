@@ -68,7 +68,7 @@ try {
         FROM schedules
         WHERE status = 'active'
         GROUP BY day_of_week
-        ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
+        ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
     ");
     $stats['day_distribution'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
     

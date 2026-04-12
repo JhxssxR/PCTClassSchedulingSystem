@@ -125,7 +125,7 @@ $time_slots = [
 ];
 
 // Define days
-$days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+$days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 ?>
 
 <!DOCTYPE html>

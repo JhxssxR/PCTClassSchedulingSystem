@@ -17,6 +17,7 @@ function student_day_short(string $day): string {
         'Thursday' => 'Thu',
         'Friday' => 'Fri',
         'Saturday' => 'Sat',
+        'Sunday' => 'Sun',
     ];
     return $map[$day] ?? $day;
 }
@@ -54,7 +55,7 @@ function student_expand_schedule_days(string $rawDayValue): array {
         return [];
     }
 
-    $order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    $order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     $order_map = array_flip($order);
     $expanded = [];
 
@@ -176,7 +177,7 @@ function student_subject_badge(string $subjectCode): string {
 
 $student = [];
 $schedule = [];
-$week_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+$week_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 $schedule_by_day = [];
 foreach ($week_days as $dayName) {
     $schedule_by_day[$dayName] = [];
@@ -280,7 +281,7 @@ try {
         {$subject_join_sql}
         LEFT JOIN classrooms cr ON s.classroom_id = cr.id
         LEFT JOIN users i ON s.instructor_id = i.id
-        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), s.start_time
+        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time
     ";
 
     $stmt = $conn->prepare($sql);
@@ -459,7 +460,7 @@ $palette = [
         }
 
         .schedule-export-mode .weekly-export-grid {
-            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+            grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
         }
 
         .schedule-export-mode .export-day-heading {
@@ -641,7 +642,7 @@ $palette = [
                         <button id="dayPrevBtn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100" aria-label="Previous day">
                             <i class="bi bi-chevron-left"></i>
                         </button>
-                        <div class="flex-1 grid grid-cols-6 gap-1">
+                        <div class="flex-1 grid grid-cols-7 gap-1">
                             <?php foreach ($week_days as $dayIndex => $dayName): ?>
                                 <button
                                     type="button"
@@ -720,7 +721,7 @@ $palette = [
                         <div class="text-sm text-slate-400">All scheduled classes</div>
                     </div>
 
-                    <div class="weekly-export-grid mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 border border-slate-200 rounded-2xl overflow-hidden">
+                    <div class="weekly-export-grid mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 border border-slate-200 rounded-2xl overflow-hidden">
                         <?php foreach ($week_days as $dayName): ?>
                             <?php $is_today_col = ($today === $dayName); ?>
                             <div class="p-3 border-r border-slate-200 last:border-r-0 <?php echo $is_today_col ? 'bg-emerald-50/50' : 'bg-white'; ?>">
@@ -1192,7 +1193,7 @@ $palette = [
                 });
             });
 
-            const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             const dayPills = Array.from(document.querySelectorAll('.day-pill'));
             const dayPanels = Array.from(document.querySelectorAll('.day-panel'));
             const prevBtn = document.getElementById('dayPrevBtn');
