@@ -77,6 +77,27 @@ try {
         $s_cols = [];
     }
 
+    $subjects_enabled = false;
+    if (isset($s_cols['subject_id'])) {
+        try {
+            $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+            $subjects_exists_stmt->execute();
+            $subjects_enabled = ((int) $subjects_exists_stmt->fetchColumn() > 0);
+        } catch (Throwable $e) {
+            $subjects_enabled = false;
+        }
+    }
+
+    $subject_join_sql = $subjects_enabled
+        ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
+        : '';
+    $notif_course_code_expr = $subjects_enabled
+        ? "COALESCE(subj.subject_code, c.course_code, 'N/A')"
+        : "COALESCE(c.course_code, 'N/A')";
+    $notif_course_name_expr = $subjects_enabled
+        ? "COALESCE(subj.subject_name, c.course_name, 'Untitled Subject')"
+        : "COALESCE(c.course_name, 'Untitled Subject')";
+
     // New classes assigned to this instructor.
     $schedule_ts_col = '';
     if (isset($s_cols['updated_at'])) {
@@ -100,7 +121,7 @@ try {
                 ? 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60)) AS end_time'
                 : "ADDTIME(s.start_time, '02:00:00') AS end_time");
 
-        $stmt = $conn->prepare("\n            SELECT\n                s.id,\n                s.{$schedule_ts_col} AS notif_ts,\n                s.day_of_week,\n                s.start_time,\n                {$select_end},\n                c.course_code,\n                c.course_name,\n                r.room_number\n            FROM schedules s\n            JOIN courses c ON c.id = s.course_id\n            JOIN classrooms r ON r.id = s.classroom_id\n            WHERE s.instructor_id = :iid\n              AND s.{$schedule_ts_col} > :cutoff_at\n              AND s.{$schedule_ts_col} <= :now_ts\n            ORDER BY s.{$schedule_ts_col} DESC\n            LIMIT 5\n        ");
+        $stmt = $conn->prepare("\n            SELECT\n                s.id,\n                s.{$schedule_ts_col} AS notif_ts,\n                s.day_of_week,\n                s.start_time,\n                {$select_end},\n                {$notif_course_code_expr} AS course_code,\n                {$notif_course_name_expr} AS course_name,\n                r.room_number\n            FROM schedules s\n            JOIN courses c ON c.id = s.course_id\n            {$subject_join_sql}\n            JOIN classrooms r ON r.id = s.classroom_id\n            WHERE s.instructor_id = :iid\n              AND s.{$schedule_ts_col} > :cutoff_at\n              AND s.{$schedule_ts_col} <= :now_ts\n            ORDER BY s.{$schedule_ts_col} DESC\n            LIMIT 5\n        ");
         $stmt->execute([
             'iid' => $instructor_id,
             'cutoff_at' => $notif_cutoff_at,
@@ -142,7 +163,7 @@ try {
                 ? 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))'
                 : "ADDTIME(s.start_time, '02:00:00')");
 
-        $stmt = $conn->prepare("\n            SELECT\n                s.id,\n                s.day_of_week,\n                s.start_time,\n                {$upcoming_end} AS end_time,\n                c.course_code,\n                c.course_name,\n                r.room_number,\n                d.class_date\n            FROM (\n                SELECT CURDATE() AS class_date\n                UNION ALL SELECT CURDATE() + INTERVAL 1 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 2 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 3 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 4 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 5 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 6 DAY\n            ) d\n            JOIN schedules s ON s.day_of_week = DAYNAME(d.class_date)\n            JOIN courses c ON c.id = s.course_id\n            JOIN classrooms r ON r.id = s.classroom_id\n            WHERE s.instructor_id = :iid\n              AND s.status = 'active'\n              AND (\n                    d.class_date > CURDATE()\n                 OR (d.class_date = CURDATE() AND s.start_time >= CURTIME())\n              )\n            ORDER BY d.class_date ASC, s.start_time ASC\n            LIMIT 5\n        ");
+        $stmt = $conn->prepare("\n            SELECT\n                s.id,\n                s.day_of_week,\n                s.start_time,\n                {$upcoming_end} AS end_time,\n                {$notif_course_code_expr} AS course_code,\n                {$notif_course_name_expr} AS course_name,\n                r.room_number,\n                d.class_date\n            FROM (\n                SELECT CURDATE() AS class_date\n                UNION ALL SELECT CURDATE() + INTERVAL 1 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 2 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 3 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 4 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 5 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 6 DAY\n            ) d\n            JOIN schedules s ON s.day_of_week = DAYNAME(d.class_date)\n            JOIN courses c ON c.id = s.course_id\n            {$subject_join_sql}\n            JOIN classrooms r ON r.id = s.classroom_id\n            WHERE s.instructor_id = :iid\n              AND s.status = 'active'\n              AND (\n                    d.class_date > CURDATE()\n                 OR (d.class_date = CURDATE() AND s.start_time >= CURTIME())\n              )\n            ORDER BY d.class_date ASC, s.start_time ASC\n            LIMIT 5\n        ");
         $stmt->execute(['iid' => $instructor_id]);
 
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
