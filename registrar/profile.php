@@ -73,15 +73,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$page_title = 'Settings';
-$breadcrumbs = 'Registrar / Settings';
-$active_page = 'settings';
+$page_title = 'Manage Account';
+$breadcrumbs = 'Registrar / Manage Account';
+$active_page = 'manage_account';
 require_once __DIR__ . '/includes/layout_top.php';
 ?>
 
 <div class="flex items-start justify-between gap-4">
     <div>
-        <h1 class="text-2xl font-semibold text-slate-900">Settings</h1>
+        <h1 class="text-2xl font-semibold text-slate-900">Manage Account</h1>
         <p class="text-sm text-slate-500">Manage your profile and password</p>
     </div>
 

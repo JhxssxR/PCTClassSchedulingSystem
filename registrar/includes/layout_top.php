@@ -86,11 +86,20 @@ $__registrar_nav = [
         'icon' => 'bi-file-earmark-text',
     ],
     [
+        'key' => 'manage_account',
+        'label' => 'Manage Account',
+        'href_registrar' => 'profile.php',
+        'href_admin' => '../admin/settings.php',
+        'icon' => 'bi-person-gear',
+        'hide_for_super_admin' => true,
+    ],
+    [
         'key' => 'settings',
         'label' => 'Settings',
         'href_registrar' => 'profile.php',
         'href_admin' => '../admin/settings.php',
         'icon' => 'bi-gear',
+        'super_admin_only' => true,
     ],
 ];
 
@@ -172,6 +181,12 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                 <div class="sidebar-nav-title text-[11px] tracking-widest text-emerald-100/60 px-3 mb-2">NAVIGATION</div>
                 <nav class="space-y-1">
                     <?php foreach ($__registrar_nav as $item):
+                        if ($__is_super_admin && !empty($item['hide_for_super_admin'])) {
+                            continue;
+                        }
+                        if (!$__is_super_admin && !empty($item['super_admin_only'])) {
+                            continue;
+                        }
                         $is_active = ($active_page === $item['key']);
                         // Use Registrar pages for registrar/admin roles.
                         // Admin (super_admin) can jump to admin pages.

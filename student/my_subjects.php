@@ -286,6 +286,7 @@ $palette = [
                         <span class="sidebar-nav-content inline-flex items-center gap-2"><i class="bi bi-book"></i><span class="sidebar-label">My Subjects</span></span>
                         <span class="sidebar-active-dot h-1.5 w-1.5 rounded-full bg-emerald-200"></span>
                     </a>
+                    <a href="manage_account.php" class="sidebar-nav-link flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-emerald-100/90 hover:bg-emerald-800/50 hover:text-white"><span class="sidebar-nav-content inline-flex items-center gap-2"><i class="bi bi-person-gear"></i><span class="sidebar-label">Manage Account</span></span></a>
                 </nav>
             </div>
 

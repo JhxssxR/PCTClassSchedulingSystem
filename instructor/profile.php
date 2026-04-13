@@ -89,6 +89,7 @@ $nav_items = [
     ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'bi-grid'],
     ['key' => 'schedule', 'label' => 'My Schedule', 'href' => 'my_schedule.php', 'icon' => 'bi-calendar3'],
     ['key' => 'classes', 'label' => 'My Classes', 'href' => 'my_classes.php', 'icon' => 'bi-book'],
+    ['key' => 'manage_account', 'label' => 'Manage Account', 'href' => 'profile.php', 'icon' => 'bi-person-gear'],
 ];
 
 ?>
@@ -188,7 +189,7 @@ $nav_items = [
                 <div class="sidebar-nav-title text-[11px] tracking-[0.18em] text-emerald-100/55 px-3 mb-3">NAVIGATION</div>
                 <nav class="space-y-1.5">
                     <?php foreach ($nav_items as $item): ?>
-                        <?php $is_active = $item['key'] === 'profile'; ?>
+                        <?php $is_active = $item['key'] === 'manage_account'; ?>
                         <a href="<?php echo htmlspecialchars($item['href']); ?>" class="sidebar-nav-link group flex items-center justify-between rounded-xl px-3 py-3 <?php echo $is_active ? 'bg-emerald-700/35 text-emerald-50 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.18)]' : 'text-emerald-100/80 hover:text-emerald-50 hover:bg-emerald-800/35'; ?>">
                             <span class="sidebar-nav-content flex items-center gap-3">
                                 <i class="bi <?php echo htmlspecialchars($item['icon']); ?> text-sm"></i>

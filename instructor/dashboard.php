@@ -426,6 +426,7 @@ $nav_items = [
     ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'bi-grid'],
     ['key' => 'schedule', 'label' => 'My Schedule', 'href' => 'my_schedule.php', 'icon' => 'bi-calendar3'],
     ['key' => 'classes', 'label' => 'My Classes', 'href' => 'my_classes.php', 'icon' => 'bi-book'],
+    ['key' => 'manage_account', 'label' => 'Manage Account', 'href' => 'profile.php', 'icon' => 'bi-person-gear'],
 ];
 
 ?>
