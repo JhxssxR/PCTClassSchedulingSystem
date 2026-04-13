@@ -1,0 +1,23 @@
+/* Universal UI baseline.
+   This file is intentionally non-invasive so existing page designs remain unchanged.
+   It centralizes shared tokens and sidebar sizing defaults for consistency. */
+:root {
+    --pct-font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --pct-sidebar-expanded-width: 250px;
+    --pct-sidebar-collapsed-width: 86px;
+}
+
+/* Keep current visual style while standardizing fallbacks across pages. */
+body {
+    font-family: var(--pct-font-family);
+}
+
+.sidebar-shell,
+.sidebar {
+    width: var(--pct-sidebar-expanded-width);
+}
+
+/* Respect compact sidebar state used by role dashboards. */
+.sidebar-compact {
+    width: var(--pct-sidebar-collapsed-width);
+}

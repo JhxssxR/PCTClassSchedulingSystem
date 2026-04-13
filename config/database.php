@@ -26,7 +26,10 @@ function enable_global_responsive_assets(): void {
             return $buffer;
         }
 
-        if (stripos($buffer, 'data-pct-responsive-assets="1"') !== false) {
+        $has_responsive_assets = (stripos($buffer, 'data-pct-responsive-assets="1"') !== false);
+        $has_universal_ui = (stripos($buffer, 'data-pct-universal-ui="1"') !== false);
+        $has_offline_ready = (stripos($buffer, 'data-pct-offline-ready="1"') !== false);
+        if ($has_responsive_assets && $has_universal_ui && $has_offline_ready) {
             return $buffer;
         }
 
@@ -46,18 +49,41 @@ function enable_global_responsive_assets(): void {
             return $buffer;
         }
 
-        $css_url = htmlspecialchars(app_url('assets/css/device-responsive.css'), ENT_QUOTES, 'UTF-8');
-        $js_url = htmlspecialchars(app_url('assets/js/device-responsive.js'), ENT_QUOTES, 'UTF-8');
+        $responsive_css_url = htmlspecialchars(app_url('assets/css/device-responsive.css'), ENT_QUOTES, 'UTF-8');
+        $responsive_js_url = htmlspecialchars(app_url('assets/js/device-responsive.js'), ENT_QUOTES, 'UTF-8');
+        $universal_css_url = htmlspecialchars(app_url('assets/css/universal-ui.css'), ENT_QUOTES, 'UTF-8');
+        $offline_register_url = htmlspecialchars(app_url('assets/js/offline-register.js'), ENT_QUOTES, 'UTF-8');
+        $sw_url = htmlspecialchars(app_url('sw.js'), ENT_QUOTES, 'UTF-8');
+        $sw_scope_url = htmlspecialchars(app_url(''), ENT_QUOTES, 'UTF-8');
 
-        $head_injection = "\n    <link rel=\"stylesheet\" href=\"{$css_url}\" data-pct-responsive-assets=\"1\">\n";
-        $body_injection = "\n    <script defer src=\"{$js_url}\" data-pct-responsive-assets=\"1\"></script>\n";
+        $head_links = [];
+        if (!$has_responsive_assets) {
+            $head_links[] = "<link rel=\"stylesheet\" href=\"{$responsive_css_url}\" data-pct-responsive-assets=\"1\">";
+        }
+        if (!$has_universal_ui) {
+            $head_links[] = "<link rel=\"stylesheet\" href=\"{$universal_css_url}\" data-pct-universal-ui=\"1\">";
+        }
 
-        $buffer = preg_replace('/<\/head>/i', $head_injection . '</head>', $buffer, 1);
+        if (!empty($head_links)) {
+            $head_injection = "\n    " . implode("\n    ", $head_links) . "\n";
+            $buffer = preg_replace('/<\/head>/i', $head_injection . '</head>', $buffer, 1);
+        }
 
-        if (stripos($buffer, '</body>') !== false) {
-            $buffer = preg_replace('/<\/body>/i', $body_injection . '</body>', $buffer, 1);
-        } else {
-            $buffer .= $body_injection;
+        $body_scripts = [];
+        if (!$has_responsive_assets) {
+            $body_scripts[] = "<script defer src=\"{$responsive_js_url}\" data-pct-responsive-assets=\"1\"></script>";
+        }
+        if (!$has_offline_ready) {
+            $body_scripts[] = "<script defer src=\"{$offline_register_url}\" data-pct-offline-ready=\"1\" data-sw-url=\"{$sw_url}\" data-sw-scope=\"{$sw_scope_url}\"></script>";
+        }
+
+        if (!empty($body_scripts)) {
+            $body_injection = "\n    " . implode("\n    ", $body_scripts) . "\n";
+            if (stripos($buffer, '</body>') !== false) {
+                $buffer = preg_replace('/<\/body>/i', $body_injection . '</body>', $buffer, 1);
+            } else {
+                $buffer .= $body_injection;
+            }
         }
 
         return $buffer;
