@@ -11,6 +11,27 @@ $page_title = 'Subjects';
 $breadcrumbs = 'Registrar / Subjects';
 $active_page = 'subjects';
 
+function subject_filter_key(string $value): string {
+    $normalized = strtolower(trim($value));
+    $normalized = preg_replace('/[^a-z0-9]+/', '-', $normalized) ?? '';
+    return trim($normalized, '-');
+}
+
+function subject_year_label(int $year): string {
+    if ($year === 1) {
+        return '1st Year';
+    }
+    if ($year === 2) {
+        return '2nd Year';
+    }
+    if ($year === 3) {
+        return '3rd Year';
+    }
+    return $year . 'th Year';
+}
+
+$default_department = 'Information Technology Education';
+
 $subject_sections = [
     [
         'id' => 'y1s1',
@@ -126,19 +147,36 @@ $subject_sections = [
     ],
 ];
 
+foreach ($subject_sections as &$section_seed_ref) {
+    if (!isset($section_seed_ref['department']) || trim((string)$section_seed_ref['department']) === '') {
+        $section_seed_ref['department'] = $default_department;
+    }
+}
+unset($section_seed_ref);
+
 $default_subject_map = [];
+$default_subject_key_map = [];
 foreach ($subject_sections as $section_seed) {
     foreach (($section_seed['items'] ?? []) as $item_seed) {
         $seed_code = trim((string)($item_seed['code'] ?? ''));
         if ($seed_code === '') {
             continue;
         }
-        $default_subject_map[strtoupper($seed_code)] = [
+        $seed_department = trim((string)($section_seed['department'] ?? $default_department));
+        if ($seed_department === '') {
+            $seed_department = $default_department;
+        }
+        $seed_code_key = strtoupper($seed_code);
+        $default_subject_map[$seed_code_key] = [
             'code' => $seed_code,
             'name' => trim((string)($item_seed['name'] ?? '')),
             'year_level' => (int)($section_seed['year'] ?? 0),
+            'semester' => trim((string)($section_seed['semester'] ?? '1st Semester')),
+            'subject_type' => trim((string)($item_seed['type'] ?? 'Core')),
+            'department' => $seed_department,
             'units' => max(1, (int)($item_seed['units'] ?? 3)),
         ];
+        $default_subject_key_map[$seed_code_key . '|' . strtolower($seed_department)] = true;
     }
 }
 
@@ -165,6 +203,130 @@ try {
     $conn->exec("ALTER TABLE subjects ADD COLUMN units INT NOT NULL DEFAULT 3 AFTER year_level");
 } catch (Throwable $e) {
     // ignore if column already exists
+}
+
+try {
+    $conn->exec("ALTER TABLE subjects ADD COLUMN semester VARCHAR(30) NULL AFTER year_level");
+} catch (Throwable $e) {
+    // ignore if column already exists
+}
+try {
+    $conn->exec("ALTER TABLE subjects ADD COLUMN subject_type VARCHAR(30) NULL AFTER semester");
+} catch (Throwable $e) {
+    // ignore if column already exists
+}
+try {
+    $conn->exec("ALTER TABLE subjects ADD COLUMN department VARCHAR(120) NULL AFTER subject_type");
+} catch (Throwable $e) {
+    // ignore if column already exists
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'add_subject') {
+    try {
+        $subject_code = strtoupper(trim((string)($_POST['subject_code'] ?? '')));
+        $subject_name = trim((string)($_POST['subject_name'] ?? ''));
+        $department = trim((string)($_POST['department'] ?? ''));
+        $year_level = (int)($_POST['year_level'] ?? 0);
+        $semester = trim((string)($_POST['semester'] ?? ''));
+        $subject_type = trim((string)($_POST['subject_type'] ?? ''));
+        $units = (int)($_POST['units'] ?? 0);
+
+        if ($subject_code === '' || $subject_name === '') {
+            throw new Exception('Subject code and name are required.');
+        }
+        if ($department === '') {
+            throw new Exception('Department is required.');
+        }
+        if ($year_level < 1 || $year_level > 4) {
+            throw new Exception('Year level must be between 1 and 4.');
+        }
+
+        $allowed_semesters = ['1st Semester', '2nd Semester', 'Summer Class'];
+        if (!in_array($semester, $allowed_semesters, true)) {
+            throw new Exception('Please select a valid semester.');
+        }
+
+        $allowed_types = ['GE', 'Core', 'Elective', 'NSTP', 'PE', 'Capstone'];
+        if (!in_array($subject_type, $allowed_types, true)) {
+            throw new Exception('Please select a valid subject type.');
+        }
+
+        if ($units < 1 || $units > 10) {
+            throw new Exception('Units must be between 1 and 10.');
+        }
+
+        $check_stmt = $conn->prepare("SELECT id FROM subjects WHERE UPPER(subject_code) = :code AND LOWER(COALESCE(department, '')) = LOWER(:department) LIMIT 1");
+        $check_stmt->execute([
+            'code' => $subject_code,
+            'department' => $department,
+        ]);
+
+        if ($check_stmt->fetch(PDO::FETCH_ASSOC)) {
+            throw new Exception('This subject code already exists for the selected department.');
+        }
+
+        $insert_stmt = $conn->prepare('INSERT INTO subjects (subject_code, subject_name, year_level, semester, subject_type, department, units) VALUES (:code, :name, :year_level, :semester, :subject_type, :department, :units)');
+        $insert_stmt->execute([
+            'code' => $subject_code,
+            'name' => $subject_name,
+            'year_level' => $year_level,
+            'semester' => $semester,
+            'subject_type' => $subject_type,
+            'department' => $department,
+            'units' => $units,
+        ]);
+
+        $_SESSION['success'] = 'Subject added successfully.';
+    } catch (Throwable $e) {
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    header('Location: subjects.php');
+    exit();
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'delete_subject') {
+    try {
+        $subject_id = (int)($_POST['subject_id'] ?? 0);
+        if ($subject_id <= 0) {
+            throw new Exception('Invalid subject selected for deletion.');
+        }
+
+        $has_schedule_subject_id = false;
+        try {
+            $cols_stmt = $conn->query('DESCRIBE schedules');
+            foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $col_row) {
+                if (($col_row['Field'] ?? '') === 'subject_id') {
+                    $has_schedule_subject_id = true;
+                    break;
+                }
+            }
+        } catch (Throwable $e) {
+            $has_schedule_subject_id = false;
+        }
+
+        if ($has_schedule_subject_id) {
+            $sched_stmt = $conn->prepare('SELECT COUNT(*) FROM schedules WHERE subject_id = :subject_id');
+            $sched_stmt->execute(['subject_id' => $subject_id]);
+            if ((int)$sched_stmt->fetchColumn() > 0) {
+                throw new Exception('Subject cannot be deleted because it is already used in schedules.');
+            }
+        }
+
+        $delete_stmt = $conn->prepare('DELETE FROM subjects WHERE id = :id');
+        $delete_stmt->execute(['id' => $subject_id]);
+
+        if ($delete_stmt->rowCount() === 0) {
+            throw new Exception('Subject not found or already removed.');
+        }
+
+        $_SESSION['success'] = 'Subject deleted successfully.';
+    } catch (Throwable $e) {
+        $_SESSION['error'] = $e->getMessage();
+    }
+
+    header('Location: subjects.php');
+    exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'update_subject_units') {
@@ -204,12 +366,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
 
 // Ensure DB has all reference subjects while preserving manually changed units.
 try {
-    $find_stmt = $conn->prepare('SELECT id, units FROM subjects WHERE subject_code = :code LIMIT 1');
-    $insert_stmt = $conn->prepare('INSERT INTO subjects (subject_code, subject_name, year_level, units) VALUES (:code, :name, :year_level, :units)');
-    $update_stmt = $conn->prepare('UPDATE subjects SET subject_name = :name, year_level = COALESCE(year_level, :year_level), units = COALESCE(NULLIF(units, 0), :units) WHERE id = :id');
+    $find_stmt = $conn->prepare("SELECT id, units, semester, subject_type, department FROM subjects WHERE UPPER(subject_code) = :code AND LOWER(COALESCE(department, '')) = LOWER(:department) LIMIT 1");
+    $insert_stmt = $conn->prepare('INSERT INTO subjects (subject_code, subject_name, year_level, semester, subject_type, department, units) VALUES (:code, :name, :year_level, :semester, :subject_type, :department, :units)');
+    $update_stmt = $conn->prepare("UPDATE subjects SET subject_name = :name, year_level = COALESCE(year_level, :year_level), semester = COALESCE(NULLIF(semester, ''), :semester), subject_type = COALESCE(NULLIF(subject_type, ''), :subject_type), department = COALESCE(NULLIF(department, ''), :department), units = COALESCE(NULLIF(units, 0), :units) WHERE id = :id");
 
     foreach ($default_subject_map as $seed_meta) {
-        $find_stmt->execute(['code' => $seed_meta['code']]);
+        $find_stmt->execute([
+            'code' => strtoupper((string)$seed_meta['code']),
+            'department' => (string)($seed_meta['department'] ?? $default_department),
+        ]);
         $existing_subject = $find_stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($existing_subject) {
@@ -217,6 +382,9 @@ try {
                 'id' => (int)$existing_subject['id'],
                 'name' => $seed_meta['name'],
                 'year_level' => $seed_meta['year_level'] > 0 ? $seed_meta['year_level'] : null,
+                'semester' => $seed_meta['semester'],
+                'subject_type' => $seed_meta['subject_type'],
+                'department' => $seed_meta['department'] !== '' ? $seed_meta['department'] : $default_department,
                 'units' => $seed_meta['units'],
             ]);
             continue;
@@ -226,6 +394,9 @@ try {
             'code' => $seed_meta['code'],
             'name' => $seed_meta['name'],
             'year_level' => $seed_meta['year_level'] > 0 ? $seed_meta['year_level'] : null,
+            'semester' => $seed_meta['semester'],
+            'subject_type' => $seed_meta['subject_type'],
+            'department' => $seed_meta['department'] !== '' ? $seed_meta['department'] : $default_department,
             'units' => $seed_meta['units'],
         ]);
     }
@@ -233,10 +404,10 @@ try {
     error_log('Subject seed sync warning (registrar subjects): ' . $e->getMessage());
 }
 
-$db_units_by_code = [];
+$db_subject_meta_by_key = [];
 $all_subject_options = [];
 try {
-    $subjects_stmt = $conn->query('SELECT id, subject_code, subject_name, year_level, COALESCE(NULLIF(units, 0), 3) AS units FROM subjects ORDER BY subject_code, subject_name');
+    $subjects_stmt = $conn->query("SELECT id, subject_code, subject_name, year_level, COALESCE(NULLIF(semester, ''), '1st Semester') AS semester, COALESCE(NULLIF(subject_type, ''), 'Core') AS subject_type, COALESCE(NULLIF(department, ''), '') AS department, COALESCE(NULLIF(units, 0), 3) AS units FROM subjects ORDER BY department, year_level, semester, subject_code, subject_name");
     $all_subject_options = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
 
     foreach ($all_subject_options as $subject_row) {
@@ -244,22 +415,118 @@ try {
         if ($subject_code_key === '') {
             continue;
         }
-        $db_units_by_code[$subject_code_key] = (int)($subject_row['units'] ?? 3);
+        $row_department = trim((string)($subject_row['department'] ?? ''));
+        if ($row_department === '') {
+            $row_department = $default_department;
+        }
+        $db_subject_meta_by_key[$subject_code_key . '|' . strtolower($row_department)] = [
+            'id' => (int)($subject_row['id'] ?? 0),
+            'units' => (int)($subject_row['units'] ?? 3),
+            'subject_name' => trim((string)($subject_row['subject_name'] ?? '')),
+            'semester' => trim((string)($subject_row['semester'] ?? '')),
+            'subject_type' => trim((string)($subject_row['subject_type'] ?? '')),
+            'department' => $row_department,
+        ];
     }
 } catch (Throwable $e) {
     error_log('Could not load subjects with units (registrar subjects): ' . $e->getMessage());
 }
 
 foreach ($subject_sections as &$section_ref) {
+    if (!isset($section_ref['department']) || trim((string)$section_ref['department']) === '') {
+        $section_ref['department'] = $default_department;
+    }
+}
+unset($section_ref);
+
+foreach ($subject_sections as &$section_ref) {
+    $section_department = trim((string)($section_ref['department'] ?? $default_department));
+    if ($section_department === '') {
+        $section_department = $default_department;
+    }
+    $section_ref['department'] = $section_department;
+
     foreach ($section_ref['items'] as &$item_ref) {
         $item_code_key = strtoupper(trim((string)($item_ref['code'] ?? '')));
-        if ($item_code_key !== '' && isset($db_units_by_code[$item_code_key])) {
-            $item_ref['units'] = (int)$db_units_by_code[$item_code_key];
+        $item_ref['subject_id'] = 0;
+        $meta_key = $item_code_key . '|' . strtolower($section_department);
+        if ($item_code_key !== '' && isset($db_subject_meta_by_key[$meta_key])) {
+            $meta = $db_subject_meta_by_key[$meta_key];
+            $item_ref['subject_id'] = (int)($meta['id'] ?? 0);
+            $item_ref['units'] = (int)$meta['units'];
+            if (($meta['subject_name'] ?? '') !== '') {
+                $item_ref['name'] = $meta['subject_name'];
+            }
+            if (($meta['subject_type'] ?? '') !== '') {
+                $item_ref['type'] = $meta['subject_type'];
+            }
         }
     }
     unset($item_ref);
 }
 unset($section_ref);
+
+$dynamic_gradients = ['from-slate-700 to-slate-500', 'from-cyan-600 to-blue-500', 'from-teal-600 to-emerald-500', 'from-fuchsia-600 to-violet-500', 'from-rose-600 to-pink-500'];
+$section_lookup = [];
+foreach ($subject_sections as $idx => $section_ref) {
+    $lookup_key = subject_filter_key((string)($section_ref['department'] ?? $default_department)) . '|' . (int)($section_ref['year'] ?? 1) . '|' . subject_filter_key((string)($section_ref['semester'] ?? '1st Semester'));
+    $section_lookup[$lookup_key] = $idx;
+}
+
+foreach ($all_subject_options as $subject_row) {
+    $subject_code = trim((string)($subject_row['subject_code'] ?? ''));
+    $subject_code_key = strtoupper($subject_code);
+    $subject_id = (int)($subject_row['id'] ?? 0);
+    if ($subject_code_key === '') {
+        continue;
+    }
+
+    $year_level = (int)($subject_row['year_level'] ?? 1);
+    if ($year_level < 1 || $year_level > 4) {
+        $year_level = 1;
+    }
+
+    $semester = trim((string)($subject_row['semester'] ?? ''));
+    if ($semester === '') {
+        $semester = '1st Semester';
+    }
+
+    $department = trim((string)($subject_row['department'] ?? ''));
+    if ($department === '') {
+        $department = $default_department;
+    }
+
+    $type = trim((string)($subject_row['subject_type'] ?? ''));
+    if ($type === '') {
+        $type = 'Core';
+    }
+
+    if (isset($default_subject_key_map[$subject_code_key . '|' . strtolower($department)])) {
+        continue;
+    }
+
+    $section_key = subject_filter_key($department) . '|' . $year_level . '|' . subject_filter_key($semester);
+    if (!isset($section_lookup[$section_key])) {
+        $new_section_index = count($subject_sections);
+        $subject_sections[] = [
+            'id' => 'dept_' . subject_filter_key($department) . '_y' . $year_level . '_' . subject_filter_key($semester),
+            'year' => $year_level,
+            'semester' => $semester,
+            'department' => $department,
+            'gradient' => $dynamic_gradients[$new_section_index % count($dynamic_gradients)],
+            'items' => [],
+        ];
+        $section_lookup[$section_key] = $new_section_index;
+    }
+
+    $subject_sections[$section_lookup[$section_key]]['items'][] = [
+        'subject_id' => $subject_id,
+        'code' => $subject_code,
+        'name' => trim((string)($subject_row['subject_name'] ?? '')),
+        'type' => $type,
+        'units' => max(1, (int)($subject_row['units'] ?? 3)),
+    ];
+}
 
 $category_order = ['GE', 'Core', 'Elective', 'NSTP', 'PE', 'Capstone'];
 $category_meta = [
@@ -274,11 +541,18 @@ $category_meta = [
 $total_subjects = 0;
 $total_units = 0;
 $category_counts = array_fill_keys($category_order, 0);
+$department_counts = [];
 
 foreach ($subject_sections as &$section) {
+    $section_department = trim((string)($section['department'] ?? ''));
+    if ($section_department === '') {
+        $section_department = $default_department;
+    }
+    $section['department'] = $section_department;
+
     $section_units = 0;
     $section_types = [];
-    $search_parts = ['Year ' . (int)$section['year'], (string)$section['semester']];
+    $search_parts = ['Year ' . (int)$section['year'], (string)$section['semester'], $section_department];
 
     foreach ($section['items'] as $item) {
         $units = (int)($item['units'] ?? 0);
@@ -302,20 +576,21 @@ foreach ($subject_sections as &$section) {
     $section['subject_count'] = count($section['items']);
     $section['unit_count'] = $section_units;
     $section['type_list'] = $ordered_types;
-    $section['title'] = (int)$section['year'] . 'th Year • ' . (string)$section['semester'];
-    if ((int)$section['year'] === 1) {
-        $section['title'] = '1st Year • ' . (string)$section['semester'];
-    } elseif ((int)$section['year'] === 2) {
-        $section['title'] = '2nd Year • ' . (string)$section['semester'];
-    } elseif ((int)$section['year'] === 3) {
-        $section['title'] = '3rd Year • ' . (string)$section['semester'];
-    }
+    $section['title'] = subject_year_label((int)$section['year']) . ' • ' . (string)$section['semester'];
+    $section['department_key'] = subject_filter_key($section_department);
     $section['search_blob'] = strtolower(implode(' ', $search_parts));
 
     $total_subjects += $section['subject_count'];
     $total_units += $section_units;
+
+    if (!isset($department_counts[$section_department])) {
+        $department_counts[$section_department] = 0;
+    }
+    $department_counts[$section_department] += $section['subject_count'];
 }
 unset($section);
+
+ksort($department_counts, SORT_NATURAL | SORT_FLAG_CASE);
 
 $core_subjects = (int)($category_counts['Core'] ?? 0);
 $ge_subjects = (int)($category_counts['GE'] ?? 0);
@@ -348,6 +623,10 @@ require_once __DIR__ . '/includes/layout_top.php';
             <p class="text-base text-slate-500">Reference list of curriculum subjects.</p>
         </div>
         <div class="flex items-center gap-2">
+            <button type="button" id="openAddSubjectModalBtn" class="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-100">
+                <i class="bi bi-plus-circle"></i>
+                <span>Add Subject</span>
+            </button>
             <button type="button" id="openEditUnitsModalBtn" class="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100">
                 <i class="bi bi-pencil-square"></i>
                 <span>Edit Subject Units</span>
@@ -404,13 +683,24 @@ require_once __DIR__ . '/includes/layout_top.php';
             <button type="button" data-category-chip="<?php echo htmlspecialchars(strtolower($cat)); ?>" data-chip-active-class="<?php echo htmlspecialchars((string)($meta['chip_active'] ?? '')); ?>" class="subject-chip inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-500 hover:border-slate-300">
                 <span class="h-2.5 w-2.5 rounded-full <?php echo htmlspecialchars($meta['dot']); ?>"></span>
                 <span><?php echo htmlspecialchars($cat); ?></span>
-                <span class="text-slate-400">(<?php echo (int)($category_counts[$cat] ?? 0); ?>)</span>
+                <span data-category-count class="text-slate-400">(<?php echo (int)($category_counts[$cat] ?? 0); ?>)</span>
             </button>
         <?php endforeach; ?>
         <button type="button" id="clearFiltersBtn" class="hidden inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-500 hover:bg-slate-100">
             <i class="bi bi-x-lg text-xs"></i>
             <span>Clear</span>
         </button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+        <?php foreach ($department_counts as $department_name => $department_total): ?>
+            <?php $department_key = subject_filter_key((string)$department_name); ?>
+            <button type="button" data-department-chip="<?php echo htmlspecialchars($department_key); ?>" data-department-label="<?php echo htmlspecialchars((string)$department_name); ?>" class="department-chip inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-500 hover:border-slate-300">
+                <i class="bi bi-diagram-3 text-xs"></i>
+                <span><?php echo htmlspecialchars((string)$department_name); ?></span>
+                <span class="text-slate-400">(<?php echo (int)$department_total; ?>)</span>
+            </button>
+        <?php endforeach; ?>
     </div>
 
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -441,6 +731,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 class="subject-section"
                 data-section-card
                 data-year="<?php echo (int)$section['year']; ?>"
+                data-department="<?php echo htmlspecialchars((string)($section['department_key'] ?? '')); ?>"
                 data-types="<?php echo htmlspecialchars(implode(',', $type_tokens)); ?>"
                 data-search="<?php echo htmlspecialchars($section['search_blob']); ?>"
                 data-default-subject-count="<?php echo (int)$section['subject_count']; ?>"
@@ -459,6 +750,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                         <div>
                             <div class="text-2xl font-semibold leading-tight"><?php echo htmlspecialchars($section['title']); ?></div>
                             <div class="text-sm font-medium text-white/80"><span data-section-subject-count><?php echo (int)$section['subject_count']; ?></span> subjects · <span data-section-unit-count><?php echo (int)$section['unit_count']; ?></span> units</div>
+                            <div class="mt-1 inline-flex rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white/95"><?php echo htmlspecialchars((string)$section['department']); ?></div>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
@@ -477,7 +769,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                                 class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-slate-700 shadow-sm"
                                 data-subject-row
                                 data-item-type="<?php echo htmlspecialchars(strtolower((string)$item['type'])); ?>"
-                                data-item-search="<?php echo htmlspecialchars(strtolower((string)$item['code'] . ' ' . (string)$item['name'] . ' ' . (string)$item['type'])); ?>"
+                                data-item-search="<?php echo htmlspecialchars(strtolower((string)$item['code'] . ' ' . (string)$item['name'] . ' ' . (string)$item['type'] . ' ' . (string)$section['department'])); ?>"
                                 data-item-units="<?php echo (int)$item['units']; ?>"
                             >
                                 <div class="flex items-center justify-between gap-3">
@@ -485,9 +777,21 @@ require_once __DIR__ . '/includes/layout_top.php';
                                         <span class="h-2.5 w-2.5 rounded-full <?php echo htmlspecialchars($category_meta[$item['type']]['dot'] ?? 'bg-slate-400'); ?>"></span>
                                         <span class="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-xs font-semibold tracking-wide text-slate-600"><?php echo htmlspecialchars($item['code']); ?></span>
                                     </div>
-                                    <span class="inline-flex rounded-full border border-current/20 px-2.5 py-0.5 text-xs font-semibold <?php echo htmlspecialchars($item_meta['pill']); ?>"><?php echo htmlspecialchars($item['type']); ?></span>
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-flex rounded-full border border-current/20 px-2.5 py-0.5 text-xs font-semibold <?php echo htmlspecialchars($item_meta['pill']); ?>"><?php echo htmlspecialchars($item['type']); ?></span>
+                                        <?php if ((int)($item['subject_id'] ?? 0) > 0): ?>
+                                            <form method="POST" action="subjects.php" onsubmit="return confirm('Delete this subject? This action cannot be undone.');">
+                                                <input type="hidden" name="action" value="delete_subject" />
+                                                <input type="hidden" name="subject_id" value="<?php echo (int)$item['subject_id']; ?>" />
+                                                <button type="submit" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100" aria-label="Delete subject" title="Delete subject">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <div class="mt-3 text-[1.05rem] font-medium leading-snug text-slate-800"><?php echo htmlspecialchars($item['name']); ?></div>
+                                <div class="mt-1 text-xs font-medium text-slate-500"><?php echo htmlspecialchars((string)$section['department']); ?></div>
                                 <div class="mt-4 flex items-center justify-between">
                                     <div class="inline-flex items-center gap-1.5 text-sm text-slate-500">
                                         <i class="bi bi-book text-xs"></i>
@@ -516,6 +820,86 @@ require_once __DIR__ . '/includes/layout_top.php';
         </div>
     </div>
 
+    <div id="addSubjectModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/50" data-add-subject-close="1"></div>
+        <div class="relative mx-auto mt-10 w-full max-w-2xl px-4">
+            <div class="rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden max-h-[88vh] flex flex-col">
+                <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-900">Add Subject</h2>
+                        <p class="text-sm text-slate-500">Create a department-specific subject entry.</p>
+                    </div>
+                    <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100" data-add-subject-close="1" aria-label="Close">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+
+                <form method="POST" action="subjects.php" class="space-y-4 px-5 py-5 overflow-y-auto">
+                    <input type="hidden" name="action" value="add_subject" />
+
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700">Subject Code</label>
+                            <input type="text" name="subject_code" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200/50" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700">Units</label>
+                            <input type="number" name="units" min="1" max="10" value="3" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200/50" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700">Subject Name</label>
+                        <input type="text" name="subject_name" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200/50" />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700">Department</label>
+                        <input type="text" name="department" list="subjectDepartments" required value="<?php echo htmlspecialchars($default_department); ?>" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200/50" />
+                        <datalist id="subjectDepartments">
+                            <?php foreach (array_keys($department_counts) as $department_option): ?>
+                                <option value="<?php echo htmlspecialchars((string)$department_option); ?>"></option>
+                            <?php endforeach; ?>
+                        </datalist>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700">Year Level</label>
+                            <select name="year_level" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200/50">
+                                <option value="1">1st Year</option>
+                                <option value="2">2nd Year</option>
+                                <option value="3">3rd Year</option>
+                                <option value="4">4th Year</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700">Semester</label>
+                            <select name="semester" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200/50">
+                                <option value="1st Semester">1st Semester</option>
+                                <option value="2nd Semester">2nd Semester</option>
+                                <option value="Summer Class">Summer Class</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700">Type</label>
+                            <select name="subject_type" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200/50">
+                                <?php foreach ($category_order as $type_option): ?>
+                                    <option value="<?php echo htmlspecialchars($type_option); ?>"><?php echo htmlspecialchars($type_option); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2 pt-1">
+                        <button type="button" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" data-add-subject-close="1">Cancel</button>
+                        <button type="submit" class="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Add Subject</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div id="editUnitsModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/50" data-edit-units-close="1"></div>
         <div class="relative mx-auto mt-16 w-full max-w-lg px-4">
@@ -538,7 +922,13 @@ require_once __DIR__ . '/includes/layout_top.php';
                         <select id="unitSubjectSelect" name="subject_id" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-200/50">
                             <?php foreach ($all_subject_options as $subject_option): ?>
                                 <option value="<?php echo (int)$subject_option['id']; ?>" data-current-units="<?php echo (int)$subject_option['units']; ?>">
-                                    <?php echo htmlspecialchars((string)$subject_option['subject_code'] . ' - ' . (string)$subject_option['subject_name']); ?>
+                                    <?php
+                                        $subject_department_label = trim((string)($subject_option['department'] ?? ''));
+                                        if ($subject_department_label === '') {
+                                            $subject_department_label = $default_department;
+                                        }
+                                        echo htmlspecialchars((string)$subject_option['subject_code'] . ' - ' . (string)$subject_option['subject_name'] . ' (' . $subject_department_label . ')');
+                                    ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -560,6 +950,39 @@ require_once __DIR__ . '/includes/layout_top.php';
 </div>
 
 <script>
+    (function () {
+        const openBtn = document.getElementById('openAddSubjectModalBtn');
+        const modal = document.getElementById('addSubjectModal');
+        const closeEls = Array.from(document.querySelectorAll('[data-add-subject-close]'));
+
+        if (!openBtn || !modal) {
+            return;
+        }
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        openBtn.addEventListener('click', openModal);
+        closeEls.forEach(function (el) {
+            el.addEventListener('click', closeModal);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+    })();
+
     (function () {
         const openBtn = document.getElementById('openEditUnitsModalBtn');
         const modal = document.getElementById('editUnitsModal');
@@ -609,6 +1032,7 @@ require_once __DIR__ . '/includes/layout_top.php';
         const emptyState = document.getElementById('subjectsEmptyState');
         const yearButtons = Array.from(document.querySelectorAll('[data-year-btn]'));
         const categoryButtons = Array.from(document.querySelectorAll('[data-category-chip]'));
+        const departmentButtons = Array.from(document.querySelectorAll('[data-department-chip]'));
         const collapseBtn = document.getElementById('collapseAllBtn');
         const clearBtn = document.getElementById('clearFiltersBtn');
         const summaryWrap = document.getElementById('subjectsFilterSummary');
@@ -616,6 +1040,7 @@ require_once __DIR__ . '/includes/layout_top.php';
         const summaryBadge = document.getElementById('subjectsFilterSummaryBadge');
         let activeYear = '';
         let activeCategory = '';
+        let activeDepartment = '';
         const categoryLabelByKey = {
             ge: 'GE',
             core: 'Core',
@@ -624,6 +1049,24 @@ require_once __DIR__ . '/includes/layout_top.php';
             pe: 'PE',
             capstone: 'Capstone'
         };
+        const defaultCategoryCounts = {};
+        const departmentLabelByKey = {};
+
+        categoryButtons.forEach(function (btn) {
+            const key = btn.getAttribute('data-category-chip') || '';
+            const countEl = btn.querySelector('[data-category-count]');
+            const rawCount = countEl ? (countEl.textContent || '') : '';
+            const parsed = parseInt(rawCount.replace(/[^0-9]/g, ''), 10);
+            defaultCategoryCounts[key] = Number.isFinite(parsed) ? parsed : 0;
+        });
+
+        departmentButtons.forEach(function (btn) {
+            const key = btn.getAttribute('data-department-chip') || '';
+            const label = btn.getAttribute('data-department-label') || '';
+            if (key !== '') {
+                departmentLabelByKey[key] = label;
+            }
+        });
 
         function updateYearButtonStyles() {
             yearButtons.forEach(function (btn) {
@@ -652,15 +1095,30 @@ require_once __DIR__ . '/includes/layout_top.php';
             });
         }
 
+        function updateDepartmentButtonStyles() {
+            departmentButtons.forEach(function (btn) {
+                const dep = btn.getAttribute('data-department-chip') || '';
+                const isActive = activeDepartment === dep;
+                btn.classList.toggle('bg-slate-900', isActive);
+                btn.classList.toggle('text-white', isActive);
+                btn.classList.toggle('border-slate-900', isActive);
+                btn.classList.toggle('bg-white', !isActive);
+                btn.classList.toggle('text-slate-500', !isActive);
+                btn.classList.toggle('border-slate-200', !isActive);
+            });
+        }
+
         function filterSections() {
             const query = (searchInput?.value || '').trim().toLowerCase();
             let visibleCount = 0;
             let visibleSemesters = 0;
-            const forceOpen = activeCategory !== '' || query !== '';
-            const hasFilters = activeCategory !== '' || activeYear !== '' || query !== '';
+            const contextualCategoryCounts = {};
+            const forceOpen = activeCategory !== '' || activeDepartment !== '' || query !== '';
+            const hasFilters = activeCategory !== '' || activeDepartment !== '' || activeYear !== '' || query !== '';
 
             sectionCards.forEach(function (card) {
                 const year = card.getAttribute('data-year') || '';
+                const department = card.getAttribute('data-department') || '';
                 const panel = card.querySelector('[data-section-panel]');
                 const toggleBtn = card.querySelector('[data-section-toggle]');
                 const chevron = toggleBtn?.querySelector('[data-chevron]');
@@ -669,6 +1127,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 const unitCountEl = card.querySelector('[data-section-unit-count]');
 
                 const yearMatch = !activeYear || year === activeYear;
+                const departmentMatch = !activeDepartment || department === activeDepartment;
                 let rowMatches = 0;
                 let rowUnits = 0;
 
@@ -676,9 +1135,12 @@ require_once __DIR__ . '/includes/layout_top.php';
                     const rowType = row.getAttribute('data-item-type') || '';
                     const rowSearch = row.getAttribute('data-item-search') || '';
                     const rowUnit = parseInt(row.getAttribute('data-item-units') || '0', 10) || 0;
+                    const contextMatch = yearMatch && departmentMatch && (query === '' || rowSearch.indexOf(query) !== -1);
+                    if (contextMatch) {
+                        contextualCategoryCounts[rowType] = (contextualCategoryCounts[rowType] || 0) + 1;
+                    }
                     const categoryMatch = !activeCategory || rowType === activeCategory;
-                    const queryMatch = query === '' || rowSearch.indexOf(query) !== -1;
-                    const showRow = yearMatch && categoryMatch && queryMatch;
+                    const showRow = contextMatch && categoryMatch;
 
                     row.classList.toggle('hidden', !showRow);
                     if (showRow) {
@@ -687,7 +1149,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                     }
                 });
 
-                const showSection = yearMatch && rowMatches > 0;
+                const showSection = yearMatch && departmentMatch && rowMatches > 0;
                 card.classList.toggle('hidden', !showSection);
                 if (showSection) {
                     visibleCount += rowMatches;
@@ -720,6 +1182,21 @@ require_once __DIR__ . '/includes/layout_top.php';
 
             clearBtn?.classList.toggle('hidden', !hasFilters);
 
+            categoryButtons.forEach(function (btn) {
+                const key = btn.getAttribute('data-category-chip') || '';
+                const countEl = btn.querySelector('[data-category-count]');
+                if (!countEl) {
+                    return;
+                }
+
+                const contextualCount = contextualCategoryCounts[key] || 0;
+                const displayCount = hasFilters ? contextualCount : (defaultCategoryCounts[key] || 0);
+                countEl.textContent = '(' + displayCount + ')';
+
+                const shouldHide = hasFilters && contextualCount === 0 && activeCategory !== key;
+                btn.classList.toggle('hidden', shouldHide);
+            });
+
             if (summaryWrap && summaryText && summaryBadge) {
                 if (hasFilters && visibleCount > 0) {
                     const subjectWord = visibleCount === 1 ? 'subject' : 'subjects';
@@ -729,6 +1206,8 @@ require_once __DIR__ . '/includes/layout_top.php';
                     let badgeText = visibleCount + ' Subjects';
                     if (activeCategory) {
                         badgeText = visibleCount + ' ' + (categoryLabelByKey[activeCategory] || activeCategory);
+                    } else if (activeDepartment) {
+                        badgeText = departmentLabelByKey[activeDepartment] || activeDepartment;
                     } else if (activeYear) {
                         badgeText = 'Year ' + activeYear;
                     }
@@ -761,14 +1240,28 @@ require_once __DIR__ . '/includes/layout_top.php';
             });
         });
 
+        departmentButtons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const dep = btn.getAttribute('data-department-chip') || '';
+                if (!dep) {
+                    return;
+                }
+                activeDepartment = (activeDepartment === dep) ? '' : dep;
+                updateDepartmentButtonStyles();
+                filterSections();
+            });
+        });
+
         clearBtn?.addEventListener('click', function () {
             activeYear = '';
             activeCategory = '';
+            activeDepartment = '';
             if (searchInput) {
                 searchInput.value = '';
             }
             updateYearButtonStyles();
             updateCategoryButtonStyles();
+            updateDepartmentButtonStyles();
             filterSections();
         });
 
@@ -811,6 +1304,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 
         updateYearButtonStyles();
         updateCategoryButtonStyles();
+        updateDepartmentButtonStyles();
         filterSections();
     })();
 </script>
