@@ -998,8 +998,8 @@ function role_pill_classes(string $pill_role, string $active_role): string {
     <!-- Add User Modal -->
     <div id="addUserModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/50" data-modal-close="addUserModal"></div>
-        <div class="relative mx-auto my-8 w-full max-w-lg px-4">
-            <div class="rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden">
+        <div class="relative mx-auto my-6 w-[92%] max-w-md">
+            <div class="rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden max-h-[82vh] flex flex-col">
                 <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                     <div>
                         <div class="text-base font-semibold text-slate-900">Add User</div>
@@ -1010,7 +1010,7 @@ function role_pill_classes(string $pill_role, string $active_role): string {
                     </button>
                 </div>
 
-                <form action="users.php" method="POST" class="p-5 space-y-4">
+                <form action="users.php" method="POST" class="p-5 space-y-3 overflow-y-auto max-h-[calc(82vh-72px)]">
                     <input type="hidden" name="action" value="add">
 
                     <div>
@@ -1072,8 +1072,8 @@ function role_pill_classes(string $pill_role, string $active_role): string {
     <!-- Edit User Modal -->
     <div id="editUserModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-slate-900/50" data-modal-close="editUserModal"></div>
-        <div class="relative mx-auto my-8 w-full max-w-lg px-4">
-            <div class="rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden">
+        <div class="relative mx-auto my-6 w-[92%] max-w-md">
+            <div class="rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden max-h-[82vh] flex flex-col">
                 <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                     <div>
                         <div class="text-base font-semibold text-slate-900">Edit User</div>
@@ -1084,7 +1084,7 @@ function role_pill_classes(string $pill_role, string $active_role): string {
                     </button>
                 </div>
 
-                <form action="users.php" method="POST" class="p-5 space-y-4">
+                <form action="users.php" method="POST" class="p-5 space-y-3 overflow-y-auto max-h-[calc(82vh-72px)]">
                     <input type="hidden" name="action" value="edit">
                     <input type="hidden" name="user_id" id="edit_user_id">
 
