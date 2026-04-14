@@ -551,7 +551,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 <!-- Add Schedule Modal -->
 <div id="addScheduleModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="absolute inset-0 bg-slate-900/50" data-modal-close="addScheduleModal"></div>
-    <div class="relative mx-auto my-10 w-[92%] max-w-2xl">
+    <div class="relative mx-auto my-10 w-[92%] max-w-lg overflow-y-auto max-h-[90vh]">
         <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                 <div class="text-base font-semibold text-slate-900">Add Schedule</div>
@@ -654,7 +654,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 <!-- Edit Schedule Modal -->
 <div id="editScheduleModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="absolute inset-0 bg-slate-900/50" data-modal-close="editScheduleModal"></div>
-    <div class="relative mx-auto my-10 w-[92%] max-w-2xl">
+    <div class="relative mx-auto my-10 w-[92%] max-w-lg overflow-y-auto max-h-[90vh]">
         <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                 <div class="text-base font-semibold text-slate-900">Edit Schedule</div>
