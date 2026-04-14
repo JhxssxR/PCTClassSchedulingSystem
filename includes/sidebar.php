@@ -62,6 +62,9 @@ $active_page = $active_page ?? '';
             <a class="nav-link <?php echo $active_page === 'settings' ? 'active' : ''; ?>" href="../admin/settings.php">
                 <i class="bi bi-gear"></i> Settings
             </a>
+            <a class="nav-link <?php echo $active_page === 'activity' ? 'active' : ''; ?>" href="../activity.php">
+                <i class="bi bi-clock-history"></i> Activity
+            </a>
         <?php elseif (in_array($role, ['admin', 'registrar'], true)): ?>
             <a class="nav-link <?php echo $active_page === 'dashboard' ? 'active' : ''; ?>" href="../registrar/dashboard.php">
                 <i class="bi bi-speedometer2"></i> Dashboard
@@ -78,6 +81,9 @@ $active_page = $active_page ?? '';
             <a class="nav-link <?php echo $active_page === 'enrollments' ? 'active' : ''; ?>" href="../registrar/enrollments.php">
                 <i class="bi bi-person-check"></i> Enrollments
             </a>
+            <a class="nav-link <?php echo $active_page === 'activity' ? 'active' : ''; ?>" href="../activity.php">
+                <i class="bi bi-clock-history"></i> Activity
+            </a>
         <?php elseif ($role === 'instructor'): ?>
             <a class="nav-link <?php echo $active_page === 'dashboard' ? 'active' : ''; ?>" href="../instructor/dashboard.php">
                 <i class="bi bi-speedometer2"></i> Dashboard
@@ -90,6 +96,9 @@ $active_page = $active_page ?? '';
             </a>
             <a class="nav-link <?php echo $active_page === 'profile' ? 'active' : ''; ?>" href="../instructor/profile.php">
                 <i class="bi bi-person"></i> Update Profile
+            </a>
+            <a class="nav-link <?php echo $active_page === 'activity' ? 'active' : ''; ?>" href="../activity.php">
+                <i class="bi bi-clock-history"></i> Activity
             </a>
         <?php endif; ?>
         <a class="nav-link" href="../auth/logout.php">

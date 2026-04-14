@@ -61,6 +61,10 @@ function get_user_id() {
 
 // Function to get current user's name
 function get_user_name() {
+    if (isset($_SESSION['full_name']) && trim((string)$_SESSION['full_name']) !== '') {
+        return $_SESSION['full_name'];
+    }
+
     return isset($_SESSION['first_name']) && isset($_SESSION['last_name']) 
         ? $_SESSION['first_name'] . ' ' . $_SESSION['last_name'] 
         : null;
@@ -146,6 +150,7 @@ function set_session_vars($user) {
     $_SESSION['role'] = $user['role'];
     $_SESSION['first_name'] = $user['first_name'];
     $_SESSION['last_name'] = $user['last_name'];
+    $_SESSION['full_name'] = trim((string)$user['first_name'] . ' ' . (string)$user['last_name']);
     $_SESSION['email'] = $user['email'];
     
     debug_to_log("Session variables set");

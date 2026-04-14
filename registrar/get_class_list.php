@@ -81,7 +81,7 @@ $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <td><?php echo htmlspecialchars($student['last_name'] . ', ' . $student['first_name']); ?></td>
                         <td>Year <?php echo htmlspecialchars($student['year_level']); ?></td>
                         <td><?php echo htmlspecialchars($student['email']); ?></td>
-                        <td><?php echo date('M d, Y', strtotime($student['date_enrolled'])); ?></td>
+                        <td><?php echo date('M d, Y g:i A', strtotime($student['date_enrolled'])); ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($students)): ?>

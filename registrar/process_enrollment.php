@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../includes/activity_log.php';
 
 // Check if user is logged in and is a registrar/admin
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'registrar'], true)) {
@@ -152,6 +153,12 @@ try {
             $stmt->execute([$student_id, $schedule_id, $initial]);
         }
 
+        activity_log_write('enrollment_added', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'registrar'), [
+            'message' => 'Added enrollment for student ' . $student_id . ' on schedule ' . $schedule_id,
+            'student_id' => $student_id,
+            'schedule_id' => $schedule_id,
+            'action' => 'add',
+        ]);
         redirect_with_message('success', 'Enrollment added successfully.');
     }
 
@@ -210,6 +217,12 @@ try {
         $stmt = $conn->prepare('UPDATE enrollments SET ' . implode(', ', $set_parts) . ' WHERE id = ?');
         $stmt->execute($exec);
 
+        activity_log_write('enrollment_status_updated', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'registrar'), [
+            'message' => 'Updated enrollment status to ' . $target,
+            'enrollment_id' => $enrollment_id,
+            'status' => $target,
+            'action' => 'update_status',
+        ]);
         redirect_with_message('success', 'Enrollment status updated successfully.');
     }
 
@@ -234,6 +247,11 @@ try {
         $stmt = $conn->prepare('DELETE FROM enrollments WHERE id = ? LIMIT 1');
         $stmt->execute([$enrollment_id]);
 
+        activity_log_write('enrollment_deleted', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'registrar'), [
+            'message' => 'Removed enrollment record',
+            'enrollment_id' => $enrollment_id,
+            'action' => 'delete',
+        ]);
         redirect_with_message('success', 'Enrollment record removed successfully.');
     }
 

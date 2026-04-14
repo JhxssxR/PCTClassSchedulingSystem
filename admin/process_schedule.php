@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../includes/activity_log.php';
 
 // Check if user is logged in and is an admin
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
@@ -225,6 +226,112 @@ function ensure_schedule_end_time_column(PDO $conn, array &$cols): void {
     }
 }
 
+function schedule_date_overlap_sql(bool $has_start_date, bool $has_end_date): string {
+    if (!$has_start_date || !$has_end_date) {
+        return '';
+    }
+
+    return "
+                          AND COALESCE(start_date, '1970-01-01') <= ?
+                          AND COALESCE(NULLIF(end_date, '0000-00-00'), start_date, '9999-12-31') >= ?
+    ";
+}
+
+function schedule_date_range_label(array $row, bool $has_start_date, bool $has_end_date): string {
+    if (!$has_start_date) {
+        return 'selected date range';
+    }
+
+    $start = normalize_date_ymd((string)($row['start_date'] ?? ''));
+    $end = $has_end_date ? normalize_date_ymd((string)($row['end_date'] ?? '')) : '';
+    if ($start === '') {
+        return 'selected date range';
+    }
+
+    if ($end !== '' && $end !== $start) {
+        return date('M d, Y', strtotime($start)) . ' to ' . date('M d, Y', strtotime($end));
+    }
+
+    return date('M d, Y', strtotime($start));
+}
+
+function schedule_conflict_message(array $row, bool $has_start_date, bool $has_end_date): string {
+    $room = trim((string)($row['room_number'] ?? ''));
+    $day = trim((string)($row['day_of_week'] ?? ''));
+    $start = normalize_time_his((string)($row['start_time'] ?? ''));
+    $end = normalize_time_his((string)($row['end_time'] ?? ''));
+
+    $range = '';
+    if ($start !== '') {
+        $range = date('g:i A', strtotime('1970-01-01 ' . $start));
+        if ($end !== '') {
+            $range .= ' - ' . date('g:i A', strtotime('1970-01-01 ' . $end));
+        }
+    }
+
+    $date_label = schedule_date_range_label($row, $has_start_date, $has_end_date);
+    $parts = [];
+    if ($room !== '') {
+        $parts[] = 'Room ' . $room;
+    }
+    if ($day !== '') {
+        $parts[] = $day;
+    }
+    if ($range !== '') {
+        $parts[] = $range;
+    }
+
+    return 'Room conflict with ' . implode(', ', $parts) . ' on ' . $date_label . '.';
+}
+
+function find_room_conflict_schedule(PDO $conn, int $classroom_id, string $day_of_week, string $start_time, string $end_time, string $start_date, string $end_date, bool $has_start_date, bool $has_end_date, string $end_time_compare_expr, array $exclude_ids = []): ?array {
+    $exclude_clause = '';
+    $params = [$classroom_id, $day_of_week];
+
+    if (!empty($exclude_ids)) {
+        $exclude_clause = ' AND id NOT IN (' . implode(',', array_fill(0, count($exclude_ids), '?')) . ')';
+        $params = array_merge($params, $exclude_ids);
+    }
+
+    $date_overlap_sql = schedule_date_overlap_sql($has_start_date, $has_end_date);
+    if ($date_overlap_sql !== '') {
+        $params[] = $end_date;
+        $params[] = $start_date;
+    }
+
+    $params = array_merge($params, [
+        $start_time,
+        $start_time,
+        $end_time,
+        $end_time,
+        $start_time,
+        $end_time
+    ]);
+
+    $sql = "
+        SELECT s.*, cr.room_number
+        FROM schedules s
+        LEFT JOIN classrooms cr ON cr.id = s.classroom_id
+        WHERE s.classroom_id = ?
+          AND s.day_of_week = ?
+          AND s.status = 'active'
+          {$exclude_clause}
+          {$date_overlap_sql}
+          AND (
+              (s.start_time <= ? AND {$end_time_compare_expr} > ?) OR
+              (s.start_time < ? AND {$end_time_compare_expr} >= ?) OR
+              (s.start_time >= ? AND {$end_time_compare_expr} <= ?)
+          )
+        ORDER BY s.id ASC
+        LIMIT 1
+    ";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: schedules.php');
     exit();
@@ -245,6 +352,7 @@ $end_time_compare_expr = $has_end_time
     ? 'end_time'
     : ($has_duration_minutes ? 'ADDTIME(start_time, SEC_TO_TIME(duration_minutes * 60))' : 'ADDTIME(start_time, SEC_TO_TIME(120 * 60))');
 $allowed_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+$date_overlap_sql = schedule_date_overlap_sql($has_start_date, $has_end_date);
 
 try {
     switch ($action) {
@@ -324,15 +432,19 @@ try {
                     WHERE classroom_id = ?
                     AND day_of_week = ?
                     AND status = 'active'
+                    {$date_overlap_sql}
                     AND (
                         (start_time <= ? AND {$end_time_compare_expr} > ?) OR
                         (start_time < ? AND {$end_time_compare_expr} >= ?) OR
                         (start_time >= ? AND {$end_time_compare_expr} <= ?)
                     )
                 ");
-                $stmt->execute([
-                    $classroom_id,
-                    $day_of_week,
+                $room_params = [$classroom_id, $day_of_week];
+                if ($date_overlap_sql !== '') {
+                    $room_params[] = $end_date;
+                    $room_params[] = $start_date;
+                }
+                $room_params = array_merge($room_params, [
                     $start_time,
                     $start_time,
                     $end_time,
@@ -340,8 +452,12 @@ try {
                     $start_time,
                     $end_time
                 ]);
+                $stmt->execute($room_params);
                 if ((int)$stmt->fetchColumn() > 0) {
-                    $conflicts[] = 'Room conflict on ' . $day_of_week . '.';
+                    $conflict_row = find_room_conflict_schedule($conn, $classroom_id, $day_of_week, $start_time, $end_time, $start_date, $end_date, $has_start_date, $has_end_date, $end_time_compare_expr);
+                    $conflicts[] = $conflict_row
+                        ? schedule_conflict_message($conflict_row, $has_start_date, $has_end_date)
+                        : ('Room conflict on ' . $day_of_week . ' for the selected date range.');
                 }
 
                 $stmt = $conn->prepare("
@@ -350,15 +466,19 @@ try {
                     WHERE instructor_id = ?
                     AND day_of_week = ?
                     AND status = 'active'
+                    {$date_overlap_sql}
                     AND (
                         (start_time <= ? AND {$end_time_compare_expr} > ?) OR
                         (start_time < ? AND {$end_time_compare_expr} >= ?) OR
                         (start_time >= ? AND {$end_time_compare_expr} <= ?)
                     )
                 ");
-                $stmt->execute([
-                    $instructor_id,
-                    $day_of_week,
+                $ins_params = [$instructor_id, $day_of_week];
+                if ($date_overlap_sql !== '') {
+                    $ins_params[] = $end_date;
+                    $ins_params[] = $start_date;
+                }
+                $ins_params = array_merge($ins_params, [
                     $start_time,
                     $start_time,
                     $end_time,
@@ -366,6 +486,7 @@ try {
                     $start_time,
                     $end_time
                 ]);
+                $stmt->execute($ins_params);
                 if ((int)$stmt->fetchColumn() > 0) {
                     $conflicts[] = 'Instructor conflict on ' . $day_of_week . '.';
                 }
@@ -425,6 +546,13 @@ try {
             } else {
                 $_SESSION['success'] = 'Schedules added successfully for ' . count($created_days) . ' days: ' . implode(', ', $created_days) . '.';
             }
+            activity_log_write('schedule_added', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'super_admin'), [
+                'message' => count($created_days) === 1
+                    ? 'Added schedule for ' . implode(', ', $created_days)
+                    : 'Added schedules for ' . implode(', ', $created_days),
+                'days' => $created_days,
+                'action' => 'add',
+            ]);
             break;
         }
 
@@ -594,15 +722,19 @@ try {
                           AND day_of_week = ?
                           AND status = 'active'
                           $exclude_clause
+                          {$date_overlap_sql}
                           AND (
                               (start_time <= ? AND {$end_time_compare_expr} > ?) OR
                               (start_time < ? AND {$end_time_compare_expr} >= ?) OR
                               (start_time >= ? AND {$end_time_compare_expr} <= ?)
                           )
                     ";
-                    $room_params = array_merge([
-                        $classroom_id,
-                        $day_of_week,
+                    $room_params = [$classroom_id, $day_of_week];
+                    if ($date_overlap_sql !== '') {
+                        $room_params[] = $end_date;
+                        $room_params[] = $start_date;
+                    }
+                    $room_params = array_merge($room_params, [
                         $start_time,
                         $start_time,
                         $end_time,
@@ -613,7 +745,10 @@ try {
                     $stmt = $conn->prepare($room_sql);
                     $stmt->execute($room_params);
                     if ((int)$stmt->fetchColumn() > 0) {
-                        throw new Exception('There is a room conflict on ' . $day_of_week . '.');
+                        $conflict_row = find_room_conflict_schedule($conn, $classroom_id, $day_of_week, $start_time, $end_time, $start_date, $end_date, $has_start_date, $has_end_date, $end_time_compare_expr, $exclude_ids);
+                        throw new Exception($conflict_row
+                            ? schedule_conflict_message($conflict_row, $has_start_date, $has_end_date)
+                            : ('There is a room conflict on ' . $day_of_week . ' for the selected date range.'));
                     }
 
                     $ins_sql = "
@@ -623,15 +758,19 @@ try {
                           AND day_of_week = ?
                           AND status = 'active'
                           $exclude_clause
+                          {$date_overlap_sql}
                           AND (
                               (start_time <= ? AND {$end_time_compare_expr} > ?) OR
                               (start_time < ? AND {$end_time_compare_expr} >= ?) OR
                               (start_time >= ? AND {$end_time_compare_expr} <= ?)
                           )
                     ";
-                    $ins_params = array_merge([
-                        $instructor_id,
-                        $day_of_week,
+                    $ins_params = [$instructor_id, $day_of_week];
+                    if ($date_overlap_sql !== '') {
+                        $ins_params[] = $end_date;
+                        $ins_params[] = $start_date;
+                    }
+                    $ins_params = array_merge($ins_params, [
                         $start_time,
                         $start_time,
                         $end_time,
@@ -732,6 +871,12 @@ try {
             $conn->commit();
 
             $_SESSION['success'] = 'Schedule updated successfully for ' . count($selected_days) . ' day(s): ' . implode(', ', $selected_days) . '.';
+            activity_log_write('schedule_updated', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'super_admin'), [
+                'message' => 'Updated schedule for ' . implode(', ', $selected_days),
+                'days' => $selected_days,
+                'schedule_id' => $schedule_id,
+                'action' => 'edit',
+            ]);
             break;
         }
 
@@ -750,6 +895,11 @@ try {
             $stmt->execute([$_POST['schedule_id']]);
 
             $_SESSION['success'] = 'Schedule deleted successfully.';
+            activity_log_write('schedule_deleted', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'super_admin'), [
+                'message' => 'Deleted schedule',
+                'schedule_id' => (int)$_POST['schedule_id'],
+                'action' => 'delete',
+            ]);
             break;
         }
 

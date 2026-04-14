@@ -1,6 +1,7 @@
 <?php
 require_once '../config/database.php';
 require_once '../includes/session.php';
+require_once '../includes/activity_log.php';
 
 // Enable error reporting for debugging
 error_reporting(E_ALL);
@@ -86,6 +87,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 } catch (Throwable $e) {
                     // ignore
                 }
+
+                activity_log_write('login_success', (int)$user['id'], (string)$user['role'], [
+                    'message' => 'Signed in successfully',
+                    'login' => $login,
+                ]);
                 
                 // Verify session was set
                 debug_to_log("Verifying session after login");
@@ -120,6 +126,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
             } else {
                 debug_to_log("Login failed - Invalid credentials");
+                activity_log_write('login_failed', null, null, [
+                    'message' => 'Invalid username, email, or password',
+                    'login' => $login,
+                ]);
                 $error = "Invalid username, email, or password";
             }
         } catch(PDOException $e) {

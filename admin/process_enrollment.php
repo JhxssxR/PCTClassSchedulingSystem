@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../includes/activity_log.php';
 
 // Check if user is logged in and is an admin
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
@@ -176,6 +177,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute($insert_vals);
 
                 $_SESSION['success'] = 'Enrollment added successfully';
+                activity_log_write('enrollment_added', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'super_admin'), [
+                    'message' => 'Added enrollment for student ' . (int)$_POST['student_id'] . ' on schedule ' . (int)$_POST['schedule_id'],
+                    'student_id' => (int)$_POST['student_id'],
+                    'schedule_id' => (int)$_POST['schedule_id'],
+                    'action' => 'add',
+                ]);
                 break;
 
             case 'update_status':
@@ -224,6 +231,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute($exec);
 
                 $_SESSION['success'] = 'Enrollment status updated successfully';
+                activity_log_write('enrollment_status_updated', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'super_admin'), [
+                    'message' => 'Updated enrollment status to ' . $new_status,
+                    'enrollment_id' => (int)$_POST['enrollment_id'],
+                    'status' => $new_status,
+                    'action' => 'update_status',
+                ]);
                 break;
 
             case 'delete':
@@ -249,6 +262,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$enrollment_id]);
 
                 $_SESSION['success'] = 'Enrollment record removed successfully';
+                activity_log_write('enrollment_deleted', (int)$_SESSION['user_id'], (string)($_SESSION['role'] ?? 'super_admin'), [
+                    'message' => 'Removed enrollment record',
+                    'enrollment_id' => $enrollment_id,
+                    'action' => 'delete',
+                ]);
                 break;
 
 

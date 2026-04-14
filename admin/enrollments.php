@@ -571,13 +571,13 @@ function status_badge(string $status): array {
             <section class="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div class="p-4 border-b border-slate-200 flex flex-col gap-3">
                     <div class="flex flex-col xl:flex-row xl:items-center gap-3">
-                        <form method="GET" class="relative w-full">
+                        <form method="GET" class="relative w-full xl:flex-1 xl:min-w-0">
                             <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
                             <input type="hidden" name="status" value="<?php echo htmlspecialchars($status_filter); ?>">
                             <input name="q" value="<?php echo htmlspecialchars($q); ?>" type="text" placeholder="Search by student, ID, or subject..." class="w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 py-2.5 text-sm text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-200">
                         </form>
 
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2 xl:justify-end xl:flex-none">
                             <?php
                                 $chips = ['all' => 'All', 'active' => 'Active'];
                                 if ($supports_pending) $chips['pending'] = 'Pending';
@@ -591,7 +591,7 @@ function status_badge(string $status): array {
                                         $href .= '&q=' . urlencode($q);
                                     }
                                 ?>
-                                <a href="<?php echo htmlspecialchars($href); ?>" class="inline-flex items-center rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 <?php echo $is_active ? 'bg-emerald-600 text-white shadow-[0_0_0_4px_rgba(16,185,129,0.18)] hover:bg-emerald-700' : 'bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700'; ?>">
+                                <a href="<?php echo htmlspecialchars($href); ?>" class="inline-flex items-center whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 <?php echo $is_active ? 'bg-emerald-600 text-white shadow-[0_0_0_4px_rgba(16,185,129,0.18)] hover:bg-emerald-700' : 'bg-slate-50 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700'; ?>">
                                     <?php echo htmlspecialchars($label); ?>
                                 </a>
                             <?php endforeach; ?>
@@ -632,7 +632,7 @@ function status_badge(string $status): array {
                                     <td class="px-4 py-3 text-slate-500">
                                         <?php
                                             $d = (string)($enrollment['display_date'] ?? '');
-                                            echo $d !== '' ? htmlspecialchars(date('M d, Y', strtotime($d))) : 'N/A';
+                                            echo $d !== '' ? htmlspecialchars(date('M d, Y g:i A', strtotime($d))) : 'N/A';
                                         ?>
                                     </td>
                                     <td class="px-4 py-3">

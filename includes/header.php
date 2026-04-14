@@ -95,21 +95,25 @@ if (!isset($_SESSION['user_id'])) {
                 <a href="../admin/classrooms.php" class="nav-link"><i class="bi bi-building"></i> Manage Classrooms</a>
                 <a href="../admin/schedules.php" class="nav-link"><i class="bi bi-calendar3"></i> View Schedules</a>
                 <a href="../admin/reports.php" class="nav-link"><i class="bi bi-file-text"></i> Reports</a>
+                <a href="../activity.php" class="nav-link"><i class="bi bi-clock-history"></i> Activity</a>
             <?php elseif (in_array($_SESSION['role'], ['admin', 'registrar'], true)): ?>
                 <a href="../registrar/dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
                 <a href="../registrar/schedules.php" class="nav-link"><i class="bi bi-calendar3"></i> Manage Schedules</a>
                 <a href="../registrar/courses.php" class="nav-link"><i class="bi bi-book"></i> Manage Courses</a>
                 <a href="../registrar/enrollments.php" class="nav-link"><i class="bi bi-person-check"></i> Enrollments</a>
                 <a href="../registrar/reports.php" class="nav-link"><i class="bi bi-file-text"></i> Reports</a>
+                <a href="../activity.php" class="nav-link"><i class="bi bi-clock-history"></i> Activity</a>
             <?php elseif ($_SESSION['role'] === 'instructor'): ?>
                 <a href="../instructor/dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
                 <a href="../instructor/schedule.php" class="nav-link"><i class="bi bi-calendar3"></i> My Schedule</a>
                 <a href="../instructor/classes.php" class="nav-link"><i class="bi bi-journal-text"></i> My Classes</a>
+                <a href="../activity.php" class="nav-link"><i class="bi bi-clock-history"></i> Activity</a>
             <?php elseif ($_SESSION['role'] === 'student'): ?>
                 <a href="../student/dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
                 <a href="../student/schedule.php" class="nav-link"><i class="bi bi-calendar3"></i> My Schedule</a>
                 <a href="../student/courses.php" class="nav-link"><i class="bi bi-book"></i> Available Courses</a>
                 <a href="../student/enrollment.php" class="nav-link"><i class="bi bi-person-check"></i> Enrollment</a>
+                <a href="../activity.php" class="nav-link"><i class="bi bi-clock-history"></i> Activity</a>
             <?php endif; ?>
             <a href="../auth/logout.php" class="nav-link mt-4"><i class="bi bi-box-arrow-right"></i> Logout</a>
         </nav>
