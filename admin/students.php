@@ -10,6 +10,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
 
 require_once __DIR__ . '/notifications_data.php';
 
+$default_department = 'Information of Technology Education';
+
 // Get all students with enrollment counts + enrolled course codes
 $stmt = $conn->prepare("
     SELECT u.*,
@@ -380,7 +382,7 @@ function student_public_id($id) {
                                         $primary_course = !empty($course_codes) ? $course_codes[0] : '—';
                                         $department = trim((string)($s['department'] ?? ''));
                                         $phone_number = trim((string)($s['phone_number'] ?? ''));
-                                        $department_display = ($department !== '') ? $department : '—';
+                                        $department_display = ($department !== '') ? $department : $default_department;
                                         $phone_display = ($phone_number !== '') ? $phone_number : '—';
                                         $search_blob = strtolower(trim($name . ' ' . $email . ' ' . $sid . ' ' . $primary_course . ' ' . $department_display . ' ' . $phone_display));
                                         $q = urlencode($email !== '' ? $email : $name);

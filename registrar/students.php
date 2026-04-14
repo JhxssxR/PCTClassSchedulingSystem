@@ -323,6 +323,7 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Student ID</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Course</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Year</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
@@ -344,7 +345,9 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                         $courses_str = (string)($s['enrolled_courses'] ?? '');
                         $course_codes = array_values(array_filter(array_map('trim', explode(',', $courses_str))));
                         $primary_course = !empty($course_codes) ? $course_codes[0] : '—';
-                        $search_blob = strtolower(trim($name . ' ' . $email . ' ' . $sid . ' ' . $primary_course));
+                        $department = trim((string)($s['department'] ?? ''));
+                        $department_display = ($department !== '') ? $department : '—';
+                        $search_blob = strtolower(trim($name . ' ' . $email . ' ' . $sid . ' ' . $primary_course . ' ' . $department_display));
                         $q = urlencode($email !== '' ? $email : $name);
                     ?>
                     <tr class="student-row" data-course="<?php echo htmlspecialchars($primary_course); ?>" data-search="<?php echo htmlspecialchars($search_blob); ?>">
@@ -370,6 +373,7 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                             <?php endif; ?>
                         </td>
                         <td class="px-4 py-3 text-sm text-slate-600"><?php echo ($year_level >= 1 && $year_level <= 4) ? ('Year ' . $year_level) : '—'; ?></td>
+                        <td class="px-4 py-3 text-sm text-slate-600"><?php echo htmlspecialchars($department_display); ?></td>
                         <td class="px-4 py-3">
                             <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold <?php echo htmlspecialchars($status_classes); ?>">
                                 <?php echo htmlspecialchars($status_label); ?>
@@ -393,7 +397,7 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
 
                 <?php if (empty($students)): ?>
                     <tr>
-                        <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">No students found</td>
+                        <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">No students found</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
