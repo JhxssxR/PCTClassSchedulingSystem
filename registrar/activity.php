@@ -1,9 +1,9 @@
 <?php
-require_once __DIR__ . '/includes/session.php';
-require_once __DIR__ . '/includes/activity_log.php';
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
-    header('Location: auth/login.php');
+    header('Location: ../auth/login.php');
     exit();
 }
 
@@ -52,54 +52,44 @@ foreach ($all_activity_items as $item) {
 $nav_items = [];
 if ($role === 'super_admin') {
     $nav_items = [
-        ['label' => 'Dashboard', 'href' => 'admin/dashboard.php', 'icon' => 'bi-speedometer2'],
-        ['label' => 'All Users', 'href' => 'admin/users.php', 'icon' => 'bi-people'],
-        ['label' => 'Instructors', 'href' => 'admin/instructors.php', 'icon' => 'bi-person-video3'],
-        ['label' => 'Students', 'href' => 'admin/students.php', 'icon' => 'bi-mortarboard'],
-        ['label' => 'Classes', 'href' => 'admin/classes.php', 'icon' => 'bi-book'],
-        ['label' => 'Classrooms', 'href' => 'admin/classrooms.php', 'icon' => 'bi-door-open'],
-        ['label' => 'Subjects', 'href' => 'admin/subjects.php', 'icon' => 'bi-journal-bookmark'],
-        ['label' => 'Courses', 'href' => 'admin/courses.php', 'icon' => 'bi-journal-text'],
-        ['label' => 'Schedules', 'href' => 'admin/schedules.php', 'icon' => 'bi-calendar3'],
-        ['label' => 'Enrollments', 'href' => 'admin/enrollments.php', 'icon' => 'bi-person-plus'],
-        ['label' => 'Reports', 'href' => 'admin/reports.php', 'icon' => 'bi-file-earmark-text'],
-        ['label' => 'Settings', 'href' => 'admin/settings.php', 'icon' => 'bi-gear'],
+        ['label' => 'Dashboard', 'href' => '../admin/dashboard.php', 'icon' => 'bi-speedometer2'],
+        ['label' => 'All Users', 'href' => '../admin/users.php', 'icon' => 'bi-people'],
+        ['label' => 'Instructors', 'href' => '../admin/instructors.php', 'icon' => 'bi-person-video3'],
+        ['label' => 'Students', 'href' => '../admin/students.php', 'icon' => 'bi-mortarboard'],
+        ['label' => 'Schedules', 'href' => '../admin/schedules.php', 'icon' => 'bi-calendar3'],
+        ['label' => 'Reports', 'href' => '../admin/reports.php', 'icon' => 'bi-file-earmark-text'],
     ];
 } elseif (in_array($role, ['admin', 'registrar'], true)) {
     $nav_items = [
-        ['label' => 'Dashboard', 'href' => 'registrar/dashboard.php', 'icon' => 'bi-speedometer2'],
-        ['label' => 'Instructors', 'href' => 'registrar/instructors.php', 'icon' => 'bi-person-video3'],
-        ['label' => 'Students', 'href' => 'registrar/students.php', 'icon' => 'bi-mortarboard'],
-        ['label' => 'Classes', 'href' => 'registrar/classes.php', 'icon' => 'bi-book'],
-        ['label' => 'Classrooms', 'href' => 'registrar/rooms.php', 'icon' => 'bi-door-open'],
-        ['label' => 'Subjects', 'href' => 'registrar/subjects.php', 'icon' => 'bi-journal-bookmark'],
-        ['label' => 'Courses', 'href' => 'registrar/courses.php', 'icon' => 'bi-journal-text'],
-        ['label' => 'Schedules', 'href' => 'registrar/schedules.php', 'icon' => 'bi-calendar3'],
-        ['label' => 'Enrollments', 'href' => 'registrar/manage_enrollments.php', 'icon' => 'bi-person-check'],
-        ['label' => 'Reports', 'href' => 'registrar/reports.php', 'icon' => 'bi-file-earmark-text'],
-        ['label' => 'Manage Account', 'href' => 'registrar/profile.php', 'icon' => 'bi-person-gear'],
+        ['label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'bi-speedometer2'],
+        ['label' => 'Instructors', 'href' => 'instructors.php', 'icon' => 'bi-person-video3'],
+        ['label' => 'Students', 'href' => 'students.php', 'icon' => 'bi-mortarboard'],
+        ['label' => 'Classes', 'href' => 'classes.php', 'icon' => 'bi-book'],
+        ['label' => 'Classrooms', 'href' => 'rooms.php', 'icon' => 'bi-door-open'],
+        ['label' => 'Subjects', 'href' => 'subjects.php', 'icon' => 'bi-journal-bookmark'],
+        ['label' => 'Courses', 'href' => 'courses.php', 'icon' => 'bi-journal-text'],
+        ['label' => 'Schedules', 'href' => 'schedules.php', 'icon' => 'bi-calendar3'],
+        ['label' => 'Enrollments', 'href' => 'manage_enrollments.php', 'icon' => 'bi-person-check'],
+        ['label' => 'Reports', 'href' => 'reports.php', 'icon' => 'bi-file-earmark-text'],
+        ['label' => 'Manage Account', 'href' => 'profile.php', 'icon' => 'bi-person-gear'],
     ];
 } elseif ($role === 'instructor') {
     $nav_items = [
-        ['label' => 'Dashboard', 'href' => 'instructor/dashboard.php', 'icon' => 'bi-speedometer2'],
-        ['label' => 'My Schedule', 'href' => 'instructor/my_schedule.php', 'icon' => 'bi-calendar3'],
-        ['label' => 'My Classes', 'href' => 'instructor/my_classes.php', 'icon' => 'bi-journal-text'],
-        ['label' => 'Update Profile', 'href' => 'instructor/profile.php', 'icon' => 'bi-person-gear'],
+        ['label' => 'Dashboard', 'href' => '../instructor/dashboard.php', 'icon' => 'bi-speedometer2'],
+        ['label' => 'My Schedule', 'href' => '../instructor/my_schedule.php', 'icon' => 'bi-calendar3'],
+        ['label' => 'My Classes', 'href' => '../instructor/my_classes.php', 'icon' => 'bi-journal-text'],
+        ['label' => 'Update Profile', 'href' => '../instructor/profile.php', 'icon' => 'bi-person-gear'],
     ];
 } elseif ($role === 'student') {
     $nav_items = [
-        ['label' => 'Dashboard', 'href' => 'student/dashboard.php', 'icon' => 'bi-speedometer2'],
-        ['label' => 'My Schedule', 'href' => 'student/my_schedule.php', 'icon' => 'bi-calendar3'],
-        ['label' => 'My Subjects', 'href' => 'student/my_subjects.php', 'icon' => 'bi-book'],
-        ['label' => 'Manage Account', 'href' => 'student/manage_account.php', 'icon' => 'bi-person-gear'],
+        ['label' => 'Dashboard', 'href' => '../student/dashboard.php', 'icon' => 'bi-speedometer2'],
+        ['label' => 'My Schedule', 'href' => '../student/my_schedule.php', 'icon' => 'bi-calendar3'],
+        ['label' => 'My Subjects', 'href' => '../student/my_subjects.php', 'icon' => 'bi-book'],
+        ['label' => 'Manage Account', 'href' => '../student/manage_account.php', 'icon' => 'bi-person-gear'],
     ];
 }
 
 $role_label = ucfirst(str_replace('_', ' ', $role));
-$last_activity_text = 'No activity yet';
-if (!empty($summary['last'])) {
-    $last_activity_text = (string)($summary['last']['timestamp'] ?? '');
-}
 
 function activity_page_status_class(string $event): string {
     if (strpos($event, 'login') === 0) {
@@ -131,7 +121,7 @@ function activity_page_label(string $event): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Activity - PCT Class Scheduling</title>
-    <link rel="icon" type="image/png" href="/PCTClassSchedulingSystem/pctlogo.png">
+    <link rel="icon" type="image/png" href="../pctlogo.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -178,7 +168,7 @@ function activity_page_label(string $event): string {
     <div class="min-h-screen lg:flex">
         <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-[290px] -translate-x-full border-r border-emerald-900/10 bg-emerald-950 text-emerald-50 shadow-2xl shadow-emerald-950/20 transition-transform duration-300 lg:translate-x-0">
             <div class="flex h-20 items-center gap-3 border-b border-white/10 px-5">
-                <img src="pctlogo.png" alt="PCT Logo" class="h-11 w-11 rounded-2xl bg-white/10 object-contain p-1">
+                <img src="../pctlogo.png" alt="PCT Logo" class="h-11 w-11 rounded-2xl bg-white/10 object-contain p-1">
                 <div class="min-w-0">
                     <div class="truncate text-sm font-semibold tracking-tight">PCT Class Scheduling</div>
                     <div class="truncate text-xs text-emerald-100/70"><?php echo htmlspecialchars($role_label); ?> Portal</div>
@@ -208,7 +198,7 @@ function activity_page_label(string $event): string {
             </div>
 
             <div class="absolute inset-x-0 bottom-0 border-t border-white/10 p-4">
-                <a href="auth/logout.php" class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/10 hover:text-white">
+                <a href="../auth/logout.php" class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/10 hover:text-white">
                     <i class="bi bi-box-arrow-right"></i>
                     <span>Logout</span>
                 </a>

@@ -30,6 +30,10 @@ if (!defined('APP_BASE')) {
     define('APP_BASE', detect_app_base_path());
 }
 
+if (date_default_timezone_get() !== 'Asia/Manila') {
+    date_default_timezone_set('Asia/Manila');
+}
+
 /**
  * Build an absolute app URL (path-only) under the detected base.
  * Example: app_url('auth/login.php') -> /PCTClassSchedulingSystem/auth/login.php

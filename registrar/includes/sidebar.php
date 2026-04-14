@@ -62,6 +62,9 @@ if (!isset($active_page)) {
             <a class="nav-link <?php echo $active_page === 'reports' ? 'active' : ''; ?>" href="reports.php">
                 <i class="bi bi-file-earmark-text"></i> Reports
             </a>
+            <a class="nav-link <?php echo $active_page === 'activity' ? 'active' : ''; ?>" href="activity.php">
+                <i class="bi bi-clock-history"></i> Activity
+            </a>
         </div>
         
         <div class="mt-auto p-3">

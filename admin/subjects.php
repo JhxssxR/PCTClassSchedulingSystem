@@ -680,6 +680,10 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                         <i class="bi bi-gear"></i>
                         <span class="text-sm font-medium">Settings</span>
                     </a>
+                    <a href="../activity.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30">
+                        <i class="bi bi-clock-history"></i>
+                        <span class="text-sm font-medium">Activity</span>
+                    </a>
                 </nav>
             </div>
 

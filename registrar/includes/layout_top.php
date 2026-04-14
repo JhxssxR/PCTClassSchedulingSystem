@@ -86,6 +86,13 @@ $__registrar_nav = [
         'icon' => 'bi-file-earmark-text',
     ],
     [
+        'key' => 'activity',
+        'label' => 'Activity',
+        'href_registrar' => 'activity.php',
+        'href_admin' => '../activity.php',
+        'icon' => 'bi-clock-history',
+    ],
+    [
         'key' => 'manage_account',
         'label' => 'Manage Account',
         'href_registrar' => 'profile.php',

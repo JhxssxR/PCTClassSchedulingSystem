@@ -441,6 +441,16 @@ try {
             $_SESSION['success'] = count($created_days) === 1
                 ? 'Class added successfully'
                 : ('Classes added successfully for ' . count($created_days) . ' days: ' . implode(', ', $created_days) . '.');
+            activity_log_write('schedule_added', (int)$_SESSION['user_id'], 'super_admin', [
+                'message' => count($created_days) === 1
+                    ? 'Added class on ' . implode(', ', $created_days)
+                    : 'Added classes on ' . implode(', ', $created_days),
+                'days' => $created_days,
+                'course_id' => $course_id,
+                'instructor_id' => $instructor_id,
+                'classroom_id' => $classroom_id,
+                'action' => 'add',
+            ]);
             break;
         }
 
@@ -534,6 +544,29 @@ try {
             $current_end_time = schedule_effective_end_time($current, $has_end_time, $has_duration_minutes, $default_duration);
             if ($current_start_time === '' || $current_end_time === '') {
                 throw new Exception('Current class time is invalid. Please contact the administrator.');
+            }
+
+            $change_parts = [];
+            if ((int)($current['course_id'] ?? 0) !== $course_id) {
+                $change_parts[] = 'changed course';
+            }
+            if ((int)($current['instructor_id'] ?? 0) !== $instructor_id) {
+                $change_parts[] = 'changed instructor';
+            }
+            if ((int)($current['classroom_id'] ?? 0) !== $classroom_id) {
+                $change_parts[] = 'changed classroom';
+            }
+            if ($current_start_time !== $start_time || $current_end_time !== $end_time) {
+                $change_parts[] = 'changed class time';
+            }
+            if ($has_subject_id && (int)($current['subject_id'] ?? 0) !== $subject_id) {
+                $change_parts[] = 'changed subject';
+            }
+            if (isset($cols['year_level']) && normalize_year_level($current['year_level'] ?? null) !== $year_level) {
+                $change_parts[] = 'changed year level';
+            }
+            if (isset($cols['status']) && (string)($current['status'] ?? 'active') !== $status) {
+                $change_parts[] = 'changed status';
             }
 
             $linked_rows = find_linked_schedule_rows(
@@ -1028,6 +1061,16 @@ try {
                 $msg .= ' (' . implode(' | ', $parts) . ')';
             }
             $_SESSION['success'] = $msg;
+            activity_log_write('schedule_updated', (int)$_SESSION['user_id'], 'super_admin', [
+                'message' => !empty($change_parts)
+                    ? 'Updated class: ' . implode(', ', $change_parts)
+                    : $msg,
+                'schedule_id' => $schedule_id,
+                'days_added' => $inserted_days,
+                'days_removed' => $removed_days,
+                'changes' => $change_parts,
+                'action' => 'edit',
+            ]);
             break;
         }
 
@@ -1065,6 +1108,11 @@ try {
             }
 
             $_SESSION['success'] = 'Class deleted successfully';
+            activity_log_write('schedule_deleted', (int)$_SESSION['user_id'], 'super_admin', [
+                'message' => 'Deleted class',
+                'schedule_id' => $schedule_id,
+                'action' => 'delete',
+            ]);
             break;
         }
 
@@ -1093,6 +1141,11 @@ try {
             }
 
             $_SESSION['success'] = 'Class deleted successfully (force delete)';
+            activity_log_write('schedule_deleted', (int)$_SESSION['user_id'], 'super_admin', [
+                'message' => 'Force deleted class',
+                'schedule_id' => $schedule_id,
+                'action' => 'force_delete',
+            ]);
             break;
         }
 

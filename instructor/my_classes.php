@@ -263,6 +263,7 @@ $avg_class_size = $total_classes > 0 ? (int) round($total_students / $total_clas
 
 $nav_items = [
     ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'bi-grid'],
+    ['key' => 'activity', 'label' => 'Activity', 'href' => '../activity.php', 'icon' => 'bi-clock-history'],
     ['key' => 'schedule', 'label' => 'My Schedule', 'href' => 'my_schedule.php', 'icon' => 'bi-calendar3'],
     ['key' => 'classes', 'label' => 'My Classes', 'href' => 'my_classes.php', 'icon' => 'bi-book'],
     ['key' => 'manage_account', 'label' => 'Manage Account', 'href' => 'profile.php', 'icon' => 'bi-person-gear'],

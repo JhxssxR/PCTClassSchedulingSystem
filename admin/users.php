@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../includes/activity_log.php';
 
 // Check if user is logged in and is an admin
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
@@ -195,6 +196,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     $stmt->execute($params);
                     $_SESSION['success'] = "User added successfully.";
+                    if ($role === 'student') {
+                        activity_log_write('student_added', (int)$_SESSION['user_id'], 'super_admin', [
+                            'message' => 'Added student ' . trim((string)($params['first_name'] ?? '') . ' ' . (string)($params['last_name'] ?? '')),
+                            'username' => (string)($params['username'] ?? ''),
+                            'email' => (string)($params['email'] ?? ''),
+                            'year_level' => $year_level,
+                            'action' => 'add',
+                        ]);
+                    }
                     break;
 
                 case 'edit':
@@ -673,6 +683,10 @@ function role_pill_classes(string $pill_role, string $active_role): string {
                     <a href="settings.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30">
                         <i class="bi bi-gear"></i>
                         <span class="text-sm font-medium">Settings</span>
+                    </a>
+                    <a href="../activity.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30">
+                        <i class="bi bi-clock-history"></i>
+                        <span class="text-sm font-medium">Activity</span>
                     </a>
                 </nav>
             </div>

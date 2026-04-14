@@ -78,10 +78,10 @@ $active_page = $active_page ?? '';
             <a class="nav-link <?php echo $active_page === 'excluded_days' ? 'active' : ''; ?>" href="../registrar/manage_excluded_days.php">
                 <i class="bi bi-calendar-x"></i> Excluded Days
             </a>
-            <a class="nav-link <?php echo $active_page === 'enrollments' ? 'active' : ''; ?>" href="../registrar/enrollments.php">
+            <a class="nav-link <?php echo $active_page === 'enrollments' ? 'active' : ''; ?>" href="../registrar/manage_enrollments.php">
                 <i class="bi bi-person-check"></i> Enrollments
             </a>
-            <a class="nav-link <?php echo $active_page === 'activity' ? 'active' : ''; ?>" href="../activity.php">
+            <a class="nav-link <?php echo $active_page === 'activity' ? 'active' : ''; ?>" href="../registrar/activity.php">
                 <i class="bi bi-clock-history"></i> Activity
             </a>
         <?php elseif ($role === 'instructor'): ?>

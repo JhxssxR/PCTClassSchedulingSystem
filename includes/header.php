@@ -100,9 +100,9 @@ if (!isset($_SESSION['user_id'])) {
                 <a href="../registrar/dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
                 <a href="../registrar/schedules.php" class="nav-link"><i class="bi bi-calendar3"></i> Manage Schedules</a>
                 <a href="../registrar/courses.php" class="nav-link"><i class="bi bi-book"></i> Manage Courses</a>
-                <a href="../registrar/enrollments.php" class="nav-link"><i class="bi bi-person-check"></i> Enrollments</a>
+                <a href="../registrar/manage_enrollments.php" class="nav-link"><i class="bi bi-person-check"></i> Enrollments</a>
                 <a href="../registrar/reports.php" class="nav-link"><i class="bi bi-file-text"></i> Reports</a>
-                <a href="../activity.php" class="nav-link"><i class="bi bi-clock-history"></i> Activity</a>
+                <a href="../registrar/activity.php" class="nav-link"><i class="bi bi-clock-history"></i> Activity</a>
             <?php elseif ($_SESSION['role'] === 'instructor'): ?>
                 <a href="../instructor/dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
                 <a href="../instructor/schedule.php" class="nav-link"><i class="bi bi-calendar3"></i> My Schedule</a>

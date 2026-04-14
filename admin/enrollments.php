@@ -405,6 +405,7 @@ function status_badge(string $status): array {
                 <a href="enrollments.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-900/40 text-emerald-50"><i class="bi bi-person-plus"></i><span class="text-sm font-medium">Enrollments</span></a>
                 <a href="reports.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-file-earmark-text"></i><span class="text-sm font-medium">Reports</span></a>
                 <a href="settings.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-gear"></i><span class="text-sm font-medium">Settings</span></a>
+                <a href="../activity.php" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-50/80 hover:text-emerald-50 hover:bg-emerald-900/30"><i class="bi bi-clock-history"></i><span class="text-sm font-medium">Activity</span></a>
             </nav>
         </div>
 
