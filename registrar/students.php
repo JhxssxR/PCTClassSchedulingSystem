@@ -8,6 +8,8 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
     exit();
 }
 
+$default_department = 'Information of Technology Education';
+
 // Handle add-student (registrar/admin only)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_student') {
     try {
@@ -137,13 +139,15 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
     header('Content-Disposition: attachment; filename="students_export.csv"');
 
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Student Name', 'Username', 'Email', 'Status', 'Enrollments', 'Courses']);
+    fputcsv($out, ['Student Name', 'Username', 'Email', 'Department', 'Status', 'Enrollments', 'Courses']);
     foreach ($students as $s) {
         $name = trim(($s['first_name'] ?? '') . ' ' . ($s['last_name'] ?? ''));
+        $department = trim((string)($s['department'] ?? ''));
         fputcsv($out, [
             $name,
             $s['username'] ?? '',
             $s['email'] ?? '',
+            $department !== '' ? $department : $default_department,
             $s['status'] ?? 'active',
             (int)($s['enrollment_count'] ?? 0),
             $s['enrolled_courses'] ?? ''
@@ -346,7 +350,7 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                         $course_codes = array_values(array_filter(array_map('trim', explode(',', $courses_str))));
                         $primary_course = !empty($course_codes) ? $course_codes[0] : '—';
                         $department = trim((string)($s['department'] ?? ''));
-                        $department_display = ($department !== '') ? $department : '—';
+                        $department_display = ($department !== '') ? $department : $default_department;
                         $search_blob = strtolower(trim($name . ' ' . $email . ' ' . $sid . ' ' . $primary_course . ' ' . $department_display));
                         $q = urlencode($email !== '' ? $email : $name);
                     ?>
