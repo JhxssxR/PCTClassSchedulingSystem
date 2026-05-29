@@ -5,30 +5,16 @@ services:
     plan: free
     envVars:
       - key: DB_HOST
-        fromDatabase:
-          name: pct-class-scheduling-db
-          property: host
+        value: buwyFvp2ejdwjgoxsbcw-mysql.services.clever-cloud.com
       - key: DB_PORT
-        fromDatabase:
-          name: pct-class-scheduling-db
-          property: port
+        value: "3306"
       - key: DB_NAME
-        value: class_scheduling
+        value: buwyFvp2ejdwjgoxsbcw
       - key: DB_USER
-        fromDatabase:
-          name: pct-class-scheduling-db
-          property: user
+        value: uux4xvgrm7xvbwe6a
       - key: DB_PASS
-        fromDatabase:
-          name: pct-class-scheduling-db
-          property: password
+        value: itYX61CE0bZ6ea4mUKE6
       - key: APP_URL
         value: $RENDER_EXTERNAL_URL
       - key: APP_ENV
         value: production
-
-databases:
-  - name: pct-class-scheduling-db
-    databaseName: class_scheduling
-    user: pct_user
-    plan: free
