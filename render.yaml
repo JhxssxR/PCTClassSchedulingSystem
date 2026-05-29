@@ -3,7 +3,6 @@ services:
     name: pct-class-scheduling
     runtime: docker
     plan: free
-    buildCommand: docker build -t pct-app .
     envVars:
       - key: DB_HOST
         fromDatabase:
