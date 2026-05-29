@@ -215,6 +215,7 @@ $tables = [
         max_students INT NOT NULL DEFAULT 30,
         semester VARCHAR(20) NOT NULL,
         academic_year VARCHAR(9) NOT NULL,
+        year_level VARCHAR(20),
         status ENUM('active', 'cancelled', 'completed') NOT NULL DEFAULT 'active',
         created_by INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -322,6 +323,13 @@ try {
 } catch (PDOException $e) {
     // Ignore if permissions/schema prevent alteration.
     error_log("Schema repair warning (schedules.day_of_week): " . $e->getMessage());
+}
+
+try {
+    $conn->exec("ALTER TABLE schedules ADD COLUMN year_level VARCHAR(20) AFTER academic_year");
+} catch (PDOException $e) {
+    // Ignore if column already exists
+    error_log("Schema repair warning (schedules.year_level): " . $e->getMessage());
 }
 
 // Repair any users with missing/blank roles.
