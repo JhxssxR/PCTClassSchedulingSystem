@@ -1,9 +1,10 @@
 services:
   - type: web
     name: pct-class-scheduling
-    runtime: php
+    runtime: docker
     plan: standard
-    buildCommand: bash ./build.sh
+    buildCommand: docker build -t pct-app .
+    startCommand: php -S 0.0.0.0:3000
     envVars:
       - key: DB_HOST
         fromDatabase:
