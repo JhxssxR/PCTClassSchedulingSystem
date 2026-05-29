@@ -107,6 +107,9 @@ define('DB_NAME', getenv('DB_NAME') ?: 'class_scheduling');
 define('DB_USER', getenv('DB_USER') ?: 'root');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 
+// Debug logging (remove in production)
+error_log("Database Config - Host: " . DB_HOST . ", Port: " . DB_PORT . ", DB: " . DB_NAME . ", User: " . DB_USER);
+
 // Function to test database connection
 function testDatabaseConnection() {
     global $conn;
@@ -120,7 +123,7 @@ function testDatabaseConnection() {
 }
 
 try {
-    // Create PDO connection with error mode
+    // Create PDO connection with error mode and timeout settings
     $conn = new PDO(
         "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
         DB_USER,
@@ -129,7 +132,9 @@ try {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
+            PDO::ATTR_TIMEOUT => 10,
+            PDO::MYSQL_ATTR_CONNECT_TIMEOUT => 10,
         ]
     );
 
@@ -138,9 +143,13 @@ try {
         throw new PDOException("Database connection test failed");
     }
     
+    error_log("Database connection successful!");
+    
 } catch(PDOException $e) {
-    // Log the error
+    // Log the error with full details
     error_log("Database Connection Error: " . $e->getMessage());
+    error_log("Error Code: " . $e->getCode());
+    error_log("Connection String: mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME);
     
     // Show user-friendly error
     die("Connection failed: Please contact the administrator. Error code: " . $e->getCode());
