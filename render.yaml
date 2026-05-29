@@ -4,7 +4,6 @@ services:
     runtime: docker
     plan: standard
     buildCommand: docker build -t pct-app .
-    startCommand: php -S 0.0.0.0:3000
     envVars:
       - key: DB_HOST
         fromDatabase:
