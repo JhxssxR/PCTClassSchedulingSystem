@@ -4,7 +4,6 @@ services:
     runtime: php
     plan: standard
     buildCommand: bash ./build.sh
-    startCommand: echo "Your app is live at $RENDER_EXTERNAL_URL"
     envVars:
       - key: DB_HOST
         fromDatabase:
@@ -31,9 +30,8 @@ services:
       - key: APP_ENV
         value: production
 
-  - type: mysql
+  - type: pserv
     name: pct-class-scheduling-db
     plan: free
     ipAllowList: []
     database: class_scheduling
-    initialDatabase: class_scheduling
