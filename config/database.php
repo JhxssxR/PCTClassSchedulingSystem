@@ -100,11 +100,15 @@ if (!file_exists(__DIR__ . '/../logs')) {
     mkdir(__DIR__ . '/../logs', 0777, true);
 }
 
-// Database configuration
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'class_scheduling');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// Database configuration - supports environment variables for Render deployment
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_PORT', getenv('DB_PORT') ?: '3306');
+define('DB_NAME', getenv('DB_NAME') ?: 'class_scheduling');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
+
+// Debug logging (remove in production)
+error_log("Database Config - Host: " . DB_HOST . ", Port: " . DB_PORT . ", DB: " . DB_NAME . ", User: " . DB_USER);
 
 // Function to test database connection
 function testDatabaseConnection() {
@@ -119,16 +123,16 @@ function testDatabaseConnection() {
 }
 
 try {
-    // Create PDO connection with error mode
+    // Create PDO connection with error mode and timeout settings
     $conn = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
         DB_USER,
         DB_PASS,
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
         ]
     );
 
@@ -137,9 +141,13 @@ try {
         throw new PDOException("Database connection test failed");
     }
     
+    error_log("Database connection successful!");
+    
 } catch(PDOException $e) {
-    // Log the error
+    // Log the error with full details
     error_log("Database Connection Error: " . $e->getMessage());
+    error_log("Error Code: " . $e->getCode());
+    error_log("Connection String: mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME);
     
     // Show user-friendly error
     die("Connection failed: Please contact the administrator. Error code: " . $e->getCode());
@@ -207,6 +215,7 @@ $tables = [
         max_students INT NOT NULL DEFAULT 30,
         semester VARCHAR(20) NOT NULL,
         academic_year VARCHAR(9) NOT NULL,
+        year_level VARCHAR(20),
         status ENUM('active', 'cancelled', 'completed') NOT NULL DEFAULT 'active',
         created_by INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -314,6 +323,13 @@ try {
 } catch (PDOException $e) {
     // Ignore if permissions/schema prevent alteration.
     error_log("Schema repair warning (schedules.day_of_week): " . $e->getMessage());
+}
+
+try {
+    $conn->exec("ALTER TABLE schedules ADD COLUMN year_level VARCHAR(20) AFTER academic_year");
+} catch (PDOException $e) {
+    // Ignore if column already exists
+    error_log("Schema repair warning (schedules.year_level): " . $e->getMessage());
 }
 
 // Repair any users with missing/blank roles.
