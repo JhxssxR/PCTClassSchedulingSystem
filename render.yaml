@@ -14,9 +14,7 @@ services:
           name: pct-class-scheduling-db
           property: port
       - key: DB_NAME
-        fromDatabase:
-          name: pct-class-scheduling-db
-          property: database
+        value: class_scheduling
       - key: DB_USER
         fromDatabase:
           name: pct-class-scheduling-db
@@ -30,8 +28,8 @@ services:
       - key: APP_ENV
         value: production
 
-  - type: pserv
-    name: pct-class-scheduling-db
+databases:
+  - name: pct-class-scheduling-db
+    databaseName: class_scheduling
+    user: pct_user
     plan: free
-    ipAllowList: []
-    database: class_scheduling
