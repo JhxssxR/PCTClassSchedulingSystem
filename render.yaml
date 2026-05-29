@@ -2,7 +2,7 @@ services:
   - type: web
     name: pct-class-scheduling
     runtime: docker
-    plan: standard
+    plan: free
     buildCommand: docker build -t pct-app .
     envVars:
       - key: DB_HOST
