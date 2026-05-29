@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: pct-class-scheduling
+    runtime: php
+    plan: standard
+    buildCommand: bash ./build.sh
+    startCommand: echo "Your app is live at $RENDER_EXTERNAL_URL"
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: pct-class-scheduling-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: pct-class-scheduling-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: pct-class-scheduling-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: pct-class-scheduling-db
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: pct-class-scheduling-db
+          property: password
+      - key: APP_URL
+        value: $RENDER_EXTERNAL_URL
+      - key: APP_ENV
+        value: production
+
+  - type: mysql
+    name: pct-class-scheduling-db
+    plan: free
+    ipAllowList: []
+    database: class_scheduling
+    initialDatabase: class_scheduling
