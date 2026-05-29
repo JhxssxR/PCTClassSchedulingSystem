@@ -29,8 +29,6 @@ try {
         getenv('DB_PASS') ?: '',
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_TIMEOUT => 10,
-            PDO::MYSQL_ATTR_CONNECT_TIMEOUT => 10,
         ]
     );
     
