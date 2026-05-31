@@ -10,69 +10,90 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 
 require_once __DIR__ . '/notifications_data.php';
 
-// Schedules schema compatibility (some DB versions don't store end_time)
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
-$schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $schedule_cols[$r['Field']] = true;
+// PERFORMANCE: Cache schedules for 5 minutes to avoid repeated expensive queries
+$cache_dir = sys_get_temp_dir();
+$cache_file = $cache_dir . '/pct_schedules_cache.json';
+$cache_ttl = 300; // 5 minutes
+$use_cache = true;
+
+// Try to load from cache if fresh
+$schedules = [];
+if (file_exists($cache_file) && (time() - filemtime($cache_file)) < $cache_ttl) {
+    $cached_data = @json_decode(file_get_contents($cache_file), true);
+    if ($cached_data !== null) {
+        $schedules = $cached_data;
+        $use_cache = false; // Mark that we used cache
+    }
 }
 
-if (isset($schedule_cols['end_time'])) {
-    $end_expr = 's.end_time';
-} elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
-} else {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
-}
+// If cache miss or stale, fetch from database
+if ($use_cache) {
+    // Schedules schema compatibility
+    $schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
+    $schedule_cols_stmt->execute();
+    $schedule_cols = [];
+    foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $schedule_cols[$r['Field']] = true;
+    }
 
-$start_date_expr = isset($schedule_cols['start_date'])
-    ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
-$end_date_expr = isset($schedule_cols['end_date'])
-    ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+    if (isset($schedule_cols['end_time'])) {
+        $end_expr = 's.end_time';
+    } elseif (isset($schedule_cols['duration_minutes'])) {
+        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+    } else {
+        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    }
 
-// Detect if subjects table exists (avoid fatal errors on older DBs)
-$subjects_table_exists = false;
-try {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-    $stmt->execute();
-    $subjects_table_exists = ((int)$stmt->fetchColumn() > 0);
-} catch (Throwable $e) {
+    $start_date_expr = isset($schedule_cols['start_date'])
+        ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
+        : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
+    $end_date_expr = isset($schedule_cols['end_date'])
+        ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
+        : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+
+    // Detect if subjects table exists
     $subjects_table_exists = false;
+    try {
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
+        $stmt->execute();
+        $subjects_table_exists = ((int)$stmt->fetchColumn() > 0);
+    } catch (Throwable $e) {
+        $subjects_table_exists = false;
+    }
+
+    $subject_code_expr = $subjects_table_exists
+        ? "COALESCE(NULLIF(TRIM(sub.subject_code), ''), NULLIF(TRIM(c.course_code), ''))"
+        : "NULLIF(TRIM(c.course_code), '')";
+    $subject_name_expr = $subjects_table_exists
+        ? "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))"
+        : "NULLIF(TRIM(c.course_name), '')";
+    $subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
+
+    $stmt = $conn->prepare("
+        SELECT s.*, 
+               {$subject_code_expr} as subject_code,
+               {$subject_name_expr} as subject_name,
+               CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
+               r.room_number,
+               COUNT(DISTINCT e.id) as enrollment_count,
+                TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time,
+                {$start_date_expr} as start_date,
+                {$end_date_expr} as end_date
+        FROM schedules s
+        {$subjects_join}
+        LEFT JOIN courses c ON (s.course_id IS NOT NULL AND s.course_id = c.id)
+        JOIN users i ON s.instructor_id = i.id
+        JOIN classrooms r ON s.classroom_id = r.id
+        LEFT JOIN enrollments e ON s.id = e.schedule_id AND e.status = 'enrolled'
+        GROUP BY s.id
+        ORDER BY s.day_of_week, s.start_time
+    ");
+    $stmt->execute();
+    $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Cache the results for next page load
+    @file_put_contents($cache_file, json_encode($schedules));
 }
-
-// Get all schedules with their subject (preferred) / course (legacy) and instructor information
-$subject_code_expr = $subjects_table_exists
-    ? "COALESCE(NULLIF(TRIM(sub.subject_code), ''), NULLIF(TRIM(c.course_code), ''))"
-    : "NULLIF(TRIM(c.course_code), '')";
-$subject_name_expr = $subjects_table_exists
-    ? "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))"
-    : "NULLIF(TRIM(c.course_name), '')";
-$subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
-
-$stmt = $conn->prepare("
-    SELECT s.*, 
-           {$subject_code_expr} as subject_code,
-           {$subject_name_expr} as subject_name,
-           CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
-           r.room_number,
-           COUNT(DISTINCT e.id) as enrollment_count,
-            TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time,
-            {$start_date_expr} as start_date,
-            {$end_date_expr} as end_date
-    FROM schedules s
-    {$subjects_join}
-    LEFT JOIN courses c ON (s.course_id IS NOT NULL AND s.course_id = c.id)
-    JOIN users i ON s.instructor_id = i.id
-    JOIN classrooms r ON s.classroom_id = r.id
-    LEFT JOIN enrollments e ON s.id = e.schedule_id AND e.status = 'enrolled'
-    GROUP BY s.id
-    ORDER BY s.day_of_week, s.start_time
-");
-$stmt->execute();
-$schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Final guard: collapse exact duplicate cards that may still exist in legacy data.
 $card_dedup_map = [];

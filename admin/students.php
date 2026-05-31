@@ -12,41 +12,71 @@ require_once __DIR__ . '/notifications_data.php';
 
 $default_department = 'Information of Technology Education';
 
-// Get all students with enrollment counts + enrolled course codes
-$stmt = $conn->prepare("
-    SELECT u.*,
-           COUNT(DISTINCT e.id) as enrollment_count,
-           GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') as enrolled_courses
-    FROM users u
-    LEFT JOIN enrollments e ON u.id = e.student_id AND e.status IN ('enrolled', 'approved')
-    LEFT JOIN schedules sch ON e.schedule_id = sch.id
-    LEFT JOIN courses c ON sch.course_id = c.id
-    WHERE u.role = 'student'
-    GROUP BY u.id
-    ORDER BY u.last_name, u.first_name
-");
-$stmt->execute();
-$students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// PERFORMANCE: Added caching for student list (5-minute TTL)
+$cache_key = 'pct_students_cache';
+$cache_dir = sys_get_temp_dir();
+$cache_file = $cache_dir . DIRECTORY_SEPARATOR . $cache_key . '.json';
+$cache_ttl = 300; // 5 minutes
 
-// Summary cards (top 4 courses by enrolled students)
-$course_summary = [];
-try {
-    $stmt = $conn->query("
-        SELECT
-            c.course_code,
-            COUNT(DISTINCT e.student_id) as students
-        FROM enrollments e
-        JOIN schedules sch ON e.schedule_id = sch.id
-        JOIN courses c ON sch.course_id = c.id
-        WHERE e.status IN ('enrolled', 'approved')
-        GROUP BY c.id
-        ORDER BY students DESC
-        LIMIT 4
+$students = null;
+if (file_exists($cache_file)) {
+    $cache_data = json_decode(file_get_contents($cache_file), true);
+    if ($cache_data && isset($cache_data['timestamp']) && (time() - $cache_data['timestamp']) < $cache_ttl) {
+        $students = $cache_data['data'];
+    }
+}
+
+if ($students === null) {
+    // Get all students with enrollment counts + enrolled course codes
+    $stmt = $conn->prepare("
+        SELECT u.*,
+               COUNT(DISTINCT e.id) as enrollment_count,
+               GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') as enrolled_courses
+        FROM users u
+        LEFT JOIN enrollments e ON u.id = e.student_id AND e.status IN ('enrolled', 'approved')
+        LEFT JOIN schedules sch ON e.schedule_id = sch.id
+        LEFT JOIN courses c ON sch.course_id = c.id
+        WHERE u.role = 'student'
+        GROUP BY u.id
+        ORDER BY u.last_name, u.first_name
     ");
-    $course_summary = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    error_log('Error fetching students course summary: ' . $e->getMessage());
-    $course_summary = [];
+    $stmt->execute();
+    $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    file_put_contents($cache_file, json_encode(['timestamp' => time(), 'data' => $students]));
+}
+
+// Summary cards (top 4 courses by enrolled students) - with caching
+$course_summary_cache_key = 'pct_students_course_summary_cache';
+$course_summary_cache_file = $cache_dir . DIRECTORY_SEPARATOR . $course_summary_cache_key . '.json';
+
+$course_summary = [];
+if (file_exists($course_summary_cache_file)) {
+    $cache_data = json_decode(file_get_contents($course_summary_cache_file), true);
+    if ($cache_data && isset($cache_data['timestamp']) && (time() - $cache_data['timestamp']) < $cache_ttl) {
+        $course_summary = $cache_data['data'];
+    }
+}
+
+if (empty($course_summary)) {
+    try {
+        $stmt = $conn->query("
+            SELECT
+                c.course_code,
+                COUNT(DISTINCT e.student_id) as students
+            FROM enrollments e
+            JOIN schedules sch ON e.schedule_id = sch.id
+            JOIN courses c ON sch.course_id = c.id
+            WHERE e.status IN ('enrolled', 'approved')
+            GROUP BY c.id
+            ORDER BY students DESC
+            LIMIT 4
+        ");
+        $course_summary = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        file_put_contents($course_summary_cache_file, json_encode(['timestamp' => time(), 'data' => $course_summary]));
+    } catch (PDOException $e) {
+        error_log('Error fetching students course summary: ' . $e->getMessage());
+        $course_summary = [];
+    }
 }
 
 // CSV export

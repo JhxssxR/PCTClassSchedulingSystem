@@ -73,14 +73,14 @@ $stmt = $conn->prepare("
         {$subject_fields_select},
         CONCAT(i.first_name, ' ', i.last_name) AS instructor_name,
         cr.room_number,
-        (SELECT COUNT(*) FROM enrollments e
-            WHERE e.schedule_id = s.id AND e.status IN ('approved', 'enrolled')
-        ) AS enrolled_students
+        COUNT(DISTINCT e.id) AS enrolled_students
     FROM schedules s
     JOIN courses c ON c.id = s.course_id
     {$subject_join_sql}
     JOIN users i ON i.id = s.instructor_id
     JOIN classrooms cr ON cr.id = s.classroom_id
+    LEFT JOIN enrollments e ON e.schedule_id = s.id AND e.status IN ('approved', 'enrolled')
+    GROUP BY s.id
     ORDER BY (s.status = 'active') DESC, {$order_by_name}, s.day_of_week, s.start_time
 ");
 $stmt->execute();
