@@ -24,13 +24,15 @@ $qs_prev = http_build_query(array_merge($_GET, ['page' => max(1, $page - 1)]));
 $qs_next = http_build_query(array_merge($_GET, ['page' => min($total_pages, $page + 1)]));
 
 // Get paginated courses with their schedule and enrollment counts
+// PERFORMANCE: Use JOINs instead of subqueries for faster execution
 $stmt = $conn->prepare("
     SELECT c.*,
-           (SELECT COUNT(*) FROM schedules WHERE course_id = c.id AND status = 'active') as schedule_count,
-           (SELECT COUNT(*) FROM enrollments e
-            JOIN schedules s ON e.schedule_id = s.id
-            WHERE s.course_id = c.id AND e.status IN ('approved', 'enrolled')) as enrollment_count
+           COUNT(DISTINCT s.id) as schedule_count,
+           COUNT(DISTINCT e.id) as enrollment_count
     FROM courses c
+    LEFT JOIN schedules s ON c.id = s.course_id AND s.status = 'active'
+    LEFT JOIN enrollments e ON s.id = e.schedule_id AND e.status IN ('approved', 'enrolled')
+    GROUP BY c.id
     ORDER BY c.course_code
     LIMIT :limit OFFSET :offset
 ");

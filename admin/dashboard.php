@@ -120,15 +120,31 @@ $recent_subject_name_expr = ($has_schedule_subject_id && $subjects_table_exists)
 
 // Get system statistics
 try {
-    $stats = [
-        'total_users' => (int)$conn->query("SELECT COUNT(*) FROM users")->fetchColumn(),
-        'students' => (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn(),
-        'instructors' => (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'instructor'")->fetchColumn(),
-        'active_classes' => admin_dashboard_count_grouped_active_classes($conn),
-        'total_enrollments' => (int)$conn->query("SELECT COUNT(*) FROM enrollments WHERE status IN ('enrolled', 'approved')")->fetchColumn(),
-        'enrolled_students' => (int)$conn->query("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE status IN ('enrolled', 'approved')")->fetchColumn(),
-        'courses' => (int)$conn->query("SELECT COUNT(*) FROM courses")->fetchColumn(),
-    ];
+    $cache_key = 'pct_dashboard_stats_cache';
+    $cache_dir = sys_get_temp_dir();
+    $cache_file = $cache_dir . DIRECTORY_SEPARATOR . $cache_key . '.json';
+    $cache_ttl = 300; // 5 minutes
+    
+    $stats = null;
+    if (file_exists($cache_file)) {
+        $cache_data = json_decode(file_get_contents($cache_file), true);
+        if ($cache_data && isset($cache_data['timestamp']) && (time() - $cache_data['timestamp']) < $cache_ttl) {
+            $stats = $cache_data['data'];
+        }
+    }
+    
+    if (!$stats) {
+        $stats = [
+            'total_users' => (int)$conn->query("SELECT COUNT(*) FROM users")->fetchColumn(),
+            'students' => (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn(),
+            'instructors' => (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'instructor'")->fetchColumn(),
+            'active_classes' => admin_dashboard_count_grouped_active_classes($conn),
+            'total_enrollments' => (int)$conn->query("SELECT COUNT(*) FROM enrollments WHERE status IN ('enrolled', 'approved')")->fetchColumn(),
+            'enrolled_students' => (int)$conn->query("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE status IN ('enrolled', 'approved')")->fetchColumn(),
+            'courses' => (int)$conn->query("SELECT COUNT(*) FROM courses")->fetchColumn(),
+        ];
+        file_put_contents($cache_file, json_encode(['timestamp' => time(), 'data' => $stats]));
+    }
 } catch (PDOException $e) {
     error_log('Error in admin dashboard: ' . $e->getMessage());
     $stats = ['total_users' => 0, 'students' => 0, 'instructors' => 0, 'active_classes' => 0, 'total_enrollments' => 0, 'enrolled_students' => 0, 'courses' => 0];
