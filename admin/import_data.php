@@ -23,24 +23,30 @@ if (empty($token) || empty($provided_token) || $provided_token !== $token) {
 echo "<pre style='font-family: monospace; white-space: pre-wrap;'>";
 echo "=== PostgreSQL Data Import ===\n\n";
 
-// Verify database engine
-if (!defined('DB_ENGINE') || DB_ENGINE !== 'pgsql') {
-    echo "✗ ERROR: Database is not configured for PostgreSQL\n";
-    echo "  Current engine: " . (defined('DB_ENGINE') ? DB_ENGINE : 'undefined') . "\n";
-    echo "  Please set DB_ENGINE=pgsql in environment variables\n";
-    die();
-}
-
-require_once __DIR__ . '/../config/database.php';
+// Direct PostgreSQL connection (bypass the config which might be MySQL)
+$pgHost = getenv('DB_HOST') ?: 'dpg-d8e5p9cm0tmc73ein590-a';
+$pgDatabase = getenv('DB_NAME') ?: 'pctclass';
+$pgUser = getenv('DB_USER') ?: 'pctclass_user';
+$pgPassword = getenv('DB_PASS') ?: 'QiNwKQRwPVpm3oziQbmYjACCvNdsDbBR';
+$pgPort = getenv('DB_PORT') ?: '5432';
 
 echo "[1/4] Database connection status:\n";
 try {
+    $dsn = "pgsql:host=$pgHost;port=$pgPort;dbname=$pgDatabase";
+    $conn = new PDO($dsn, $pgUser, $pgPassword, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_TIMEOUT => 30
+    ]);
+    
     $test = $conn->query("SELECT version()");
     $version = $test->fetch(PDO::FETCH_NUM)[0];
     echo "  ✓ Connected to PostgreSQL\n";
-    echo "  Version: " . substr($version, 0, 50) . "...\n\n";
+    echo "  Version: " . substr($version, 0, 50) . "...\n";
+    echo "  Host: $pgHost\n";
+    echo "  Port: $pgPort\n";
+    echo "  Database: $pgDatabase\n\n";
 } catch (Exception $e) {
-    die("  ✗ Not connected to PostgreSQL: " . $e->getMessage() . "\n");
+    die("  ✗ Connection failed: " . $e->getMessage() . "\n");
 }
 
 // Step 2: Read the converted SQL file from Downloads
