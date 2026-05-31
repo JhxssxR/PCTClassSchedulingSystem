@@ -100,11 +100,14 @@ if (!file_exists(__DIR__ . '/../logs')) {
     mkdir(__DIR__ . '/../logs', 0777, true);
 }
 
-// Database configuration
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'class_scheduling');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// Database configuration - Support both local development and Render PostgreSQL
+$db_engine = getenv('DB_ENGINE') ?: 'mysql';
+define('DB_ENGINE', $db_engine);
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'class_scheduling');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_PORT', getenv('DB_PORT') ?: ($db_engine === 'pgsql' ? 5432 : 3306));
 
 // Function to test database connection
 function testDatabaseConnection() {
@@ -119,25 +122,34 @@ function testDatabaseConnection() {
 }
 
 try {
-    // Create PDO connection with error mode
-    $conn = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        [
+    $db_engine = DB_ENGINE;
+    
+    if ($db_engine === 'pgsql') {
+        // PostgreSQL connection
+        $dsn = "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME;
+        $pdo_options = [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ];
+    } else {
+        // MySQL connection (default)
+        $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+        $pdo_options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
-        ]
-    );
+        ];
+    }
+    
+    $conn = new PDO($dsn, DB_USER, DB_PASS, $pdo_options);
 
     // Test the connection
     if (!testDatabaseConnection()) {
         throw new PDOException("Database connection test failed");
     }
-    
-} catch(PDOException $e) {
+    } catch(PDOException $e) {
     // Log the error
     error_log("Database Connection Error: " . $e->getMessage());
     
