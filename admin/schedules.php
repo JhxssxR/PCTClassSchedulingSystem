@@ -50,7 +50,7 @@ $subject_code_expr = $subjects_table_exists
 $subject_name_expr = $subjects_table_exists
     ? "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))"
     : "NULLIF(TRIM(c.course_name), '')";
-$subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.course_id IS NOT NULL AND s.course_id = sub.id)' : '';
+$subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
 
 $stmt = $conn->prepare("
     SELECT s.*, 
