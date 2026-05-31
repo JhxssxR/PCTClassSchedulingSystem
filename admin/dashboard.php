@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role
 }
 
 require_once __DIR__ . '/notifications_data.php';
+require_once __DIR__ . '/../includes/CacheHelper.php';
 
 function admin_dashboard_has_column(PDO $conn, string $table, string $column): bool {
     try {
@@ -120,20 +121,10 @@ $recent_subject_name_expr = ($has_schedule_subject_id && $subjects_table_exists)
 
 // Get system statistics
 try {
-    $cache_key = 'pct_dashboard_stats_cache';
-    $cache_dir = sys_get_temp_dir();
-    $cache_file = $cache_dir . DIRECTORY_SEPARATOR . $cache_key . '.json';
     $cache_ttl = 300; // 5 minutes
+    $stats = CacheHelper::get('dashboard_stats');
     
-    $stats = null;
-    if (file_exists($cache_file)) {
-        $cache_data = json_decode(file_get_contents($cache_file), true);
-        if ($cache_data && isset($cache_data['timestamp']) && (time() - $cache_data['timestamp']) < $cache_ttl) {
-            $stats = $cache_data['data'];
-        }
-    }
-    
-    if (!$stats) {
+    if ($stats === null) {
         $stats = [
             'total_users' => (int)$conn->query("SELECT COUNT(*) FROM users")->fetchColumn(),
             'students' => (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn(),
@@ -143,7 +134,7 @@ try {
             'enrolled_students' => (int)$conn->query("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE status IN ('enrolled', 'approved')")->fetchColumn(),
             'courses' => (int)$conn->query("SELECT COUNT(*) FROM courses")->fetchColumn(),
         ];
-        file_put_contents($cache_file, json_encode(['timestamp' => time(), 'data' => $stats]));
+        CacheHelper::set('dashboard_stats', $stats, $cache_ttl);
     }
 } catch (PDOException $e) {
     error_log('Error in admin dashboard: ' . $e->getMessage());

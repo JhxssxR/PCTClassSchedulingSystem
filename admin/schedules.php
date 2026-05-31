@@ -9,22 +9,12 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 }
 
 require_once __DIR__ . '/notifications_data.php';
+require_once __DIR__ . '/../includes/CacheHelper.php';
 
 // PERFORMANCE: Cache schedules for 5 minutes to avoid repeated expensive queries
-$cache_dir = sys_get_temp_dir();
-$cache_file = $cache_dir . '/pct_schedules_cache.json';
 $cache_ttl = 300; // 5 minutes
-$use_cache = true;
-
-// Try to load from cache if fresh
-$schedules = [];
-if (file_exists($cache_file) && (time() - filemtime($cache_file)) < $cache_ttl) {
-    $cached_data = @json_decode(file_get_contents($cache_file), true);
-    if ($cached_data !== null) {
-        $schedules = $cached_data;
-        $use_cache = false; // Mark that we used cache
-    }
-}
+$schedules = CacheHelper::get('schedules');
+$use_cache = ($schedules === null);
 
 // If cache miss or stale, fetch from database
 if ($use_cache) {
@@ -92,7 +82,7 @@ if ($use_cache) {
     $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Cache the results for next page load
-    @file_put_contents($cache_file, json_encode($schedules));
+    CacheHelper::set('schedules', $schedules, $cache_ttl);
 }
 
 // Final guard: collapse exact duplicate cards that may still exist in legacy data.

@@ -9,22 +9,14 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
 }
 
 require_once __DIR__ . '/notifications_data.php';
+require_once __DIR__ . '/../includes/CacheHelper.php';
 
 $default_department = 'Information of Technology Education';
 
 // PERFORMANCE: Added caching for student list (5-minute TTL)
-$cache_key = 'pct_students_cache';
-$cache_dir = sys_get_temp_dir();
-$cache_file = $cache_dir . DIRECTORY_SEPARATOR . $cache_key . '.json';
 $cache_ttl = 300; // 5 minutes
 
-$students = null;
-if (file_exists($cache_file)) {
-    $cache_data = json_decode(file_get_contents($cache_file), true);
-    if ($cache_data && isset($cache_data['timestamp']) && (time() - $cache_data['timestamp']) < $cache_ttl) {
-        $students = $cache_data['data'];
-    }
-}
+$students = CacheHelper::get('students');
 
 if ($students === null) {
     // Get all students with enrollment counts + enrolled course codes
@@ -42,22 +34,13 @@ if ($students === null) {
     ");
     $stmt->execute();
     $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    file_put_contents($cache_file, json_encode(['timestamp' => time(), 'data' => $students]));
+    CacheHelper::set('students', $students, $cache_ttl);
 }
 
 // Summary cards (top 4 courses by enrolled students) - with caching
-$course_summary_cache_key = 'pct_students_course_summary_cache';
-$course_summary_cache_file = $cache_dir . DIRECTORY_SEPARATOR . $course_summary_cache_key . '.json';
+$course_summary = CacheHelper::get('students_course_summary');
 
-$course_summary = [];
-if (file_exists($course_summary_cache_file)) {
-    $cache_data = json_decode(file_get_contents($course_summary_cache_file), true);
-    if ($cache_data && isset($cache_data['timestamp']) && (time() - $cache_data['timestamp']) < $cache_ttl) {
-        $course_summary = $cache_data['data'];
-    }
-}
-
-if (empty($course_summary)) {
+if ($course_summary === null) {
     try {
         $stmt = $conn->query("
             SELECT
@@ -72,7 +55,7 @@ if (empty($course_summary)) {
             LIMIT 4
         ");
         $course_summary = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        file_put_contents($course_summary_cache_file, json_encode(['timestamp' => time(), 'data' => $course_summary]));
+        CacheHelper::set('students_course_summary', $course_summary, $cache_ttl);
     } catch (PDOException $e) {
         error_log('Error fetching students course summary: ' . $e->getMessage());
         $course_summary = [];
