@@ -9,15 +9,13 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
 }
 
 require_once __DIR__ . '/notifications_data.php';
+require_once __DIR__ . '/../includes/CacheHelper.php';
 
 // Add search and filter functionality
 $search = isset($_GET['search']) ? $_GET['search'] : '';
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
 
 // PERFORMANCE: Added caching for instructor list (5-minute TTL)
-$cache_key = 'pct_instructors_cache';
-$cache_dir = sys_get_temp_dir();
-$cache_file = $cache_dir . DIRECTORY_SEPARATOR . $cache_key . '.json';
 $cache_ttl = 300; // 5 minutes
 
 // Main query (uses schedules; older versions referenced a non-existent `classes` table)
@@ -48,15 +46,7 @@ $stmt->execute();
 $instructors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get total counts for filters - use cache for these statistics
-$counts_cache_file = $cache_dir . DIRECTORY_SEPARATOR . 'pct_instructor_counts_cache.json';
-$instructor_counts = null;
-
-if (file_exists($counts_cache_file)) {
-    $cache_data = json_decode(file_get_contents($counts_cache_file), true);
-    if ($cache_data && isset($cache_data['timestamp']) && (time() - $cache_data['timestamp']) < $cache_ttl) {
-        $instructor_counts = $cache_data['data'];
-    }
-}
+$instructor_counts = CacheHelper::get('instructor_counts');
 
 if ($instructor_counts === null) {
     $total_instructors = $conn->query("SELECT COUNT(*) FROM users WHERE role = 'instructor'")->fetchColumn();
@@ -72,7 +62,7 @@ if ($instructor_counts === null) {
         'active' => $active_instructors,
         'inactive' => $inactive_instructors
     ];
-    file_put_contents($counts_cache_file, json_encode(['timestamp' => time(), 'data' => $instructor_counts]));
+    CacheHelper::set('instructor_counts', $instructor_counts, $cache_ttl);
 }
 
 $total_instructors = $instructor_counts['total'];
