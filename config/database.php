@@ -102,13 +102,14 @@ if (!file_exists(__DIR__ . '/../logs')) {
 
 // Database configuration - supports environment variables for Render deployment
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_PORT', getenv('DB_PORT') ?: '3306');
+define('DB_PORT', getenv('DB_PORT') ?: '5432');  // PostgreSQL default: 5432
 define('DB_NAME', getenv('DB_NAME') ?: 'class_scheduling');
-define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_USER', getenv('DB_USER') ?: 'postgres');
 define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_ENGINE', getenv('DB_ENGINE') ?: 'pgsql');  // 'mysql' or 'pgsql'
 
 // Debug logging (remove in production)
-error_log("Database Config - Host: " . DB_HOST . ", Port: " . DB_PORT . ", DB: " . DB_NAME . ", User: " . DB_USER);
+error_log("Database Config - Host: " . DB_HOST . ", Port: " . DB_PORT . ", DB: " . DB_NAME . ", User: " . DB_USER . ", Engine: " . DB_ENGINE);
 
 // Function to test database connection
 function testDatabaseConnection() {
@@ -124,17 +125,28 @@ function testDatabaseConnection() {
 
 try {
     // Create PDO connection with error mode and timeout settings
-    $conn = new PDO(
-        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        [
+    if (DB_ENGINE === 'pgsql') {
+        // PostgreSQL connection
+        $dsn = "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME;
+        $conn = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
-        ]
-    );
+        ]);
+    } else {
+        // MySQL connection (legacy)
+        $conn = new PDO(
+            "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+            DB_USER,
+            DB_PASS,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
+            ]
+        );
+    }
 
     // Test the connection
     if (!testDatabaseConnection()) {
@@ -147,7 +159,11 @@ try {
     // Log the error with full details
     error_log("Database Connection Error: " . $e->getMessage());
     error_log("Error Code: " . $e->getCode());
-    error_log("Connection String: mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME);
+    if (DB_ENGINE === 'pgsql') {
+        error_log("Connection String: pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME);
+    } else {
+        error_log("Connection String: mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME);
+    }
     
     // Show user-friendly error
     die("Connection failed: Please contact the administrator. Error code: " . $e->getCode());
