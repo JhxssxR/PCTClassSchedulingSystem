@@ -32,9 +32,13 @@ function schedule_end_expr(array $schedule_cols, string $alias = ''): string {
         return $p . 'end_time';
     }
     if (isset($schedule_cols['duration_minutes'])) {
-        return "ADDTIME({$p}start_time, SEC_TO_TIME({$p}duration_minutes * 60))";
+        return is_pgsql() 
+            ? "({$p}start_time + ({$p}duration_minutes || ' minutes')::interval)"
+            : "ADDTIME({$p}start_time, SEC_TO_TIME({$p}duration_minutes * 60))";
     }
-    return "ADDTIME({$p}start_time, SEC_TO_TIME(120 * 60))";
+    return is_pgsql()
+        ? "({$p}start_time + interval '120 minutes')"
+        : "ADDTIME({$p}start_time, SEC_TO_TIME(120 * 60))";
 }
 
 function fmt_time_range(?string $start, ?string $end): string {
@@ -212,6 +216,10 @@ $enrollment_from_sql = "
     {$where_sql}
 ";
 
+$time_format_expr_sched = is_pgsql() 
+    ? "TO_CHAR({$end_expr_sched}, 'HH24:MI:SS')" 
+    : "TIME_FORMAT({$end_expr_sched}, '%H:%i:%s')";
+
 $enrollment_select_cols = "
     SELECT e.*,
            CONCAT(u.first_name, ' ', u.last_name) as student_name,
@@ -222,7 +230,7 @@ $enrollment_select_cols = "
            r.room_number,
            sched.day_of_week,
            sched.start_time,
-           TIME_FORMAT({$end_expr_sched}, '%H:%i:%s') as end_time,
+           {$time_format_expr_sched} as end_time,
            {$display_date_expr} as display_date
 ";
 
@@ -272,6 +280,10 @@ $pagination_start = max(1, $page - 2);
 $pagination_end = min($total_pages, $page + 2);
 
 // Get all active schedules for the dropdown
+$time_format_expr_s = is_pgsql() 
+    ? "TO_CHAR({$end_expr_s}, 'HH24:MI:SS')" 
+    : "TIME_FORMAT({$end_expr_s}, '%H:%i:%s')";
+
 $stmt = $conn->prepare("
     SELECT s.id, 
               c.id as course_id,
@@ -288,7 +300,7 @@ $stmt = $conn->prepare("
            r.room_number,
            s.day_of_week,
            s.start_time,
-           TIME_FORMAT({$end_expr_s}, '%H:%i:%s') as end_time
+           {$time_format_expr_s} as end_time
     FROM schedules s
     JOIN courses c ON s.course_id = c.id
     {$subjects_join_s}
