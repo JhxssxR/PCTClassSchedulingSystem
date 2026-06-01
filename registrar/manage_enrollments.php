@@ -57,7 +57,7 @@ function enrollment_status_map(PDO $conn): array {
         }
     }
 
-    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'enrolled');
+    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
     $pending = isset($allowed['pending']) ? 'pending' : 'pending';
     $rejected = isset($allowed['rejected']) ? 'rejected' : 'rejected';
     $dropped = isset($allowed['dropped']) ? 'dropped' : 'dropped';
@@ -575,7 +575,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-1">Status</label>
                     <select id="edit_status_value" name="status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                        <option value="enrolled">Active</option>
+                        <option value="<?php echo htmlspecialchars($active_db_status); ?>">Active</option>
                         <?php if ($supports_pending): ?><option value="pending">Pending</option><?php endif; ?>
                         <?php if ($supports_dropped): ?><option value="dropped">Dropped</option><?php endif; ?>
                         <?php if ($supports_rejected): ?><option value="rejected">Rejected</option><?php endif; ?>
@@ -872,7 +872,7 @@ require_once __DIR__ . '/includes/layout_top.php';
         if (!idInput || !statusSelect) return;
 
         idInput.value = String(enrollmentId);
-        const normalized = currentStatus === 'active' ? 'enrolled' : currentStatus;
+        const normalized = currentStatus === 'active' ? '<?php echo htmlspecialchars($active_db_status); ?>' : currentStatus;
         const exists = Array.from(statusSelect.options).some(function (opt) {
             return opt.value === normalized;
         });

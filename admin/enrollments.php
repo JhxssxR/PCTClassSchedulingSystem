@@ -95,7 +95,7 @@ function enrollment_status_map(PDO $conn): array {
         }
     }
 
-    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'enrolled');
+    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
 
     return [
         'active' => $active,
@@ -752,7 +752,7 @@ function status_badge(string $status): array {
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-1">Status</label>
                     <select id="edit_status_value" name="status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
-                        <option value="enrolled">Active</option>
+                        <option value="<?php echo htmlspecialchars($active_db_status); ?>">Active</option>
                         <?php if ($supports_pending): ?><option value="pending">Pending</option><?php endif; ?>
                         <?php if ($supports_dropped): ?><option value="dropped">Dropped</option><?php endif; ?>
                         <?php if ($supports_rejected): ?><option value="rejected">Rejected</option><?php endif; ?>
@@ -1132,7 +1132,7 @@ function status_badge(string $status): array {
         if (!idInput || !statusSelect) return;
 
         idInput.value = String(enrollmentId);
-        const normalized = currentStatus === 'active' ? 'enrolled' : currentStatus;
+        const normalized = currentStatus === 'active' ? '<?php echo htmlspecialchars($active_db_status); ?>' : currentStatus;
         const exists = Array.from(statusSelect.options).some(function (opt) {
             return opt.value === normalized;
         });

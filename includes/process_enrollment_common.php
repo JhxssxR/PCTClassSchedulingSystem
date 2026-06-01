@@ -52,7 +52,7 @@ function enrollment_status_map_common(PDO $conn): array {
         }
     }
 
-    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'pending');
+    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
 
     return [
         'active' => $active,

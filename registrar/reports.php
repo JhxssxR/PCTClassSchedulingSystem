@@ -31,7 +31,7 @@ function reg_reports_enrollment_status_map(PDO $conn): array {
         }
     }
 
-    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'enrolled');
+    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
     return [
         'active' => $active,
         'pending' => 'pending',
