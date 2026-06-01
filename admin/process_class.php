@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 
 // Check if user is logged in and is an admin
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? null) !== 'super_admin') {
