@@ -141,9 +141,9 @@ function student_schedule_end_expr(array $schedule_cols, string $alias): string 
         return $alias . '.end_time';
     }
     if (isset($schedule_cols['duration_minutes'])) {
-        return "ADDTIME({$alias}.start_time, SEC_TO_TIME(COALESCE({$alias}.duration_minutes, 120) * 60))";
+        return pgsql_addtime_expr("{$alias}.start_time", "COALESCE({$alias}.duration_minutes, 120)");
     }
-    return "ADDTIME({$alias}.start_time, SEC_TO_TIME(120 * 60))";
+    return pgsql_addtime_expr("{$alias}.start_time", "120");
 }
 
 function student_class_duration(string $start_date, string $end_date, string $start_time, string $end_time): string {

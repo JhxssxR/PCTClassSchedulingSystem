@@ -108,9 +108,9 @@ try {
     if ($has_end_time) {
         $end_expr = 's.end_time';
     } elseif ($has_duration_minutes) {
-        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
+        $end_expr = pgsql_addtime_expr('s.start_time', 'COALESCE(s.duration_minutes, 120)');
     } else {
-        $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+        $end_expr = pgsql_addtime_expr('s.start_time', '120');
     }
 
     $units_expr = $has_units ? 'COALESCE(c.units, 3)' : '3';

@@ -72,18 +72,18 @@ try {
 
     $notif_has_event_ts = count($enroll_ts_candidates) > 0;
 
-    $schedule_end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    $schedule_end_expr = pgsql_addtime_expr('s.start_time', '120');
     if (student_notif_has_column($conn, 'schedules', 'end_time')) {
         $schedule_end_expr = 's.end_time';
     } elseif (student_notif_has_column($conn, 'schedules', 'duration_minutes')) {
-        $schedule_end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
+        $schedule_end_expr = pgsql_addtime_expr('s.start_time', 'COALESCE(s.duration_minutes, 120)');
     }
 
-    $linked_schedule_end_expr = 'ADDTIME(se.start_time, SEC_TO_TIME(120 * 60))';
+    $linked_schedule_end_expr = pgsql_addtime_expr('se.start_time', '120');
     if (student_notif_has_column($conn, 'schedules', 'end_time')) {
         $linked_schedule_end_expr = 'se.end_time';
     } elseif (student_notif_has_column($conn, 'schedules', 'duration_minutes')) {
-        $linked_schedule_end_expr = 'ADDTIME(se.start_time, SEC_TO_TIME(COALESCE(se.duration_minutes, 120) * 60))';
+        $linked_schedule_end_expr = pgsql_addtime_expr('se.start_time', 'COALESCE(se.duration_minutes, 120)');
     }
 
     $schedule_ts_candidates = [];
