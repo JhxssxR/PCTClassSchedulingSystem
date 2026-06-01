@@ -153,7 +153,11 @@ try {
     // Log the error
     error_log("Database Connection Error: " . $e->getMessage());
     
-    // Show user-friendly error
+    // Show detailed error for debugging
+    $error_msg = "Connection failed: " . $e->getMessage();
+    if (getenv('APP_DEBUG') === 'true') {
+        die($error_msg . " | Engine: " . DB_ENGINE . " | Host: " . DB_HOST . " | User: " . DB_USER);
+    }
     die("Connection failed: Please contact the administrator. Error code: " . $e->getCode());
 }
 
