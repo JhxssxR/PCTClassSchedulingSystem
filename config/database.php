@@ -4,6 +4,29 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 require_once __DIR__ . '/app.php';
+require_once __DIR__ . '/database-compatibility.php';
+
+// Database Compatibility Helpers
+// These functions help bridge MySQL and PostgreSQL differences
+global $_db_engine;
+$_db_engine = getenv('DB_ENGINE') ?: 'mysql';
+
+// Helper function to check database type
+function is_pgsql() {
+    global $_db_engine;
+    return $_db_engine === 'pgsql';
+}
+
+// Helper function to get current database name for PostgreSQL
+function get_current_database_pgsql($conn) {
+    try {
+        $stmt = $conn->query("SELECT current_database()");
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $result['current_database'] ?? null;
+    } catch (Exception $e) {
+        return null;
+    }
+}
 
 /**
  * Inject global responsive assets into HTML responses.
