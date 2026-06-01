@@ -13,16 +13,14 @@ require_once __DIR__ . '/notifications_data.php';
 $initial_search = trim((string)($_GET['search'] ?? ''));
 
 // Subjects table may not exist on older DBs
-$subjects_table_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-$subjects_table_exists_stmt->execute();
-$subjects_table_exists = ((int)$subjects_table_exists_stmt->fetchColumn() > 0);
+$subjects_table_exists = table_exists($conn, 'subjects');
 
 // Schedules schema compatibility (some DB versions don't store end_time)
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
+$schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $schedule_cols[$r['Field']] = true;
+foreach ($schedule_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $schedule_cols[$col_name] = true;
 }
 
 if (isset($schedule_cols['end_time'])) {
