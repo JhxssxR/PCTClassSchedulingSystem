@@ -31,7 +31,7 @@ $settings_array = [
 $settings_missing = false;
 if (table_exists($conn, 'settings')) {
     try {
-        $stmt = $conn->prepare('SELECT `key`, `value` FROM settings');
+        $stmt = $conn->prepare('SELECT ' . (is_pgsql() ? '"key", "value"' : '`key`, `value`') . ' FROM settings');
         $stmt->execute();
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $setting) {
             if (isset($setting['key'])) {

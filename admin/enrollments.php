@@ -145,7 +145,7 @@ $class_name_expr = $subjects_table_exists ? 'COALESCE(sub.subject_name, c.course
 $subjects_join_s = $subjects_table_exists ? 'LEFT JOIN subjects sub_s ON (s.subject_id IS NOT NULL AND s.subject_id = sub_s.id)' : '';
 $subject_name_expr_s = $subjects_table_exists ? 'COALESCE(sub_s.subject_name, c.course_name)' : 'c.course_name';
 $subject_id_expr_s = isset($schedule_cols['subject_id']) ? 'COALESCE(s.subject_id, 0)' : '0';
-$year_level_expr_s = isset($schedule_cols['year_level']) ? "COALESCE(s.year_level, '')" : "''";
+$year_level_expr_s = isset($schedule_cols['year_level']) ? (is_pgsql() ? "COALESCE(CAST(s.year_level AS TEXT), '')" : "COALESCE(s.year_level, '')") : "''";
 
 $where = [];
 $params = [];
