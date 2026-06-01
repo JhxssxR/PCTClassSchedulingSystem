@@ -11,9 +11,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 $initial_search = trim((string)($_GET['search'] ?? ''));
 
 // Subjects table may not exist on older DBs
-$subjects_table_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-$subjects_table_exists_stmt->execute();
-$subjects_table_exists = ((int)$subjects_table_exists_stmt->fetchColumn() > 0);
+$subjects_table_exists = table_exists($conn, 'subjects');
 
 function __pct_enum_values_from_type($type) {
     $type = (string)$type;

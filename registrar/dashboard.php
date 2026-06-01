@@ -130,9 +130,7 @@ if (registrar_has_column($conn, 'enrollments', 'enrolled_at')) {
 $has_schedule_subject_id = registrar_has_column($conn, 'schedules', 'subject_id');
 $subjects_table_exists = false;
 try {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-    $stmt->execute();
-    $subjects_table_exists = ((int)$stmt->fetchColumn() > 0);
+        $subjects_table_exists = table_exists($conn, 'subjects');
 } catch (Throwable $e) {
     $subjects_table_exists = false;
 }

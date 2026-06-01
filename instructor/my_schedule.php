@@ -97,9 +97,7 @@ $end_date_expr = isset($schedule_cols['end_date'])
 
 $subjects_table_exists = false;
 try {
-    $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-    $subjects_exists_stmt->execute();
-    $subjects_table_exists = ((int) $subjects_exists_stmt->fetchColumn() > 0);
+    $subjects_table_exists = table_exists($conn, 'subjects');
 } catch (Throwable $e) {
     $subjects_table_exists = false;
 }

@@ -70,9 +70,7 @@ $end_expr = pgsql_time_format($end_expr_inner);
 
 $subjects_table_exists = false;
 try {
-    $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-    $subjects_exists_stmt->execute();
-    $subjects_table_exists = ((int) $subjects_exists_stmt->fetchColumn() > 0);
+    $subjects_table_exists = table_exists($conn, 'subjects');
 } catch (Throwable $e) {
     $subjects_table_exists = false;
 }
@@ -129,7 +127,7 @@ $stmt = $conn->prepare("
     LEFT JOIN enrollments e ON s.id = e.schedule_id
     WHERE s.instructor_id = :instructor_id
       AND s.status = 'active'
-    GROUP BY s.id, c.course_code, subj.subject_code, c.course_name, subj.subject_name, cl.room_number
+    GROUP BY s.id, c.course_code, c.course_name, cl.room_number
     ORDER BY course_code, {$order_by_day}, s.start_time
 ");
 $stmt->execute(['instructor_id' => $instructor_id]);

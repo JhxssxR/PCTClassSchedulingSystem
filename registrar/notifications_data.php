@@ -238,12 +238,13 @@ try {
             }
         }
 
-        $subjects_table_exists = false;
-        $subjects_exists_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-        $subjects_exists_stmt->execute();
-        $subjects_table_exists = ((int)$subjects_exists_stmt->fetchColumn() > 0);
+        try {
+            $subjects_enabled = table_exists($conn, 'subjects');
+        } catch (Throwable $e) {
+            $subjects_enabled = false;
+        }
 
-        if ($schedules_has_subject_id && $subjects_table_exists) {
+        if ($schedules_has_subject_id && $subjects_enabled) {
             $enrollment_subject_join_sql = 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)';
             $enrollment_subject_code_expr = "COALESCE(NULLIF(TRIM(sub.subject_code), ''), NULLIF(TRIM(c.course_code), ''))";
             $enrollment_subject_name_expr = "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))";
