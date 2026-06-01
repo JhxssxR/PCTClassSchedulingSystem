@@ -10,92 +10,161 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 
 $default_department = 'Information of Technology Education';
 
-// Handle add-student (registrar/admin only)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_student') {
-    try {
-        $password_raw = (string)($_POST['password'] ?? '');
-        if ($password_raw === '') {
-            throw new Exception('Password is required.');
-        }
+// ─── Handle POST actions ───────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $post_action = $_POST['action'] ?? '';
 
-        $password = password_hash($password_raw, PASSWORD_DEFAULT);
-        $now = date('Y-m-d H:i:s');
-
-        // Detect optional columns for compatibility
-        $user_cols = [];
+    // --- DELETE ---
+    if ($post_action === 'delete_student') {
         try {
-            foreach (get_table_columns($conn, 'users') as $r) {
-                $col_name = $r['Field'] ?? $r['column_name'] ?? '';
-                if ($col_name !== '') {
-                    $user_cols[$col_name] = true;
-                }
+            $del_id = (int)($_POST['student_id'] ?? 0);
+            if ($del_id > 0) {
+                try { $conn->beginTransaction(); } catch (Throwable $e) {}
+                $stmt = $conn->prepare("DELETE FROM enrollments WHERE student_id = ?");
+                $stmt->execute([$del_id]);
+                $stmt = $conn->prepare("DELETE FROM users WHERE id = ? AND role = 'student'");
+                $stmt->execute([$del_id]);
+                try { $conn->commit(); } catch (Throwable $e) {}
+                $_SESSION['success'] = 'Student deleted successfully.';
             }
         } catch (Throwable $e) {
-            $user_cols = [];
+            try { $conn->rollBack(); } catch (Throwable $re) {}
+            $_SESSION['error'] = 'Failed to delete student: ' . $e->getMessage();
         }
-
-        $insert_cols = ['username', 'password', 'email', 'role', 'first_name', 'last_name'];
-        $insert_vals = [':username', ':password', ':email', ':role', ':first_name', ':last_name'];
-        $params = [
-            'username' => trim((string)($_POST['username'] ?? '')),
-            'password' => $password,
-            'email' => trim((string)($_POST['email'] ?? '')),
-            'role' => 'student',
-            'first_name' => trim((string)($_POST['first_name'] ?? '')),
-            'last_name' => trim((string)($_POST['last_name'] ?? '')),
-        ];
-
-        if (isset($user_cols['status'])) {
-            $insert_cols[] = 'status';
-            $insert_vals[] = ':status';
-            $params['status'] = 'active';
-        }
-
-        if (isset($user_cols['created_at'])) {
-            $insert_cols[] = 'created_at';
-            $insert_vals[] = ':created_at';
-            $params['created_at'] = $now;
-        }
-
-        if (isset($user_cols['updated_at'])) {
-            $insert_cols[] = 'updated_at';
-            $insert_vals[] = ':updated_at';
-            $params['updated_at'] = $now;
-        }
-
-        $stmt = $conn->prepare(
-            'INSERT INTO users (' . implode(', ', $insert_cols) . ') VALUES (' . implode(', ', $insert_vals) . ')'
-        );
-        $stmt->execute($params);
-
-        $_SESSION['success'] = 'Student added successfully.';
-    } catch (PDOException $e) {
-        $friendly = null;
-        $sqlState = $e->getCode();
-        $driverCode = null;
-        $driverMsg = null;
-        if (is_array($e->errorInfo ?? null)) {
-            $driverCode = $e->errorInfo[1] ?? null;
-            $driverMsg = $e->errorInfo[2] ?? null;
-        }
-
-        if ($sqlState === '23000' || $driverCode === 1062) {
-            $friendly = 'Username or email already exists.';
-        } elseif ($driverCode === 1364 && is_string($driverMsg) && preg_match("/Field '([^']+)' doesn't have a default value/i", $driverMsg, $m)) {
-            $friendly = 'Database schema requires a value for: ' . $m[1] . '.';
-        }
-
-        error_log('Registrar add student error: ' . $e->getMessage());
-        $_SESSION['error'] = $friendly ?: ('Database error: ' . $e->getMessage());
-    } catch (Exception $e) {
-        $_SESSION['error'] = $e->getMessage();
+        header('Location: students.php');
+        exit();
     }
 
-    header('Location: students.php');
-    exit();
+    // --- EDIT ---
+    if ($post_action === 'edit_student') {
+        try {
+            $student_id = (int)($_POST['student_id'] ?? 0);
+            if ($student_id <= 0) throw new Exception('Invalid student ID.');
+            $password_raw = trim((string)($_POST['password'] ?? ''));
+            $first_name   = trim((string)($_POST['first_name'] ?? ''));
+            $last_name    = trim((string)($_POST['last_name'] ?? ''));
+            $username     = trim((string)($_POST['username'] ?? ''));
+            $email        = trim((string)($_POST['email'] ?? ''));
+
+            if ($first_name === '' || $last_name === '' || $username === '' || $email === '') {
+                throw new Exception('Please fill in all required fields.');
+            }
+
+            // Duplicate username check
+            $stmt = $conn->prepare('SELECT id FROM users WHERE username = ? AND id != ?');
+            $stmt->execute([$username, $student_id]);
+            if ($stmt->fetchColumn()) throw new Exception('Username already exists.');
+
+            // Duplicate email check
+            $stmt = $conn->prepare('SELECT id FROM users WHERE email = ? AND id != ?');
+            $stmt->execute([$email, $student_id]);
+            if ($stmt->fetchColumn()) throw new Exception('Email already exists.');
+
+            $set_parts  = ['first_name = ?', 'last_name = ?', 'username = ?', 'email = ?'];
+            $params_upd = [$first_name, $last_name, $username, $email];
+            if ($password_raw !== '') {
+                $set_parts[]  = 'password = ?';
+                $params_upd[] = password_hash($password_raw, PASSWORD_DEFAULT);
+            }
+            $params_upd[] = $student_id;
+
+            $stmt = $conn->prepare('UPDATE users SET ' . implode(', ', $set_parts) . " WHERE id = ? AND role = 'student'");
+            $stmt->execute($params_upd);
+            $_SESSION['success'] = 'Student updated successfully.';
+        } catch (Throwable $e) {
+            $_SESSION['error'] = 'Failed to update student: ' . $e->getMessage();
+        }
+        header('Location: students.php');
+        exit();
+    }
+
+    // --- ADD ---
+    if ($post_action === 'add_student') {
+        try {
+            $password_raw = (string)($_POST['password'] ?? '');
+            if ($password_raw === '') {
+                throw new Exception('Password is required.');
+            }
+
+            $password = password_hash($password_raw, PASSWORD_DEFAULT);
+            $now = date('Y-m-d H:i:s');
+
+            // Detect optional columns for compatibility
+            $user_cols = [];
+            try {
+                foreach (get_table_columns($conn, 'users') as $r) {
+                    $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+                    if ($col_name !== '') {
+                        $user_cols[$col_name] = true;
+                    }
+                }
+            } catch (Throwable $e) {
+                $user_cols = [];
+            }
+
+            $insert_cols = ['username', 'password', 'email', 'role', 'first_name', 'last_name'];
+            $insert_vals = [':username', ':password', ':email', ':role', ':first_name', ':last_name'];
+            $params = [
+                'username'   => trim((string)($_POST['username'] ?? '')),
+                'password'   => $password,
+                'email'      => trim((string)($_POST['email'] ?? '')),
+                'role'       => 'student',
+                'first_name' => trim((string)($_POST['first_name'] ?? '')),
+                'last_name'  => trim((string)($_POST['last_name'] ?? '')),
+            ];
+
+            if (isset($user_cols['status'])) {
+                $insert_cols[] = 'status';
+                $insert_vals[] = ':status';
+                $params['status'] = 'active';
+            }
+
+            if (isset($user_cols['created_at'])) {
+                $insert_cols[] = 'created_at';
+                $insert_vals[] = ':created_at';
+                $params['created_at'] = $now;
+            }
+
+            if (isset($user_cols['updated_at'])) {
+                $insert_cols[] = 'updated_at';
+                $insert_vals[] = ':updated_at';
+                $params['updated_at'] = $now;
+            }
+
+            $stmt = $conn->prepare(
+                'INSERT INTO users (' . implode(', ', $insert_cols) . ') VALUES (' . implode(', ', $insert_vals) . ')'
+            );
+            $stmt->execute($params);
+
+            $_SESSION['success'] = 'Student added successfully.';
+        } catch (PDOException $e) {
+            $friendly    = null;
+            $sqlState    = $e->getCode();
+            $driverCode  = null;
+            $driverMsg   = null;
+            if (is_array($e->errorInfo ?? null)) {
+                $driverCode = $e->errorInfo[1] ?? null;
+                $driverMsg  = $e->errorInfo[2] ?? null;
+            }
+
+            if ($sqlState === '23000' || $driverCode === 1062) {
+                $friendly = 'Username or email already exists.';
+            } elseif ($driverCode === 1364 && is_string($driverMsg) && preg_match("/Field '([^']+)' doesn't have a default value/i", $driverMsg, $m)) {
+                $friendly = 'Database schema requires a value for: ' . $m[1] . '.';
+            }
+
+            error_log('Registrar add student error: ' . $e->getMessage());
+            $_SESSION['error'] = $friendly ?: ('Database error: ' . $e->getMessage());
+        } catch (Exception $e) {
+            $_SESSION['error'] = $e->getMessage();
+        }
+
+        header('Location: students.php');
+        exit();
+    }
 }
 
-// Get all students with enrollment counts + enrolled course codes
+
 $stmt = $conn->prepare("
     SELECT u.*,
            COUNT(DISTINCT e.id) as enrollment_count,
@@ -384,15 +453,15 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                         </td>
                         <td class="px-4 py-3">
                             <div class="flex items-center justify-end gap-2">
-                                <a href="../admin/enrollments.php?student_id=<?php echo (int)$s['id']; ?>" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="View enrollments" aria-label="View">
+                                <a href="manage_enrollments.php?q=<?php echo urlencode($s['student_id'] ?? $s['email'] ?? $s['username'] ?? ''); ?>" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="View Enrollments" aria-label="View">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="../admin/users.php?q=<?php echo htmlspecialchars($q); ?>" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="Edit in All Users" aria-label="Edit">
+                                <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="Edit Student" aria-label="Edit" onclick='editStudent(<?php echo htmlspecialchars(json_encode($s), ENT_QUOTES, "UTF-8"); ?>)'>
                                     <i class="bi bi-pencil"></i>
-                                </a>
-                                <a href="../admin/users.php?q=<?php echo htmlspecialchars($q); ?>" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="Delete in All Users" aria-label="Delete">
+                                </button>
+                                <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="Delete Student" aria-label="Delete" onclick="deleteStudent(<?php echo (int)$s['id']; ?>)">
                                     <i class="bi bi-trash"></i>
-                                </a>
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -459,6 +528,21 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
         }
 
         document.getElementById('addStudentBtn')?.addEventListener('click', function () {
+            // Reset to Add mode
+            const form = document.querySelector('#addStudentModal form');
+            if (form) {
+                form.reset();
+                const hiddenAction = form.querySelector('input[name="action"]');
+                if (hiddenAction) hiddenAction.value = 'add_student';
+                const hiddenId = document.getElementById('edit_student_id');
+                if (hiddenId) hiddenId.remove();
+            }
+            const titleEl = document.querySelector('#addStudentModal .text-base');
+            if (titleEl) titleEl.textContent = 'Add Student';
+            const subtitleEl = document.querySelector('#addStudentModal .text-sm.text-slate-600');
+            if (subtitleEl) subtitleEl.textContent = 'Create a new student account.';
+            const pwInput = document.querySelector('#addStudentModal input[name="password"]');
+            if (pwInput) { pwInput.required = true; pwInput.placeholder = ''; }
             openModal('addStudentModal');
         });
 
@@ -468,7 +552,73 @@ $filter_courses = array_map(function ($r) { return $r['course_code']; }, $course
                 if (target) closeModal(target);
             });
         });
+
+        // --- Edit Student ---
+        window.editStudent = function (s) {
+            const form = document.querySelector('#addStudentModal form');
+            if (!form) return;
+
+            // Switch action to edit
+            let hiddenAction = form.querySelector('input[name="action"]');
+            if (hiddenAction) {
+                hiddenAction.value = 'edit_student';
+            }
+
+            // Inject or update hidden student_id
+            let hiddenId = document.getElementById('edit_student_id');
+            if (!hiddenId) {
+                hiddenId = document.createElement('input');
+                hiddenId.type = 'hidden';
+                hiddenId.name = 'student_id';
+                hiddenId.id = 'edit_student_id';
+                form.appendChild(hiddenId);
+            }
+            hiddenId.value = s.id;
+
+            // Fill fields
+            const fn = form.querySelector('input[name="first_name"]');
+            const ln = form.querySelector('input[name="last_name"]');
+            const un = form.querySelector('input[name="username"]');
+            const em = form.querySelector('input[name="email"]');
+            const pw = form.querySelector('input[name="password"]');
+            if (fn) fn.value = s.first_name || '';
+            if (ln) ln.value = s.last_name || '';
+            if (un) un.value = s.username || '';
+            if (em) em.value = s.email || '';
+            if (pw) { pw.required = false; pw.placeholder = 'Leave blank to keep unchanged'; pw.value = ''; }
+
+            // Update modal title
+            const titleEl = document.querySelector('#addStudentModal .text-base');
+            if (titleEl) titleEl.textContent = 'Edit Student';
+            const subtitleEl = document.querySelector('#addStudentModal .text-sm.text-slate-600');
+            if (subtitleEl) subtitleEl.textContent = 'Update student details.';
+
+            openModal('addStudentModal');
+        };
+
+        // --- Delete Student ---
+        window.deleteStudent = function (id) {
+            if (!confirm('Are you sure you want to delete this student? This will also remove their enrollments.')) return;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'students.php';
+
+            const aInput = document.createElement('input');
+            aInput.type = 'hidden';
+            aInput.name = 'action';
+            aInput.value = 'delete_student';
+            form.appendChild(aInput);
+
+            const iInput = document.createElement('input');
+            iInput.type = 'hidden';
+            iInput.name = 'student_id';
+            iInput.value = id;
+            form.appendChild(iInput);
+
+            document.body.appendChild(form);
+            form.submit();
+        };
     })();
 </script>
 
-<?php require_once __DIR__ . '/includes/layout_bottom.php'; ?>
+<?php require_once __DIR__ . '/includes/layout_bottom.php'; ?>
