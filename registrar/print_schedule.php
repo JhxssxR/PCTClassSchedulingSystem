@@ -18,7 +18,7 @@ try {
                cr.capacity,
                u.first_name as instructor_first_name,
                u.last_name as instructor_last_name,
-               TIME_FORMAT(ADDTIME(s.start_time, SEC_TO_TIME(120 * 60)), '%H:%i:%s') as end_time
+               " . pgsql_time_format(pgsql_addtime_expr('s.start_time', '120')) . " as end_time
         FROM schedules s
         JOIN courses c ON s.course_id = c.id
         JOIN classrooms cr ON s.classroom_id = cr.id

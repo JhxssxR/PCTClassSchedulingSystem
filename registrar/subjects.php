@@ -294,9 +294,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
 
         $has_schedule_subject_id = false;
         try {
-            $cols_stmt = $conn->query('DESCRIBE schedules');
-            foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $col_row) {
-                if (($col_row['Field'] ?? '') === 'subject_id') {
+            foreach (get_table_columns($conn, 'schedules') as $col_row) {
+                $col_name = $col_row['Field'] ?? $col_row['column_name'] ?? '';
+                if ($col_name === 'subject_id') {
                     $has_schedule_subject_id = true;
                     break;
                 }

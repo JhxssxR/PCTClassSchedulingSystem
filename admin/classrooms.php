@@ -21,9 +21,9 @@ foreach ($schedule_cols_result as $r) {
 if (isset($schedule_cols['end_time'])) {
     $end_time_expr_s0 = 's0.end_time';
 } elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_time_expr_s0 = 'ADDTIME(s0.start_time, SEC_TO_TIME(s0.duration_minutes * 60))';
+    $end_time_expr_s0 = pgsql_addtime_expr('s0.start_time', 's0.duration_minutes');
 } else {
-    $end_time_expr_s0 = 'ADDTIME(s0.start_time, SEC_TO_TIME(120 * 60))';
+    $end_time_expr_s0 = pgsql_addtime_expr('s0.start_time', '120');
 }
 
 // Get all classrooms + active schedule counts + a sample active schedule (for card display)

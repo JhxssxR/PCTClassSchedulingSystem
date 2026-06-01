@@ -12,15 +12,11 @@ require_once __DIR__ . '/notifications_data.php';
 function reports_table_columns(PDO $conn, string $table): array {
     $cols = [];
     try {
-        if (is_pgsql()) {
-            $stmt = $conn->prepare("SELECT column_name as \"Field\" FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ?");
-            $stmt->execute([$table]);
-        } else {
-            $stmt = $conn->prepare("DESCRIBE `{$table}`");
-            $stmt->execute();
-        }
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $cols[$row['Field']] = true;
+        foreach (get_table_columns($conn, $table) as $row) {
+            $col_name = $row['Field'] ?? $row['column_name'] ?? '';
+            if ($col_name !== '') {
+                $cols[$col_name] = true;
+            }
         }
     } catch (Exception $e) {}
     return $cols;

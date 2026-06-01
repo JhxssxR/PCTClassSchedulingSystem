@@ -21,9 +21,9 @@ foreach ($schedule_cols_result as $r) {
 if (isset($schedule_cols['end_time'])) {
     $end_expr = 's.end_time';
 } elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+    $end_expr = pgsql_addtime_expr('s.start_time', 's.duration_minutes');
 } else {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    $end_expr = pgsql_addtime_expr('s.start_time', '120');
 }
 
 // Format dates for display
@@ -42,20 +42,16 @@ $start_date_expr = isset($schedule_cols['start_date'])
 $subjects_table_exists = table_exists($conn, 'subjects');
 
 // Date expression - handle PostgreSQL vs MySQL INTERVAL syntax
-$interval_expr = is_pgsql()
-    ? "(s.created_at + INTERVAL '17 days')"
-    : "DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY)";
-$interval_expr_coalesce = is_pgsql()
-    ? "(COALESCE(s.start_date, DATE(s.created_at)) + INTERVAL '17 days')"
-    : "DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)";
-
-$end_date_expr = isset($schedule_cols['end_date'])
-    ? (is_pgsql() 
-        ? "TO_CHAR(COALESCE(s.end_date, $interval_expr_coalesce), 'YYYY-MM-DD')"
-        : "DATE_FORMAT(COALESCE(s.end_date, $interval_expr_coalesce), '%Y-%m-%d')")
-    : (is_pgsql()
-        ? "TO_CHAR($interval_expr::date, 'YYYY-MM-DD')"
-        : "DATE_FORMAT($interval_expr, '%Y-%m-%d')");
+$has_end_date = isset($schedule_cols['end_date']);
+$interval_expr_coalesce = pgsql_date_add_days_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))", 17);
+$interval_expr = pgsql_date_add_days_expr("CAST(s.created_at AS DATE)", 17);
+$end_date_expr = $has_end_date
+    ? ($has_start_date
+        ? pgsql_date_format_expr("COALESCE(s.end_date, $interval_expr_coalesce)", '%Y-%m-%d')
+        : pgsql_date_format_expr("COALESCE(s.end_date, $interval_expr)", '%Y-%m-%d'))
+    : ($has_start_date
+        ? pgsql_date_format_expr($interval_expr_coalesce, '%Y-%m-%d')
+        : pgsql_date_format_expr($interval_expr, '%Y-%m-%d'));
 
 // Get all schedules with their subject (preferred) / course (legacy) and instructor information
 $subject_code_expr = $subjects_table_exists
@@ -66,9 +62,10 @@ $subject_name_expr = $subjects_table_exists
     : "NULLIF(TRIM(c.course_name), '')";
 $subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
 
-$time_format_expr = is_pgsql() 
-    ? "TO_CHAR({$end_expr}, 'HH24:MI:SS')" 
-    : "TIME_FORMAT({$end_expr}, '%H:%i:%s')";
+$has_end_time = isset($schedule_cols['end_time']);
+$select_end = $has_end_time
+    ? "s.end_time"
+    : pgsql_time_format($end_expr);
 
 $stmt = $conn->prepare("
     SELECT s.*, 

@@ -27,8 +27,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('Course code already exists');
                 }
 
+                $course_cols = [];
+                foreach (get_table_columns($conn, 'courses') as $r) {
+                    $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+                    if ($col_name !== '') {
+                        $course_cols[$col_name] = true;
+                    }
+                }
+                $units_col = isset($course_cols['units']) ? 'units' : (isset($course_cols['credits']) ? 'credits' : 'units');
+
                 // Add new course
-                $stmt = $conn->prepare("\n                    INSERT INTO courses (course_code, course_name, units)\n                    VALUES (?, ?, ?)\n                ");
+                $stmt = $conn->prepare("
+                    INSERT INTO courses (course_code, course_name, {$units_col})
+                    VALUES (?, ?, ?)
+                ");
                 $stmt->execute([
                     $_POST['course_code'],
                     $_POST['course_name'],
@@ -46,14 +58,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // Check if course code already exists (excluding current course)
-                $stmt = $conn->prepare("\n                    SELECT id FROM courses \n                    WHERE course_code = ? AND id != ?\n                ");
+                $stmt = $conn->prepare("
+                    SELECT id FROM courses 
+                    WHERE course_code = ? AND id != ?
+                ");
                 $stmt->execute([$_POST['course_code'], $_POST['course_id']]);
                 if ($stmt->fetch()) {
                     throw new Exception('Course code already exists');
                 }
+                
+                $course_cols = [];
+                foreach (get_table_columns($conn, 'courses') as $r) {
+                    $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+                    if ($col_name !== '') {
+                        $course_cols[$col_name] = true;
+                    }
+                }
+                $units_col = isset($course_cols['units']) ? 'units' : (isset($course_cols['credits']) ? 'credits' : 'units');
 
                 // Update course
-                $stmt = $conn->prepare("\n                    UPDATE courses \n                    SET course_code = ?, course_name = ?, units = ?\n                    WHERE id = ?\n                ");
+                $stmt = $conn->prepare("
+                    UPDATE courses 
+                    SET course_code = ?, course_name = ?, {$units_col} = ?
+                    WHERE id = ?
+                ");
                 $stmt->execute([
                     $_POST['course_code'],
                     $_POST['course_name'],

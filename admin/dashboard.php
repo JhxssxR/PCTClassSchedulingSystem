@@ -21,18 +21,19 @@ function admin_dashboard_count_grouped_active_classes(PDO $conn): int {
 
         $has_subject_id = admin_dashboard_has_column($conn, 'schedules', 'subject_id');
         $has_end_time = admin_dashboard_has_column($conn, 'schedules', 'end_time');
-        $has_duration_minutes = admin_dashboard_has_column($conn, 'schedules', 'duration_minutes');
-        $has_year_level = admin_dashboard_has_column($conn, 'schedules', 'year_level');
+        $schedule_cols = get_table_columns($conn, 'schedules');
+        $has_subject_id = isset($schedule_cols['subject_id']);
+        $has_year_level = isset($schedule_cols['year_level']);
 
         $subject_expr = $has_subject_id ? 'COALESCE(s.subject_id, 0)' : '0';
         $year_level_expr = $has_year_level ? (is_pgsql() ? "COALESCE(CAST(s.year_level AS TEXT), '')" : "COALESCE(s.year_level, '')") : "''";
 
-        if ($has_end_time) {
+        if (isset($schedule_cols['end_time'])) {
             $end_time_expr = 's.end_time';
-        } elseif ($has_duration_minutes) {
-            $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+        } elseif (isset($schedule_cols['duration_minutes'])) {
+            $end_time_expr = pgsql_addtime_expr('s.start_time', 's.duration_minutes');
         } else {
-            $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+            $end_time_expr = pgsql_addtime_expr('s.start_time', '120');
         }
 
         $sql = "

@@ -66,11 +66,10 @@ $instructor_id = (int) ($_SESSION['user_id'] ?? 0);
 try {
     $s_cols = [];
     try {
-        $s_stmt = $conn->prepare('DESCRIBE schedules');
-        $s_stmt->execute();
-        foreach ($s_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            if (!empty($r['Field'])) {
-                $s_cols[$r['Field']] = true;
+        foreach (get_table_columns($conn, 'schedules') as $r) {
+            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+            if ($col_name !== '') {
+                $s_cols[$col_name] = true;
             }
         }
     } catch (Throwable $e) {

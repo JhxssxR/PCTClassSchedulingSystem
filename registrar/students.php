@@ -24,11 +24,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_s
         // Detect optional columns for compatibility
         $user_cols = [];
         try {
-            $cols_stmt = $conn->prepare('DESCRIBE users');
-            $cols_stmt->execute();
-            foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                if (!empty($r['Field'])) {
-                    $user_cols[$r['Field']] = true;
+            foreach (get_table_columns($conn, 'users') as $r) {
+                $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+                if ($col_name !== '') {
+                    $user_cols[$col_name] = true;
                 }
             }
         } catch (Throwable $e) {

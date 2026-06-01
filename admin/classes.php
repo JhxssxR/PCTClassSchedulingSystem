@@ -26,9 +26,9 @@ foreach ($schedule_cols_result as $r) {
 if (isset($schedule_cols['end_time'])) {
     $end_time_expr = 's.end_time';
 } elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+    $end_time_expr = pgsql_addtime_expr('s.start_time', 's.duration_minutes');
 } else {
-    $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    $end_time_expr = pgsql_addtime_expr('s.start_time', '120');
 }
 $has_start_date = isset($schedule_cols['start_date']);
 $has_end_date = isset($schedule_cols['end_date']);

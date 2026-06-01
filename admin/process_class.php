@@ -10,9 +10,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? null) !== 'super_admin
 }
 
 function table_columns(PDO $conn, string $table): array {
+    $rows = get_table_columns($conn, $table);
     $cols = [];
-    foreach (describe_table($conn, $table) as $row) {
-        $cols[$row['Field']] = true;
+    foreach ($rows as $row) {
+        $col_name = isset($row['Field']) ? $row['Field'] : $row['column_name'];
+        $cols[$col_name] = true;
     }
     return $cols;
 }
@@ -138,8 +140,7 @@ function find_linked_schedule_rows(PDO $conn, array $base_row, array $cols, bool
         }
     }
 
-    $time_fmt = pgsql_time_format('start_time');
-    $where[] = "{$time_fmt} = ?";
+    $where[] = pgsql_time_format('start_time') . " = ?";
     $params[] = normalize_time_his((string)($base_row['start_time'] ?? ''));
 
     $sql = 'SELECT * FROM schedules';
@@ -221,7 +222,7 @@ function ensure_schedule_end_time_column(PDO $conn, array &$cols): void {
     try {
         $conn->exec("ALTER TABLE schedules ADD COLUMN end_time TIME NULL AFTER start_time");
         $cols['end_time'] = true;
-        $conn->exec("UPDATE schedules SET end_time = ADDTIME(start_time, SEC_TO_TIME(120 * 60)) WHERE end_time IS NULL OR end_time = '00:00:00'");
+        $conn->exec("UPDATE schedules SET end_time = " . pgsql_addtime_expr('start_time', '120') . " WHERE end_time IS NULL OR end_time = '00:00:00'");
     } catch (Throwable $e) {
         // Ignore if schema cannot be altered; code will fall back to default duration behavior.
     }
@@ -660,8 +661,7 @@ try {
                     }
                 }
 
-                $fallback_time_fmt = pgsql_time_format('start_time');
-                $fallback_where[] = "{$fallback_time_fmt} = ?";
+                $fallback_where[] = pgsql_time_format('start_time') . " = ?";
                 $fallback_params[] = $current_start_time;
 
                 if (!empty($linked_ids)) {
@@ -973,8 +973,8 @@ try {
                     'course_id = ?',
                     'instructor_id = ?',
                     'classroom_id = ?',
-                    "TIME_FORMAT(start_time, '%H:%i:%s') = ?",
-                    "TIME_FORMAT({$end_time_compare_expr}, '%H:%i:%s') = ?",
+                    pgsql_time_format('start_time') . " = ?",
+                    pgsql_time_format($end_time_compare_expr) . " = ?",
                 ];
                 $reuse_params = [$day_of_week, $course_id, $instructor_id, $classroom_id, $start_time, $end_time];
 

@@ -70,16 +70,15 @@ try {
     $has_year_level = false;
     $has_phone_number = false;
     $has_department = false;
-    $cols_stmt = $conn->prepare('DESCRIBE users');
-    $cols_stmt->execute();
-    foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        if (($r['Field'] ?? '') === 'year_level') {
+    foreach (get_table_columns($conn, 'users') as $r) {
+        $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+        if ($col_name === 'year_level') {
             $has_year_level = true;
         }
-        if (($r['Field'] ?? '') === 'phone_number') {
+        if ($col_name === 'phone_number') {
             $has_phone_number = true;
         }
-        if (($r['Field'] ?? '') === 'department') {
+        if ($col_name === 'department') {
             $has_department = true;
         }
     }
@@ -115,11 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Detect optional timestamp columns for compatibility
                     $user_cols = [];
                     try {
-                        $cols_stmt = $conn->prepare('DESCRIBE users');
-                        $cols_stmt->execute();
-                        foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                            if (!empty($r['Field'])) {
-                                $user_cols[$r['Field']] = true;
+                        foreach (get_table_columns($conn, 'users') as $r) {
+                            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+                            if ($col_name !== '') {
+                                $user_cols[$col_name] = true;
                             }
                         }
                     } catch (Throwable $e) {
@@ -253,23 +251,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $phoneNumberSql = '';
                     $departmentSql = '';
                     try {
-                        $cols_stmt = $conn->prepare('DESCRIBE users');
-                        $cols_stmt->execute();
                         $has_updated_at = false;
                         $has_year_level = false;
                         $has_phone_number = false;
                         $has_department = false;
-                        foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                            if (($r['Field'] ?? null) === 'updated_at') {
+                        foreach (get_table_columns($conn, 'users') as $r) {
+                            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+                            if ($col_name === 'updated_at') {
                                 $has_updated_at = true;
                             }
-                            if (($r['Field'] ?? null) === 'year_level') {
+                            if ($col_name === 'year_level') {
                                 $has_year_level = true;
                             }
-                            if (($r['Field'] ?? null) === 'phone_number') {
+                            if ($col_name === 'phone_number') {
                                 $has_phone_number = true;
                             }
-                            if (($r['Field'] ?? null) === 'department') {
+                            if ($col_name === 'department') {
                                 $has_department = true;
                             }
                         }

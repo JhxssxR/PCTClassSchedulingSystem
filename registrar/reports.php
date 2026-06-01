@@ -8,11 +8,12 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 function reg_reports_table_columns(PDO $conn, string $table): array {
-    $stmt = $conn->prepare("DESCRIBE `{$table}`");
-    $stmt->execute();
     $cols = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $cols[$row['Field']] = true;
+    foreach (get_table_columns($conn, $table) as $row) {
+        $col_name = $row['Field'] ?? $row['column_name'] ?? '';
+        if ($col_name !== '') {
+            $cols[$col_name] = true;
+        }
     }
     return $cols;
 }
@@ -327,7 +328,7 @@ try {
         COALESCE(c.course_code, 'Course') AS course_code,
         COALESCE(r.room_number, 'TBA') AS room_number,
         COALESCE(e.status, 'enrolled') AS status,
-        DATE_FORMAT({$activity_date_expr}, '%Y-%m-%d %H:%i:%s') AS activity_at
+        " . (is_pgsql() ? "TO_CHAR({$activity_date_expr}, 'YYYY-MM-DD HH24:MI:SS')" : "DATE_FORMAT({$activity_date_expr}, '%Y-%m-%d %H:%i:%s')") . " AS activity_at
         FROM enrollments e
         JOIN users st ON e.student_id = st.id
         LEFT JOIN schedules s ON e.schedule_id = s.id

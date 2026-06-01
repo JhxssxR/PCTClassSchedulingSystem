@@ -10,13 +10,13 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? null) !== 'super_admin
 }
 
 function table_columns(PDO $conn, string $table): array {
-	$stmt = $conn->prepare("DESCRIBE {$table}");
-	$stmt->execute();
-	$cols = [];
-	foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-		$cols[$row['Field']] = true;
-	}
-	return $cols;
+    $rows = get_table_columns($conn, $table);
+    $cols = [];
+    foreach ($rows as $row) {
+        $col_name = isset($row['Field']) ? $row['Field'] : $row['column_name'];
+        $cols[$col_name] = true;
+    }
+    return $cols;
 }
 
 function normalize_room_type(string $room_type): string {

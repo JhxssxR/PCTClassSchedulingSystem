@@ -36,7 +36,7 @@ try {
             s.id,
             ts.slot_name,
             ts.start_time,
-            TIME_FORMAT(ADDTIME(ts.start_time, SEC_TO_TIME(ts.duration_minutes * 60)), '%H:%i:%s') as end_time,
+            " . pgsql_time_format(pgsql_addtime_expr('ts.start_time', '120')) . " as end_time,
             c.course_code,
             c.course_name,
             cr.room_number,

@@ -10,11 +10,11 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 function table_columns(PDO $conn, string $table): array {
-    $stmt = $conn->prepare("DESCRIBE {$table}");
-    $stmt->execute();
+    $rows = get_table_columns($conn, $table);
     $cols = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $cols[$row['Field']] = true;
+    foreach ($rows as $row) {
+        $col_name = isset($row['Field']) ? $row['Field'] : $row['column_name'];
+        $cols[$col_name] = true;
     }
     return $cols;
 }
@@ -133,7 +133,7 @@ function find_linked_schedule_rows(PDO $conn, array $base_row, array $cols, bool
         $where[] = 'COALESCE(classroom_id, 0) = ?';
         $params[] = (int)($base_row['classroom_id'] ?? 0);
     }
-    $where[] = "TIME_FORMAT(start_time, '%H:%i:%s') = ?";
+    $where[] = pgsql_time_format('start_time') . " = ?";
     $params[] = normalize_time_his((string)($base_row['start_time'] ?? ''));
 
     if (isset($cols['max_students'])) {
@@ -220,7 +220,7 @@ function ensure_schedule_end_time_column(PDO $conn, array &$cols): void {
     try {
         $conn->exec("ALTER TABLE schedules ADD COLUMN end_time TIME NULL AFTER start_time");
         $cols['end_time'] = true;
-        $conn->exec("UPDATE schedules SET end_time = ADDTIME(start_time, SEC_TO_TIME(120 * 60)) WHERE end_time IS NULL OR end_time = '00:00:00'");
+        $conn->exec("UPDATE schedules SET end_time = " . pgsql_addtime_expr('start_time', '120') . " WHERE end_time IS NULL OR end_time = '00:00:00'");
     } catch (Throwable $e) {
         // Ignore if schema cannot be altered; code will fall back to default duration behavior.
     }
@@ -350,7 +350,7 @@ if ($default_duration < 30) $default_duration = 120;
 
 $end_time_compare_expr = $has_end_time
     ? 'end_time'
-    : ($has_duration_minutes ? 'ADDTIME(start_time, SEC_TO_TIME(duration_minutes * 60))' : 'ADDTIME(start_time, SEC_TO_TIME(120 * 60))');
+    : ($has_duration_minutes ? pgsql_addtime_expr('start_time', 'duration_minutes') : pgsql_addtime_expr('start_time', '120'));
 $allowed_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 $date_overlap_sql = schedule_date_overlap_sql($has_start_date, $has_end_date);
 

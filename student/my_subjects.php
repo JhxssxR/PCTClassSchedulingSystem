@@ -75,9 +75,9 @@ try {
 
     $schedule_cols = [];
     try {
-        $stmtCols = $conn->query('DESCRIBE schedules');
-        foreach (($stmtCols ? $stmtCols->fetchAll(PDO::FETCH_ASSOC) : []) as $colRow) {
-            $schedule_cols[(string)($colRow['Field'] ?? '')] = true;
+        foreach (get_table_columns($conn, 'schedules') as $colRow) {
+            $col_name = $colRow['Field'] ?? $colRow['column_name'] ?? '';
+            if ($col_name !== '') $schedule_cols[$col_name] = true;
         }
     } catch (Throwable $e) {
         $schedule_cols = [];
@@ -85,9 +85,9 @@ try {
 
     $course_cols = [];
     try {
-        $courseStmt = $conn->query('DESCRIBE courses');
-        foreach (($courseStmt ? $courseStmt->fetchAll(PDO::FETCH_ASSOC) : []) as $colRow) {
-            $course_cols[(string)($colRow['Field'] ?? '')] = true;
+        foreach (get_table_columns($conn, 'courses') as $colRow) {
+            $col_name = $colRow['Field'] ?? $colRow['column_name'] ?? '';
+            if ($col_name !== '') $course_cols[$col_name] = true;
         }
     } catch (Throwable $e) {
         $course_cols = [];

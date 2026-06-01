@@ -9,19 +9,19 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 // Schedules schema compatibility (some DB versions don't store end_time)
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
+$schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $schedule_cols[$r['Field']] = true;
+foreach ($schedule_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $schedule_cols[$col_name] = true;
 }
 
 // Enrollments schema compatibility (date columns may vary)
-$enroll_cols_stmt = $conn->prepare('DESCRIBE enrollments');
-$enroll_cols_stmt->execute();
+$enroll_cols_result = get_table_columns($conn, 'enrollments');
 $enroll_cols = [];
-foreach ($enroll_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $enroll_cols[$r['Field']] = true;
+foreach ($enroll_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $enroll_cols[$col_name] = true;
 }
 
 function schedule_end_expr(array $schedule_cols, string $alias = ''): string {
@@ -30,9 +30,9 @@ function schedule_end_expr(array $schedule_cols, string $alias = ''): string {
         return $p . 'end_time';
     }
     if (isset($schedule_cols['duration_minutes'])) {
-        return "ADDTIME({$p}start_time, SEC_TO_TIME({$p}duration_minutes * 60))";
+        return pgsql_addtime_expr("{$p}start_time", "{$p}duration_minutes");
     }
-    return "ADDTIME({$p}start_time, SEC_TO_TIME(120 * 60))";
+    return pgsql_addtime_expr("{$p}start_time", "120");
 }
 
 function fmt_time_range(?string $start, ?string $end): string {
@@ -191,7 +191,7 @@ $enrollment_select_cols = "
            r.room_number,
            sched.day_of_week,
            sched.start_time,
-           TIME_FORMAT({$end_expr_sched}, '%H:%i:%s') as end_time,
+           " . pgsql_time_format($end_expr_sched) . " as end_time,
            {$display_date_expr} as display_date
 ";
 
@@ -257,7 +257,7 @@ $stmt = $conn->prepare("
            r.room_number,
            s.day_of_week,
            s.start_time,
-           TIME_FORMAT({$end_expr_s}, '%H:%i:%s') as end_time
+           " . pgsql_time_format($end_expr_s) . " as end_time
     FROM schedules s
     JOIN courses c ON s.course_id = c.id
     {$subjects_join_s}

@@ -33,7 +33,7 @@ try {
             s.id,
             s.day_of_week,
             s.start_time,
-            ADDTIME(s.start_time, '02:00:00') as end_time,
+            " . pgsql_addtime_expr('s.start_time', '120') . " as end_time,
             c.course_code,
             c.course_name,
             u.first_name,

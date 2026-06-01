@@ -8,11 +8,12 @@ require 'config/database.php';
 // Safe to run multiple times.
 
 try {
-    $cols_stmt = $conn->prepare('DESCRIBE schedules');
-    $cols_stmt->execute();
     $cols = [];
-    foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $cols[$r['Field']] = true;
+    foreach (get_table_columns($conn, 'schedules') as $r) {
+        $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+        if ($col_name !== '') {
+            $cols[$col_name] = true;
+        }
     }
 
     if (!isset($cols['subject_id'])) {

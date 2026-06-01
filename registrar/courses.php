@@ -9,11 +9,12 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 // Courses schema compatibility: older DBs use credits/description, newer might use units.
-$course_cols_stmt = $conn->prepare('DESCRIBE courses');
-$course_cols_stmt->execute();
 $course_cols = [];
-foreach ($course_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $course_cols[$r['Field']] = true;
+foreach (get_table_columns($conn, 'courses') as $r) {
+    $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+    if ($col_name !== '') {
+        $course_cols[$col_name] = true;
+    }
 }
 
 $units_col = isset($course_cols['units']) ? 'units' : (isset($course_cols['credits']) ? 'credits' : 'units');

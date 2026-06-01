@@ -35,11 +35,10 @@ $user_id = (int)($_SESSION['user_id'] ?? 0);
 // Keep admin notifications isolated from registrar notifications.
 try {
     $ns_cols = [];
-    $stmt = $conn->prepare('DESCRIBE notification_state');
-    $stmt->execute();
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        if (!empty($r['Field'])) {
-            $ns_cols[$r['Field']] = true;
+    foreach (get_table_columns($conn, 'notification_state') as $r) {
+        $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+        if ($col_name !== '') {
+            $ns_cols[$col_name] = true;
         }
     }
     if (!isset($ns_cols['admin_notif_seen_at'])) {
@@ -108,6 +107,7 @@ $notif_new_students = 0;
 $notif_new_enrollments = 0;
 $notif_new_classes = 0;
 $notif_new_courses = 0;
+$notif_new_subjects = 0;
 $notif_new_rooms = 0;
 $notif_unread_total = 0;
 $notif_badge_label = '';
@@ -116,11 +116,10 @@ try {
     // Users schema checks
     $users_has_created_at = true;
     try {
-        $u_cols_stmt = $conn->prepare('DESCRIBE users');
-        $u_cols_stmt->execute();
         $users_has_created_at = false;
-        foreach ($u_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            if (($r['Field'] ?? null) === 'created_at') {
+        foreach (get_table_columns($conn, 'users') as $r) {
+            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+            if ($col_name === 'created_at') {
                 $users_has_created_at = true;
                 break;
             }
@@ -193,13 +192,12 @@ try {
     $enrollment_subject_code_expr = "NULLIF(TRIM(c.course_code), '')";
     $enrollment_subject_name_expr = "NULLIF(TRIM(c.course_name), '')";
 
-    $cols_stmt = $conn->prepare('DESCRIBE enrollments');
-    $cols_stmt->execute();
-    $en_cols = $cols_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $en_cols = get_table_columns($conn, 'enrollments');
 
     $col_set = [];
     foreach ($en_cols as $r) {
-        $col_set[$r['Field']] = $r;
+        $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+        $col_set[$col_name] = $r;
     }
 
     // Build a robust timestamp expression: prefer enrolled_at, then enrollment_date, then created_at.
@@ -222,10 +220,9 @@ try {
     // Prefer subject details when schedules.subject_id and subjects table exist.
     try {
         $schedules_has_subject_id = false;
-        $sched_cols_stmt = $conn->prepare('DESCRIBE schedules');
-        $sched_cols_stmt->execute();
-        foreach ($sched_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            if (($r['Field'] ?? '') === 'subject_id') {
+        foreach (get_table_columns($conn, 'schedules') as $r) {
+            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+            if ($col_name === 'subject_id') {
                 $schedules_has_subject_id = true;
                 break;
             }
@@ -334,10 +331,9 @@ try {
     // Classes (schedules), courses, rooms
     $s_cols = [];
     try {
-        $s_stmt = $conn->prepare('DESCRIBE schedules');
-        $s_stmt->execute();
-        foreach ($s_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            if (!empty($r['Field'])) $s_cols[$r['Field']] = true;
+        foreach (get_table_columns($conn, 'schedules') as $r) {
+            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+            if ($col_name !== '') $s_cols[$col_name] = true;
         }
     } catch (Throwable $e) {
         $s_cols = [];
@@ -403,10 +399,9 @@ try {
 
     $c_cols = [];
     try {
-        $c_stmt = $conn->prepare('DESCRIBE courses');
-        $c_stmt->execute();
-        foreach ($c_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            if (!empty($r['Field'])) $c_cols[$r['Field']] = true;
+        foreach (get_table_columns($conn, 'courses') as $r) {
+            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+            if ($col_name !== '') $c_cols[$col_name] = true;
         }
     } catch (Throwable $e) {
         $c_cols = [];
@@ -437,12 +432,46 @@ try {
         }
     }
 
+    $subj_cols = [];
+    try {
+        foreach (get_table_columns($conn, 'subjects') as $r) {
+            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+            if ($col_name !== '') $subj_cols[$col_name] = true;
+        }
+    } catch (Throwable $e) {
+        $subj_cols = [];
+    }
+
+    if (isset($subj_cols['created_at'])) {
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM subjects WHERE created_at > :cutoff_at AND created_at <= :now_ts");
+        $stmt->execute(['cutoff_at' => $notif_unread_cutoff_at, 'now_ts' => $notif_now]);
+        $notif_new_subjects = (int)$stmt->fetchColumn();
+
+        $stmt = $conn->prepare("
+            SELECT id, subject_code, subject_name, created_at
+            FROM subjects
+            WHERE created_at > :cutoff_at AND created_at <= :now_ts
+            ORDER BY created_at DESC
+            LIMIT 5
+        ");
+        $stmt->execute(['cutoff_at' => $notif_list_cutoff_at, 'now_ts' => $notif_now]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $subject = trim(($r['subject_code'] ?? '') . ' — ' . ($r['subject_name'] ?? ''));
+            $notif_items[] = [
+                'ts' => (string)($r['created_at'] ?? ''),
+                'icon' => 'bi-journal-bookmark',
+                'title' => 'Subject added',
+                'subtitle' => $subject !== '' ? $subject : 'New subject',
+                'href' => 'subjects.php',
+            ];
+        }
+    }
+
     $r_cols = [];
     try {
-        $r_stmt = $conn->prepare('DESCRIBE classrooms');
-        $r_stmt->execute();
-        foreach ($r_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            if (!empty($r['Field'])) $r_cols[$r['Field']] = true;
+        foreach (get_table_columns($conn, 'classrooms') as $r) {
+            $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+            if ($col_name !== '') $r_cols[$col_name] = true;
         }
     } catch (Throwable $e) {
         $r_cols = [];
@@ -493,6 +522,7 @@ try {
         $notif_new_students > 0 ||
         $notif_new_classes > 0 ||
         $notif_new_courses > 0 ||
+        $notif_new_subjects > 0 ||
         $notif_new_rooms > 0
     );
 
@@ -551,6 +581,15 @@ try {
                 'href' => 'courses.php',
             ];
         }
+        if ($notif_new_subjects > 0) {
+            $notif_items[] = [
+                'ts' => $notif_now,
+                'icon' => 'bi-journal-bookmark',
+                'title' => $notif_new_subjects . ' new subject(s)',
+                'subtitle' => 'Review subjects',
+                'href' => 'subjects.php',
+            ];
+        }
         if ($notif_new_rooms > 0) {
             $notif_items[] = [
                 'ts' => $notif_now,
@@ -562,7 +601,7 @@ try {
         }
     }
 
-    $notif_unread_total = (int)$notif_new_registrars + (int)$notif_new_instructors + (int)$notif_new_students + (int)$notif_new_enrollments + (int)$notif_new_classes + (int)$notif_new_courses + (int)$notif_new_rooms;
+    $notif_unread_total = (int)$notif_new_registrars + (int)$notif_new_instructors + (int)$notif_new_students + (int)$notif_new_enrollments + (int)$notif_new_classes + (int)$notif_new_courses + (int)$notif_new_subjects + (int)$notif_new_rooms;
     $notif_badge_label = $notif_unread_total > 99 ? '99+' : (string)$notif_unread_total;
     $notif_has_new = ($notif_unread_total > 0);
 } catch (Throwable $e) {
@@ -575,6 +614,7 @@ try {
     $notif_new_enrollments = 0;
     $notif_new_classes = 0;
     $notif_new_courses = 0;
+    $notif_new_subjects = 0;
     $notif_new_rooms = 0;
     $notif_unread_total = 0;
     $notif_badge_label = '';

@@ -9,19 +9,19 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 // Schedules schema compatibility (some DB versions don't store end_time)
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
+$schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $schedule_cols[$r['Field']] = true;
+foreach ($schedule_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $schedule_cols[$col_name] = true;
 }
 
 if (isset($schedule_cols['end_time'])) {
     $end_time_expr_s0 = 's0.end_time';
 } elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_time_expr_s0 = 'ADDTIME(s0.start_time, SEC_TO_TIME(s0.duration_minutes * 60))';
+    $end_time_expr_s0 = pgsql_addtime_expr('s0.start_time', 's0.duration_minutes');
 } else {
-    $end_time_expr_s0 = 'ADDTIME(s0.start_time, SEC_TO_TIME(120 * 60))';
+    $end_time_expr_s0 = pgsql_addtime_expr('s0.start_time', '120');
 }
 
 // Get all classrooms + active schedule counts + a sample active schedule (for card display)

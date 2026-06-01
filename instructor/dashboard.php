@@ -147,9 +147,10 @@ try {
     $stmt->execute([$_SESSION['user_id']]);
     $total_students = (int) $stmt->fetchColumn();
 
+    $addtime_120 = pgsql_addtime_expr('s.start_time', '120');
     $end_time_select = $has_schedule_end_time
-        ? "COALESCE(NULLIF(s.end_time, '00:00:00'), ADDTIME(s.start_time, '02:00:00'))"
-        : "ADDTIME(s.start_time, '02:00:00')";
+        ? "COALESCE(NULLIF(s.end_time, '00:00:00'), {$addtime_120})"
+        : $addtime_120;
     $stmt = $conn->prepare("\n        SELECT\n            s.id,\n            s.course_id,\n            s.instructor_id,\n            s.classroom_id,\n            {$link_subject_select} AS link_subject_id,\n            {$link_year_level_select} AS link_year_level,\n            {$link_semester_select} AS link_semester,\n            {$link_academic_year_select} AS link_academic_year,\n            s.start_time,\n            $end_time_select AS end_time,\n            s.max_students,\n            s.semester,\n            s.academic_year,\n            {$schedule_code_expr} AS course_code,\n            {$schedule_name_expr} AS course_name,\n            cl.room_number,\n            (SELECT COUNT(DISTINCT e.student_id) FROM enrollments e WHERE e.schedule_id = s.id AND e.status IN ('approved', 'enrolled')) AS enrolled_students\n        FROM schedules s\n        JOIN courses c ON s.course_id = c.id\n        {$schedule_subject_join_sql}\n        JOIN classrooms cl ON s.classroom_id = cl.id\n        WHERE s.instructor_id = ?\n          AND s.day_of_week = ?\n          AND s.status = 'active'\n        ORDER BY s.start_time ASC\n    ");
     $stmt->execute([$_SESSION['user_id'], $today]);
     $today_schedule = $stmt->fetchAll(PDO::FETCH_ASSOC);

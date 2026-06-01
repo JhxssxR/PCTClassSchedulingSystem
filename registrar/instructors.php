@@ -8,12 +8,11 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 function users_columns(PDO $conn): array {
-    $stmt = $conn->prepare('DESCRIBE users');
-    $stmt->execute();
     $cols = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        if (!empty($row['Field'])) {
-            $cols[$row['Field']] = true;
+    foreach (get_table_columns($conn, 'users') as $row) {
+        $col_name = $row['Field'] ?? $row['column_name'] ?? '';
+        if ($col_name !== '') {
+            $cols[$col_name] = true;
         }
     }
     return $cols;

@@ -19,7 +19,7 @@ try {
             c.course_name,
             sch.day_of_week,
             sch.start_time,
-            TIME_FORMAT(ADDTIME(sch.start_time, SEC_TO_TIME(120 * 60)), '%H:%i:%s') as end_time,
+            " . pgsql_time_format(pgsql_addtime_expr('sch.start_time', '120')) . " as end_time,
             u.first_name as instructor_first_name,
             u.last_name as instructor_last_name,
             cr.room_number,

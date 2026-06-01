@@ -28,16 +28,15 @@ function __pct_enum_values_from_type($type) {
 }
 
 // Schedules schema compatibility
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
+$schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
 $schedule_status_type = '';
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $field = (string)($r['Field'] ?? '');
+foreach ($schedule_cols_result as $r) {
+    $field = (string)(isset($r['Field']) ? $r['Field'] : $r['column_name']);
     if ($field !== '') {
         $schedule_cols[$field] = true;
         if ($field === 'status') {
-            $schedule_status_type = (string)($r['Type'] ?? '');
+            $schedule_status_type = (string)($r['Type'] ?? $r['data_type'] ?? '');
         }
     }
 }
@@ -45,9 +44,9 @@ foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
 if (isset($schedule_cols['end_time'])) {
     $end_time_expr = 's.end_time';
 } elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+    $end_time_expr = pgsql_addtime_expr('s.start_time', 's.duration_minutes');
 } else {
-    $end_time_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    $end_time_expr = pgsql_addtime_expr('s.start_time', '120');
 }
 $has_start_date = isset($schedule_cols['start_date']);
 $has_end_date = isset($schedule_cols['end_date']);

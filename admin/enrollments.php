@@ -26,19 +26,12 @@ foreach ($enroll_cols_result as $r) {
     $enroll_cols[$col_name] = true;
 }
 
-function schedule_end_expr(array $schedule_cols, string $alias = ''): string {
-    $p = $alias !== '' ? ($alias . '.') : '';
-    if (isset($schedule_cols['end_time'])) {
-        return $p . 'end_time';
-    }
-    if (isset($schedule_cols['duration_minutes'])) {
-        return is_pgsql() 
-            ? "({$p}start_time + ({$p}duration_minutes || ' minutes')::interval)"
-            : "ADDTIME({$p}start_time, SEC_TO_TIME({$p}duration_minutes * 60))";
-    }
-    return is_pgsql()
-        ? "({$p}start_time + interval '120 minutes')"
-        : "ADDTIME({$p}start_time, SEC_TO_TIME(120 * 60))";
+function get_end_time_expr($sc, $p = 'sch.') {
+    return isset($sc['end_time'])
+        ? "{$p}end_time"
+        : (isset($sc['duration_minutes'])
+            ? pgsql_addtime_expr("{$p}start_time", "{$p}duration_minutes")
+            : pgsql_addtime_expr("{$p}start_time", "120"));
 }
 
 function fmt_time_range(?string $start, ?string $end): string {
@@ -136,8 +129,8 @@ $q = trim((string)($_GET['q'] ?? ''));
 $per_page = 10;
 $page = max(1, (int)($_GET['page'] ?? 1));
 
-$end_expr_sched = schedule_end_expr($schedule_cols, 'sched');
-$end_expr_s = schedule_end_expr($schedule_cols, 's');
+$end_expr_sched = get_end_time_expr($schedule_cols, 'sched.');
+$end_expr_s = get_end_time_expr($schedule_cols, 's.');
 
 $subjects_table_exists = isset($schedule_cols['subject_id']) && table_exists_local($conn, 'subjects');
 $subjects_join_sched = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (sched.subject_id IS NOT NULL AND sched.subject_id = sub.id)' : '';
@@ -216,10 +209,6 @@ $enrollment_from_sql = "
     {$where_sql}
 ";
 
-$time_format_expr_sched = is_pgsql() 
-    ? "TO_CHAR({$end_expr_sched}, 'HH24:MI:SS')" 
-    : "TIME_FORMAT({$end_expr_sched}, '%H:%i:%s')";
-
 $enrollment_select_cols = "
     SELECT e.*,
            CONCAT(u.first_name, ' ', u.last_name) as student_name,
@@ -230,7 +219,7 @@ $enrollment_select_cols = "
            r.room_number,
            sched.day_of_week,
            sched.start_time,
-           {$time_format_expr_sched} as end_time,
+           " . pgsql_time_format($end_expr_sched) . " as end_time,
            {$display_date_expr} as display_date
 ";
 
@@ -280,10 +269,6 @@ $pagination_start = max(1, $page - 2);
 $pagination_end = min($total_pages, $page + 2);
 
 // Get all active schedules for the dropdown
-$time_format_expr_s = is_pgsql() 
-    ? "TO_CHAR({$end_expr_s}, 'HH24:MI:SS')" 
-    : "TIME_FORMAT({$end_expr_s}, '%H:%i:%s')";
-
 $stmt = $conn->prepare("
     SELECT s.id, 
               c.id as course_id,

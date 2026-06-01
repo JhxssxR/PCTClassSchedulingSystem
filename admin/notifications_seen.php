@@ -26,11 +26,10 @@ try {
 
 try {
     $ns_cols = [];
-    $stmt = $conn->prepare('DESCRIBE notification_state');
-    $stmt->execute();
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        if (!empty($r['Field'])) {
-            $ns_cols[$r['Field']] = true;
+    foreach (get_table_columns($conn, 'notification_state') as $r) {
+        $col_name = $r['Field'] ?? $r['column_name'] ?? '';
+        if ($col_name !== '') {
+            $ns_cols[$col_name] = true;
         }
     }
     if (!isset($ns_cols['admin_notif_seen_at'])) {

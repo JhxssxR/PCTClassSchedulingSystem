@@ -9,27 +9,37 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 // Schedules schema compatibility (some DB versions don't store end_time)
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
+$schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $schedule_cols[$r['Field']] = true;
+foreach ($schedule_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $schedule_cols[$col_name] = true;
 }
 
 if (isset($schedule_cols['end_time'])) {
     $end_expr = 's.end_time';
 } elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))';
+    $end_expr = pgsql_addtime_expr('s.start_time', 's.duration_minutes');
 } else {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    $end_expr = pgsql_addtime_expr('s.start_time', '120');
 }
 
-$start_date_expr = isset($schedule_cols['start_date'])
-    ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
-$end_date_expr = isset($schedule_cols['end_date'])
-    ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+$has_start_date = registrar_schedules_has_column($conn, 'schedules', 'start_date');
+$start_date_expr = $has_start_date
+    ? pgsql_date_format_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))", '%Y-%m-%d')
+    : pgsql_date_format_expr("CAST(s.created_at AS DATE)", '%Y-%m-%d');
+
+$has_end_date = registrar_schedules_has_column($conn, 'schedules', 'end_date');
+$interval_expr_coalesce = pgsql_date_add_days_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))", 17);
+$interval_expr = pgsql_date_add_days_expr("CAST(s.created_at AS DATE)", 17);
+
+$end_date_expr = $has_end_date
+    ? ($has_start_date
+        ? pgsql_date_format_expr("COALESCE(s.end_date, $interval_expr_coalesce)", '%Y-%m-%d')
+        : pgsql_date_format_expr("COALESCE(s.end_date, $interval_expr)", '%Y-%m-%d'))
+    : ($has_start_date
+        ? pgsql_date_format_expr($interval_expr_coalesce, '%Y-%m-%d')
+        : pgsql_date_format_expr($interval_expr, '%Y-%m-%d'));
 
 // Detect if subjects table exists (avoid fatal errors on older DBs)
 $subjects_table_exists = false;
@@ -47,6 +57,7 @@ $subject_name_expr = $subjects_table_exists
     ? "COALESCE(NULLIF(TRIM(sub.subject_name), ''), NULLIF(TRIM(c.course_name), ''))"
     : "NULLIF(TRIM(c.course_name), '')";
 $subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
+$has_end_time = isset($schedule_cols['end_time']);
 
 $stmt = $conn->prepare("
     SELECT s.*,
@@ -55,9 +66,9 @@ $stmt = $conn->prepare("
            CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
            r.room_number,
            COUNT(DISTINCT e.id) as enrollment_count,
-            TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time,
-            {$start_date_expr} as start_date,
-            {$end_date_expr} as end_date
+           " . ($has_end_time ? "s.end_time" : pgsql_time_format($end_expr) . " as end_time") . ",
+           $start_date_expr as start_date,
+           $end_date_expr as end_date
     FROM schedules s
     {$subjects_join}
     LEFT JOIN courses c ON (s.course_id IS NOT NULL AND s.course_id = c.id)
