@@ -125,7 +125,7 @@ $link_academic_year_expr = isset($schedule_cols['academic_year'])
     ? "COALESCE(s.academic_year, '')"
     : "''";
 $link_year_level_expr = isset($schedule_cols['year_level'])
-    ? "COALESCE(s.year_level, '')"
+    ? (is_pgsql() ? "COALESCE(CAST(s.year_level AS TEXT), '')" : "COALESCE(s.year_level, '')")
     : "''";
 
 $end_time_formatted = pgsql_time_format($end_expr);

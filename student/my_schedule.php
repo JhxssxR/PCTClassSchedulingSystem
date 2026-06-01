@@ -237,7 +237,7 @@ try {
         ? 'COALESCE(s.subject_id, 0) = COALESCE(se.subject_id, 0)'
         : '1=1';
     $year_level_link_predicate = isset($schedule_cols['year_level'])
-        ? "(COALESCE(se.year_level, '') = '' OR COALESCE(s.year_level, '') = COALESCE(se.year_level, ''))"
+        ? (is_pgsql() ? "(COALESCE(CAST(se.year_level AS TEXT), '') = '' OR COALESCE(CAST(s.year_level AS TEXT), '') = COALESCE(CAST(se.year_level AS TEXT), ''))" : "(COALESCE(se.year_level, '') = '' OR COALESCE(s.year_level, '') = COALESCE(se.year_level, ''))")
         : '1=1';
     $semester_link_predicate = isset($schedule_cols['semester'])
         ? "(COALESCE(se.semester, '') = '' OR COALESCE(s.semester, '') = COALESCE(se.semester, ''))"

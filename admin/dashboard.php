@@ -30,7 +30,7 @@ function admin_dashboard_count_grouped_active_classes(PDO $conn): int {
         $has_year_level = admin_dashboard_has_column($conn, 'schedules', 'year_level');
 
         $subject_expr = $has_subject_id ? 'COALESCE(s.subject_id, 0)' : '0';
-        $year_level_expr = $has_year_level ? "COALESCE(s.year_level, '')" : "''";
+        $year_level_expr = $has_year_level ? (is_pgsql() ? "COALESCE(CAST(s.year_level AS TEXT), '')" : "COALESCE(s.year_level, '')") : "''";
 
         if ($has_end_time) {
             $end_time_expr = 's.end_time';

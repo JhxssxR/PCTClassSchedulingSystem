@@ -126,7 +126,7 @@ $link_subject_select = $has_schedule_subject_id
     ? 'COALESCE(s.subject_id, 0)'
     : '0';
 $link_year_level_select = $has_schedule_year_level
-    ? "COALESCE(s.year_level, '')"
+    ? (is_pgsql() ? "COALESCE(CAST(s.year_level AS TEXT), '')" : "COALESCE(s.year_level, '')")
     : "''";
 $link_semester_select = $has_schedule_semester
     ? "COALESCE(s.semester, '')"
