@@ -125,8 +125,8 @@ try {
     $db_engine = DB_ENGINE;
     
     if ($db_engine === 'pgsql') {
-        // PostgreSQL connection
-        $dsn = "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME;
+        // PostgreSQL connection with SSL support for Render
+        $dsn = "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";sslmode=require";
         $pdo_options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
