@@ -168,103 +168,204 @@ function closeConnection() {
 // Register shutdown function
 register_shutdown_function('closeConnection');
 
-// Create tables if they don't exist
-$tables = [
-    "users" => "CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        role ENUM('super_admin', 'admin', 'registrar', 'instructor', 'student') NOT NULL,
-        first_name VARCHAR(50) NOT NULL,
-        last_name VARCHAR(50) NOT NULL,
-        status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )",
-    
-    "courses" => "CREATE TABLE IF NOT EXISTS courses (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        course_code VARCHAR(20) UNIQUE NOT NULL,
-        course_name VARCHAR(100) NOT NULL,
-        description TEXT,
-        credits INT NOT NULL DEFAULT 3,
-        created_by INT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (created_by) REFERENCES users(id)
-    )",
-    
-    "classrooms" => "CREATE TABLE IF NOT EXISTS classrooms (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        room_number VARCHAR(20) UNIQUE NOT NULL,
-        capacity INT NOT NULL DEFAULT 30,
-        building VARCHAR(50) NOT NULL DEFAULT 'Main Building',
-        room_type ENUM('lecture', 'comlab', 'laboratory', 'conference') NOT NULL DEFAULT 'lecture',
-        status ENUM('active', 'maintenance', 'inactive') NOT NULL DEFAULT 'active',
-        created_by INT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (created_by) REFERENCES users(id)
-    )",
-    
-    "schedules" => "CREATE TABLE IF NOT EXISTS schedules (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        course_id INT NOT NULL,
-        instructor_id INT NOT NULL,
-        classroom_id INT NOT NULL,
-        day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday') NOT NULL,
-        start_time TIME NOT NULL,
-        end_time TIME NOT NULL,
-        max_students INT NOT NULL DEFAULT 30,
-        semester VARCHAR(20) NOT NULL,
-        academic_year VARCHAR(9) NOT NULL,
-        status ENUM('active', 'cancelled', 'completed') NOT NULL DEFAULT 'active',
-        created_by INT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (course_id) REFERENCES courses(id),
-        FOREIGN KEY (instructor_id) REFERENCES users(id),
-        FOREIGN KEY (classroom_id) REFERENCES classrooms(id),
-        FOREIGN KEY (created_by) REFERENCES users(id)
-    )",
-    
-    "enrollments" => "CREATE TABLE IF NOT EXISTS enrollments (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        student_id INT NOT NULL,
-        schedule_id INT NOT NULL,
-        status ENUM('pending', 'approved', 'rejected', 'dropped') NOT NULL DEFAULT 'pending',
-        grade DECIMAL(4,2),
-        created_by INT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (student_id) REFERENCES users(id),
-        FOREIGN KEY (schedule_id) REFERENCES schedules(id),
-        FOREIGN KEY (created_by) REFERENCES users(id)
-    )",
+// Create tables if they don't exist - supports both MySQL and PostgreSQL
+function get_create_table_sql($db_engine) {
+    if ($db_engine === 'pgsql') {
+        return [
+            "users" => "CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                role VARCHAR(50) NOT NULL DEFAULT 'student',
+                first_name VARCHAR(50) NOT NULL,
+                last_name VARCHAR(50) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )",
+            
+            "courses" => "CREATE TABLE IF NOT EXISTS courses (
+                id SERIAL PRIMARY KEY,
+                course_code VARCHAR(20) UNIQUE NOT NULL,
+                course_name VARCHAR(100) NOT NULL,
+                description TEXT,
+                credits INT NOT NULL DEFAULT 3,
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
+            
+            "classrooms" => "CREATE TABLE IF NOT EXISTS classrooms (
+                id SERIAL PRIMARY KEY,
+                room_number VARCHAR(20) UNIQUE NOT NULL,
+                capacity INT NOT NULL DEFAULT 30,
+                building VARCHAR(50) NOT NULL DEFAULT 'Main Building',
+                room_type VARCHAR(50) NOT NULL DEFAULT 'lecture',
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
+            
+            "schedules" => "CREATE TABLE IF NOT EXISTS schedules (
+                id SERIAL PRIMARY KEY,
+                course_id INT NOT NULL,
+                instructor_id INT NOT NULL,
+                classroom_id INT NOT NULL,
+                day_of_week VARCHAR(20) NOT NULL,
+                start_time TIME NOT NULL,
+                end_time TIME NOT NULL,
+                max_students INT NOT NULL DEFAULT 30,
+                semester VARCHAR(20) NOT NULL,
+                academic_year VARCHAR(9) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (course_id) REFERENCES courses(id),
+                FOREIGN KEY (instructor_id) REFERENCES users(id),
+                FOREIGN KEY (classroom_id) REFERENCES classrooms(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
+            
+            "enrollments" => "CREATE TABLE IF NOT EXISTS enrollments (
+                id SERIAL PRIMARY KEY,
+                student_id INT NOT NULL,
+                schedule_id INT NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                grade DECIMAL(4,2),
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES users(id),
+                FOREIGN KEY (schedule_id) REFERENCES schedules(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
 
-    "settings" => "CREATE TABLE IF NOT EXISTS settings (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        `key` VARCHAR(100) NOT NULL,
-        `value` TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY uniq_settings_key (`key`)
-    )"
+            "settings" => "CREATE TABLE IF NOT EXISTS settings (
+                id SERIAL PRIMARY KEY,
+                key VARCHAR(100) UNIQUE NOT NULL,
+                value TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )",
 
-    ,
-    "notification_state" => "CREATE TABLE IF NOT EXISTS notification_state (
-        user_id INT PRIMARY KEY,
-        notif_seen_at DATETIME NULL,
-        notif_cleared_at DATETIME NULL,
-        admin_notif_seen_at DATETIME NULL,
-        admin_notif_cleared_at DATETIME NULL,
-        registrar_notif_seen_at DATETIME NULL,
-        registrar_notif_cleared_at DATETIME NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )"
-];
+            "notification_state" => "CREATE TABLE IF NOT EXISTS notification_state (
+                user_id INT PRIMARY KEY,
+                notif_seen_at TIMESTAMP NULL,
+                notif_cleared_at TIMESTAMP NULL,
+                admin_notif_seen_at TIMESTAMP NULL,
+                admin_notif_cleared_at TIMESTAMP NULL,
+                registrar_notif_seen_at TIMESTAMP NULL,
+                registrar_notif_cleared_at TIMESTAMP NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )"
+        ];
+    } else {
+        // MySQL/MariaDB schema
+        return [
+            "users" => "CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                role ENUM('super_admin', 'admin', 'registrar', 'instructor', 'student') NOT NULL,
+                first_name VARCHAR(50) NOT NULL,
+                last_name VARCHAR(50) NOT NULL,
+                status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )",
+            
+            "courses" => "CREATE TABLE IF NOT EXISTS courses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                course_code VARCHAR(20) UNIQUE NOT NULL,
+                course_name VARCHAR(100) NOT NULL,
+                description TEXT,
+                credits INT NOT NULL DEFAULT 3,
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
+            
+            "classrooms" => "CREATE TABLE IF NOT EXISTS classrooms (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                room_number VARCHAR(20) UNIQUE NOT NULL,
+                capacity INT NOT NULL DEFAULT 30,
+                building VARCHAR(50) NOT NULL DEFAULT 'Main Building',
+                room_type ENUM('lecture', 'comlab', 'laboratory', 'conference') NOT NULL DEFAULT 'lecture',
+                status ENUM('active', 'maintenance', 'inactive') NOT NULL DEFAULT 'active',
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
+            
+            "schedules" => "CREATE TABLE IF NOT EXISTS schedules (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                course_id INT NOT NULL,
+                instructor_id INT NOT NULL,
+                classroom_id INT NOT NULL,
+                day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday') NOT NULL,
+                start_time TIME NOT NULL,
+                end_time TIME NOT NULL,
+                max_students INT NOT NULL DEFAULT 30,
+                semester VARCHAR(20) NOT NULL,
+                academic_year VARCHAR(9) NOT NULL,
+                status ENUM('active', 'cancelled', 'completed') NOT NULL DEFAULT 'active',
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (course_id) REFERENCES courses(id),
+                FOREIGN KEY (instructor_id) REFERENCES users(id),
+                FOREIGN KEY (classroom_id) REFERENCES classrooms(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
+            
+            "enrollments" => "CREATE TABLE IF NOT EXISTS enrollments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                student_id INT NOT NULL,
+                schedule_id INT NOT NULL,
+                status ENUM('pending', 'approved', 'rejected', 'dropped') NOT NULL DEFAULT 'pending',
+                grade DECIMAL(4,2),
+                created_by INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES users(id),
+                FOREIGN KEY (schedule_id) REFERENCES schedules(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )",
+
+            "settings" => "CREATE TABLE IF NOT EXISTS settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                `key` VARCHAR(100) NOT NULL,
+                `value` TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_settings_key (`key`)
+            )",
+
+            "notification_state" => "CREATE TABLE IF NOT EXISTS notification_state (
+                user_id INT PRIMARY KEY,
+                notif_seen_at DATETIME NULL,
+                notif_cleared_at DATETIME NULL,
+                admin_notif_seen_at DATETIME NULL,
+                admin_notif_cleared_at DATETIME NULL,
+                registrar_notif_seen_at DATETIME NULL,
+                registrar_notif_cleared_at DATETIME NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )"
+        ];
+    }
+}
+
+$tables = get_create_table_sql($db_engine);
 
 // Execute each table creation query
 foreach ($tables as $table => $sql) {
