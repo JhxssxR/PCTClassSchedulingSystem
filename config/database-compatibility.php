@@ -88,6 +88,29 @@ function pgsql_time_format(string $col): string {
 }
 
 /**
+ * Cross-database DATE_FORMAT equivalent
+ */
+function pgsql_date_format_expr(string $col, string $format = '%Y-%m-%d'): string {
+    global $_db_engine;
+    if ($_db_engine === 'pgsql') {
+        $pg_format = str_replace(['%Y', '%m', '%d'], ['YYYY', 'MM', 'DD'], $format);
+        return "TO_CHAR({$col}::date, '{$pg_format}')";
+    }
+    return "DATE_FORMAT({$col}, '{$format}')";
+}
+
+/**
+ * Cross-database DATE_ADD(..., INTERVAL N DAY) equivalent
+ */
+function pgsql_date_add_days_expr(string $col, int $days): string {
+    global $_db_engine;
+    if ($_db_engine === 'pgsql') {
+        return "({$col}::date + {$days})";
+    }
+    return "DATE_ADD({$col}, INTERVAL {$days} DAY)";
+}
+
+/**
  * Execute a query with PostgreSQL/MySQL compatibility
  * Automatically converts MySQL-specific syntax
  */

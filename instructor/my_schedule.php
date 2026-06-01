@@ -1,6 +1,7 @@
 <?php
 require_once '../config/database.php';
 require_once '../includes/session.php';
+require_once '../config/database-compatibility.php';
 
 require_role('instructor');
 require_once __DIR__ . '/notifications_data.php';
@@ -68,27 +69,31 @@ if ($full_name === '') {
 }
 $user_initials = strtoupper(substr((string) ($instructor['first_name'] ?? 'I'), 0, 1) . substr((string) ($instructor['last_name'] ?? 'N'), 0, 1));
 
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+foreach (describe_table($conn, 'schedules') as $r) {
     $schedule_cols[$r['Field']] = true;
 }
 
 if (isset($schedule_cols['end_time'])) {
     $end_expr = 's.end_time';
 } elseif (isset($schedule_cols['duration_minutes'])) {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60))';
+    $end_expr = pgsql_addtime_expr('s.start_time', 'COALESCE(s.duration_minutes, 120)');
 } else {
-    $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
+    $end_expr = pgsql_addtime_expr('s.start_time', '120');
 }
 
+$start_date_base = "COALESCE(s.start_date, CAST(s.created_at AS date))";
 $start_date_expr = isset($schedule_cols['start_date'])
-    ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
+    ? pgsql_date_format_expr($start_date_base)
+    : pgsql_date_format_expr("CAST(s.created_at AS date)");
+
+$end_date_base = isset($schedule_cols['start_date'])
+    ? "COALESCE(s.end_date, " . pgsql_date_add_days_expr("COALESCE(s.start_date, CAST(s.created_at AS date))", 17) . ")"
+    : pgsql_date_add_days_expr("CAST(s.created_at AS date)", 17);
+
 $end_date_expr = isset($schedule_cols['end_date'])
-    ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+    ? pgsql_date_format_expr($end_date_base)
+    : pgsql_date_format_expr(pgsql_date_add_days_expr("CAST(s.created_at AS date)", 17));
 
 $subjects_table_exists = false;
 try {
@@ -123,7 +128,35 @@ $link_year_level_expr = isset($schedule_cols['year_level'])
     ? "COALESCE(s.year_level, '')"
     : "''";
 
-$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        {$link_subject_expr} AS link_subject_id,\n        s.instructor_id,\n        s.classroom_id,\n        {$link_semester_expr} AS link_semester,\n        {$link_academic_year_expr} AS link_academic_year,\n        {$link_year_level_expr} AS link_year_level,\n        s.day_of_week,\n        s.start_time,\n        TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,\n        {$start_date_expr} AS start_date,\n        {$end_date_expr} AS end_date,\n        s.max_students,\n        {$course_code_expr} AS course_code,\n        {$course_name_expr} AS course_name,\n        cl.room_number,\n        cl.room_type\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    {$subject_join_sql}\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time\n");
+$end_time_formatted = pgsql_time_format($end_expr);
+$stmt = $conn->prepare("
+    SELECT
+        s.id,
+        s.course_id,
+        {$link_subject_expr} AS link_subject_id,
+        s.instructor_id,
+        s.classroom_id,
+        {$link_semester_expr} AS link_semester,
+        {$link_academic_year_expr} AS link_academic_year,
+        {$link_year_level_expr} AS link_year_level,
+        s.day_of_week,
+        s.start_time,
+        {$end_time_formatted} AS end_time,
+        {$start_date_expr} AS start_date,
+        {$end_date_expr} AS end_date,
+        s.max_students,
+        {$course_code_expr} AS course_code,
+        {$course_name_expr} AS course_name,
+        cl.room_number,
+        cl.room_type
+    FROM schedules s
+    JOIN courses c ON s.course_id = c.id
+    {$subject_join_sql}
+    JOIN classrooms cl ON s.classroom_id = cl.id
+    WHERE s.instructor_id = :instructor_id
+      AND s.status = 'active'
+    ORDER BY " . (is_pgsql() ? "ARRAY_POSITION(ARRAY['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], s.day_of_week::text)" : "FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')") . ", s.start_time
+");
 $stmt->execute(['instructor_id' => $instructor_id]);
 $all_schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

@@ -1,6 +1,7 @@
 <?php
 require_once '../config/database.php';
 require_once '../includes/session.php';
+require_once '../config/database-compatibility.php';
 
 require_role('instructor');
 require_once __DIR__ . '/notifications_data.php';
@@ -51,21 +52,21 @@ if ($full_name === '') {
 }
 $user_initials = strtoupper(substr((string) ($instructor['first_name'] ?? 'I'), 0, 1) . substr((string) ($instructor['last_name'] ?? 'N'), 0, 1));
 
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+foreach (describe_table($conn, 'schedules') as $row) {
     $schedule_cols[$row['Field']] = true;
 }
 
 $has_end_time = isset($schedule_cols['end_time']);
 $has_duration_minutes = isset($schedule_cols['duration_minutes']);
 
-$end_expr = $has_end_time
-    ? "TIME_FORMAT(COALESCE(s.end_time, ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))), '%H:%i:%s')"
+$end_expr_inner = $has_end_time
+    ? "COALESCE(s.end_time, " . pgsql_addtime_expr('s.start_time', '120') . ")"
     : ($has_duration_minutes
-        ? "TIME_FORMAT(ADDTIME(s.start_time, SEC_TO_TIME(COALESCE(s.duration_minutes, 120) * 60)), '%H:%i:%s')"
-        : "TIME_FORMAT(ADDTIME(s.start_time, SEC_TO_TIME(120 * 60)), '%H:%i:%s')");
+        ? pgsql_addtime_expr('s.start_time', 'COALESCE(s.duration_minutes, 120)')
+        : pgsql_addtime_expr('s.start_time', '120'));
+
+$end_expr = pgsql_time_format($end_expr_inner);
 
 $subjects_table_exists = false;
 try {
@@ -100,7 +101,37 @@ $link_year_level_expr = isset($schedule_cols['year_level'])
     ? "COALESCE(s.year_level, '')"
     : "''";
 
-$stmt = $conn->prepare("\n    SELECT\n        s.id,\n        s.course_id,\n        {$link_subject_expr} AS link_subject_id,\n        {$link_semester_expr} AS link_semester,\n        {$link_academic_year_expr} AS link_academic_year,\n        {$link_year_level_expr} AS link_year_level,\n        s.classroom_id,\n        s.day_of_week,\n        s.start_time,\n        {$end_expr} AS end_time,\n        s.max_students,\n        {$course_code_expr} AS course_code,\n        {$course_name_expr} AS course_name,\n        cl.room_number,\n        COUNT(DISTINCT CASE WHEN LOWER(COALESCE(e.status, '')) IN ('approved', 'enrolled', 'active') THEN e.student_id END) AS enrolled_students\n    FROM schedules s\n    JOIN courses c ON s.course_id = c.id\n    {$subject_join_sql}\n    JOIN classrooms cl ON s.classroom_id = cl.id\n    LEFT JOIN enrollments e ON s.id = e.schedule_id\n    WHERE s.instructor_id = :instructor_id\n      AND s.status = 'active'\n    GROUP BY s.id\n    ORDER BY course_code, FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time\n");
+$order_by_day = is_pgsql() 
+    ? "ARRAY_POSITION(ARRAY['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], s.day_of_week::text)" 
+    : "FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
+
+$stmt = $conn->prepare("
+    SELECT
+        s.id,
+        s.course_id,
+        {$link_subject_expr} AS link_subject_id,
+        {$link_semester_expr} AS link_semester,
+        {$link_academic_year_expr} AS link_academic_year,
+        {$link_year_level_expr} AS link_year_level,
+        s.classroom_id,
+        s.day_of_week,
+        s.start_time,
+        {$end_expr} AS end_time,
+        s.max_students,
+        {$course_code_expr} AS course_code,
+        {$course_name_expr} AS course_name,
+        cl.room_number,
+        COUNT(DISTINCT CASE WHEN LOWER(COALESCE(e.status, '')) IN ('approved', 'enrolled', 'active') THEN e.student_id END) AS enrolled_students
+    FROM schedules s
+    JOIN courses c ON s.course_id = c.id
+    {$subject_join_sql}
+    JOIN classrooms cl ON s.classroom_id = cl.id
+    LEFT JOIN enrollments e ON s.id = e.schedule_id
+    WHERE s.instructor_id = :instructor_id
+      AND s.status = 'active'
+    GROUP BY s.id, c.course_code, subj.subject_code, c.course_name, subj.subject_name, cl.room_number
+    ORDER BY course_code, {$order_by_day}, s.start_time
+");
 $stmt->execute(['instructor_id' => $instructor_id]);
 $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
