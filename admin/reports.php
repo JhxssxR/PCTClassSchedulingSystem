@@ -10,20 +10,37 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 require_once __DIR__ . '/notifications_data.php';
 
 function reports_table_columns(PDO $conn, string $table): array {
-    $stmt = $conn->prepare("DESCRIBE `{$table}`");
-    $stmt->execute();
     $cols = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $cols[$row['Field']] = true;
-    }
+    try {
+        if (is_pgsql()) {
+            $stmt = $conn->prepare("SELECT column_name as \"Field\" FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ?");
+            $stmt->execute([$table]);
+        } else {
+            $stmt = $conn->prepare("DESCRIBE `{$table}`");
+            $stmt->execute();
+        }
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $cols[$row['Field']] = true;
+        }
+    } catch (Exception $e) {}
     return $cols;
 }
 
 function reports_enrollment_status_map(PDO $conn): array {
-    $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
-    $stmt->execute();
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    $type = (string)($row['Type'] ?? '');
+    $type = '';
+    try {
+        if (is_pgsql()) {
+            $stmt = $conn->prepare("SELECT data_type FROM information_schema.columns WHERE table_name = 'enrollments' AND column_name = 'status' AND table_schema = 'public'");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $type = $row['data_type'] ?? '';
+        } else {
+            $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $type = (string)($row['Type'] ?? '');
+        }
+    } catch (Exception $e) {}
 
     $allowed = [];
     if (preg_match("/^enum\((.*)\)$/i", $type, $m)) {
