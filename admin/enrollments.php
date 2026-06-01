@@ -45,9 +45,13 @@ function fmt_time_range(?string $start, ?string $end): string {
 }
 
 function table_exists_local(PDO $conn, string $table): bool {
-    $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
+    if (is_pgsql()) {
+        $stmt = $conn->prepare('SELECT 1 FROM information_schema.tables WHERE table_schema = \'public\' AND table_name = ? LIMIT 1');
+    } else {
+        $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
+    }
     $stmt->execute([$table]);
-    return ((int)$stmt->fetchColumn()) > 0;
+    return $stmt->rowCount() > 0 || (($stmt->fetchColumn() ?? 0) > 0);
 }
 
 function enrollment_status_map(PDO $conn): array {
