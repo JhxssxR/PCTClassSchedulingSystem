@@ -10,15 +10,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 
 require_once __DIR__ . '/notifications_data.php';
 
-function table_exists(PDO $conn, string $table): bool {
-    // MariaDB/MySQL does not reliably support placeholders in SHOW TABLES.
-    // Use information_schema instead (safe parameterization).
-    $stmt = $conn->prepare(
-        'SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1'
-    );
-    $stmt->execute([$table]);
-    return (bool)$stmt->fetchColumn();
-}
+// Use the global table_exists() from database-compatibility.php, no need to redefine
 
 $settings_array = [
     'school_name' => 'Philippine College of Technology',
@@ -66,7 +58,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
 $php_version = phpversion();
 $mysql_version = $conn->getAttribute(PDO::ATTR_SERVER_VERSION);
 $server_software = (string)($_SERVER['SERVER_SOFTWARE'] ?? '');
-$database_name = (string)($conn->query('SELECT DATABASE()')->fetchColumn() ?? '');
+$database_name = is_pgsql() ? get_current_database_pgsql($conn) : (string)($conn->query('SELECT DATABASE()')->fetchColumn() ?? '');
 $server_name = (string)($_SERVER['SERVER_NAME'] ?? '');
 $server_protocol = (string)($_SERVER['SERVER_PROTOCOL'] ?? '');
 ?>

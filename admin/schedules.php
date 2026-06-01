@@ -11,11 +11,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 require_once __DIR__ . '/notifications_data.php';
 
 // Schedules schema compatibility (some DB versions don't store end_time)
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
+$schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $schedule_cols[$r['Field']] = true;
+foreach ($schedule_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $schedule_cols[$col_name] = true;
 }
 
 if (isset($schedule_cols['end_time'])) {
@@ -26,22 +26,36 @@ if (isset($schedule_cols['end_time'])) {
     $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
 }
 
-$start_date_expr = isset($schedule_cols['start_date'])
-    ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
+// Format dates for display
+$date_format_expr_start = is_pgsql()
+    ? "TO_CHAR(COALESCE(s.start_date, DATE(s.created_at)), 'YYYY-MM-DD')"
+    : "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')";
+$date_format_expr_simple = is_pgsql()
+    ? "TO_CHAR(DATE(s.created_at), 'YYYY-MM-DD')"
     : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
-$end_date_expr = isset($schedule_cols['end_date'])
-    ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
 
-// Detect if subjects table exists (avoid fatal errors on older DBs)
-$subjects_table_exists = false;
-try {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-    $stmt->execute();
-    $subjects_table_exists = ((int)$stmt->fetchColumn() > 0);
-} catch (Throwable $e) {
-    $subjects_table_exists = false;
-}
+$start_date_expr = isset($schedule_cols['start_date'])
+    ? $date_format_expr_start
+    : $date_format_expr_simple;
+
+// Subjects table may not exist on older DBs (use compatibility helper)
+$subjects_table_exists = table_exists($conn, 'subjects');
+
+// Date expression - handle PostgreSQL vs MySQL INTERVAL syntax
+$interval_expr = is_pgsql()
+    ? "(s.created_at + INTERVAL '17 days')"
+    : "DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY)";
+$interval_expr_coalesce = is_pgsql()
+    ? "(COALESCE(s.start_date, DATE(s.created_at)) + INTERVAL '17 days')"
+    : "DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)";
+
+$end_date_expr = isset($schedule_cols['end_date'])
+    ? (is_pgsql() 
+        ? "TO_CHAR(COALESCE(s.end_date, $interval_expr_coalesce), 'YYYY-MM-DD')"
+        : "DATE_FORMAT(COALESCE(s.end_date, $interval_expr_coalesce), '%Y-%m-%d')")
+    : (is_pgsql()
+        ? "TO_CHAR($interval_expr::date, 'YYYY-MM-DD')"
+        : "DATE_FORMAT($interval_expr, '%Y-%m-%d')");
 
 // Get all schedules with their subject (preferred) / course (legacy) and instructor information
 $subject_code_expr = $subjects_table_exists
@@ -52,14 +66,18 @@ $subject_name_expr = $subjects_table_exists
     : "NULLIF(TRIM(c.course_name), '')";
 $subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
 
+$time_format_expr = is_pgsql() 
+    ? "TO_CHAR({$end_expr}, 'HH24:MI:SS')" 
+    : "TIME_FORMAT({$end_expr}, '%H:%i:%s')";
+
 $stmt = $conn->prepare("
     SELECT s.*, 
            {$subject_code_expr} as subject_code,
            {$subject_name_expr} as subject_name,
-           CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
+           " . (is_pgsql() ? "(i.first_name || ' ' || i.last_name)" : "CONCAT(i.first_name, ' ', i.last_name)") . " as instructor_name,
            r.room_number,
            COALESCE(e_count.enrollment_count, 0) as enrollment_count,
-            TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time,
+            {$time_format_expr} as end_time,
             {$start_date_expr} as start_date,
             {$end_date_expr} as end_date
     FROM schedules s

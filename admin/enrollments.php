@@ -11,19 +11,19 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 require_once __DIR__ . '/notifications_data.php';
 
 // Schedules schema compatibility (some DB versions don't store end_time)
-$schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-$schedule_cols_stmt->execute();
+$schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
-foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $schedule_cols[$r['Field']] = true;
+foreach ($schedule_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $schedule_cols[$col_name] = true;
 }
 
 // Enrollments schema compatibility (date columns may vary)
-$enroll_cols_stmt = $conn->prepare('DESCRIBE enrollments');
-$enroll_cols_stmt->execute();
+$enroll_cols_result = get_table_columns($conn, 'enrollments');
 $enroll_cols = [];
-foreach ($enroll_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $enroll_cols[$r['Field']] = true;
+foreach ($enroll_cols_result as $r) {
+    $col_name = isset($r['Field']) ? $r['Field'] : $r['column_name'];
+    $enroll_cols[$col_name] = true;
 }
 
 function schedule_end_expr(array $schedule_cols, string $alias = ''): string {
@@ -44,20 +44,46 @@ function fmt_time_range(?string $start, ?string $end): string {
     return date('g:i A', strtotime($start)) . ' – ' . date('g:i A', strtotime($end));
 }
 
-function table_exists(PDO $conn, string $table): bool {
-    $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
+function table_exists_local(PDO $conn, string $table): bool {
+    if (is_pgsql()) {
+        $stmt = $conn->prepare('SELECT 1 FROM information_schema.tables WHERE table_schema = \'public\' AND table_name = ? LIMIT 1');
+    } else {
+        $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
+    }
     $stmt->execute([$table]);
-    return ((int)$stmt->fetchColumn()) > 0;
+    return $stmt->rowCount() > 0 || (($stmt->fetchColumn() ?? 0) > 0);
 }
 
 function enrollment_status_map(PDO $conn): array {
     // Some schemas use 'approved' instead of 'enrolled'.
-    $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
-    $stmt->execute();
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    $type = (string)($row['Type'] ?? '');
+    // Get enum/column type in a database-agnostic way
+    $type = '';
+    try {
+        if (is_pgsql()) {
+            // PostgreSQL: get the data type
+            $stmt = $conn->prepare("
+                SELECT data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'enrollments' 
+                AND column_name = 'status'
+                AND table_schema = 'public'
+            ");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $type = $row['data_type'] ?? '';
+        } else {
+            // MySQL: use SHOW COLUMNS
+            $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $type = (string)($row['Type'] ?? '');
+        }
+    } catch (Exception $e) {
+        // Ignore query errors, use defaults below
+    }
 
     $allowed = [];
+    // Parse ENUM type from MySQL
     if (preg_match("/^enum\((.*)\)$/i", $type, $m)) {
         $vals = str_getcsv($m[1], ',', "'");
         foreach ($vals as $v) {
@@ -109,7 +135,7 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $end_expr_sched = schedule_end_expr($schedule_cols, 'sched');
 $end_expr_s = schedule_end_expr($schedule_cols, 's');
 
-$subjects_table_exists = isset($schedule_cols['subject_id']) && table_exists($conn, 'subjects');
+$subjects_table_exists = isset($schedule_cols['subject_id']) && table_exists_local($conn, 'subjects');
 $subjects_join_sched = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (sched.subject_id IS NOT NULL AND sched.subject_id = sub.id)' : '';
 $class_name_expr = $subjects_table_exists ? 'COALESCE(sub.subject_name, c.course_name)' : 'c.course_name';
 $subjects_join_s = $subjects_table_exists ? 'LEFT JOIN subjects sub_s ON (s.subject_id IS NOT NULL AND s.subject_id = sub_s.id)' : '';
@@ -323,7 +349,7 @@ if (!$has_schedule_options) {
     $courses_stmt->execute();
     $all_courses = $courses_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    if (table_exists($conn, 'subjects')) {
+    if (table_exists_local($conn, 'subjects')) {
         $subjects_stmt = $conn->prepare("SELECT id, subject_code, subject_name FROM subjects ORDER BY subject_name, subject_code");
         $subjects_stmt->execute();
         $all_subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);

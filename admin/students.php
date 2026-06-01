@@ -13,10 +13,10 @@ require_once __DIR__ . '/notifications_data.php';
 $default_department = 'Information of Technology Education';
 
 // Get all students with enrollment counts + enrolled course codes
-$stmt = $conn->prepare("
+$sql = "
     SELECT u.*,
            COUNT(DISTINCT e.id) as enrollment_count,
-           GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') as enrolled_courses
+           " . (is_pgsql() ? "string_agg(DISTINCT c.course_code, ', ' ORDER BY c.course_code)" : "GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ')") . " as enrolled_courses
     FROM users u
     LEFT JOIN enrollments e ON u.id = e.student_id AND e.status IN ('enrolled', 'approved')
     LEFT JOIN schedules sch ON e.schedule_id = sch.id
@@ -24,7 +24,8 @@ $stmt = $conn->prepare("
     WHERE u.role = 'student'
     GROUP BY u.id
     ORDER BY u.last_name, u.first_name
-");
+";
+$stmt = $conn->prepare($sql);
 $stmt->execute();
 $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

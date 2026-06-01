@@ -15,11 +15,11 @@ $search = isset($_GET['search']) ? $_GET['search'] : '';
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
 
 // Main query (uses schedules; older versions referenced a non-existent `classes` table)
-$stmt = $conn->prepare("
+$sql = "
     SELECT u.*, 
            COUNT(DISTINCT s.id) as class_count,
            COUNT(DISTINCT e.student_id) as student_count,
-           GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') as courses
+           " . (is_pgsql() ? "string_agg(DISTINCT c.course_code, ', ' ORDER BY c.course_code)" : "GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ')") . " as courses
     FROM users u
     LEFT JOIN schedules s ON u.id = s.instructor_id AND s.status = 'active'
     LEFT JOIN courses c ON s.course_id = c.id
@@ -33,7 +33,8 @@ $stmt = $conn->prepare("
         ) : "") . "
     GROUP BY u.id
     ORDER BY u.last_name, u.first_name
-");
+";
+$stmt = $conn->prepare($sql);
 
 if (!empty($search)) {
     $stmt->bindValue(':search', "%$search%", PDO::PARAM_STR);
