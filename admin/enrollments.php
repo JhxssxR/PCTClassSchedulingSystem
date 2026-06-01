@@ -209,13 +209,19 @@ $enrollment_from_sql = "
     {$where_sql}
 ";
 
+$concat_student = is_pgsql() ? "(u.first_name || ' ' || u.last_name)" : "CONCAT(u.first_name, ' ', u.last_name)";
+$concat_instructor = is_pgsql() ? "(i.first_name || ' ' || i.last_name)" : "CONCAT(i.first_name, ' ', i.last_name)";
+$student_number_fallback = is_pgsql()
+    ? "COALESCE(u.student_id, 'STU' || LPAD(CAST(u.id AS VARCHAR), 6, '0'))"
+    : "COALESCE(u.student_id, CONCAT('STU', LPAD(CAST(u.id AS CHAR(20)), 6, '0')))";
+
 $enrollment_select_cols = "
     SELECT e.*,
-           CONCAT(u.first_name, ' ', u.last_name) as student_name,
-           COALESCE(u.student_id, CONCAT('STU', LPAD(CAST(u.id AS CHAR(20)), 6, '0'))) as student_number,
+           {$concat_student} as student_name,
+           {$student_number_fallback} as student_number,
            c.course_code, c.course_name,
            {$class_name_expr} as class_name,
-           CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
+           {$concat_instructor} as instructor_name,
            r.room_number,
            sched.day_of_week,
            sched.start_time,
@@ -269,6 +275,8 @@ $pagination_start = max(1, $page - 2);
 $pagination_end = min($total_pages, $page + 2);
 
 // Get all active schedules for the dropdown
+$concat_instructor_s = is_pgsql() ? "(i.first_name || ' ' || i.last_name)" : "CONCAT(i.first_name, ' ', i.last_name)";
+
 $stmt = $conn->prepare("
     SELECT s.id, 
               c.id as course_id,
@@ -281,11 +289,11 @@ $stmt = $conn->prepare("
            s.semester,
            s.academic_year,
            {$year_level_expr_s} as year_level,
-           CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
+           {$concat_instructor_s} as instructor_name,
            r.room_number,
            s.day_of_week,
            s.start_time,
-           {$time_format_expr_s} as end_time
+           " . pgsql_time_format($end_expr_s) . " as end_time
     FROM schedules s
     JOIN courses c ON s.course_id = c.id
     {$subjects_join_s}

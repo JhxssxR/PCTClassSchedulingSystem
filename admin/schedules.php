@@ -45,6 +45,7 @@ $subjects_table_exists = table_exists($conn, 'subjects');
 $has_end_date = isset($schedule_cols['end_date']);
 $interval_expr_coalesce = pgsql_date_add_days_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))", 17);
 $interval_expr = pgsql_date_add_days_expr("CAST(s.created_at AS DATE)", 17);
+$has_start_date = isset($schedule_cols['start_date']);
 $end_date_expr = $has_end_date
     ? ($has_start_date
         ? pgsql_date_format_expr("COALESCE(s.end_date, $interval_expr_coalesce)", '%Y-%m-%d')
@@ -74,9 +75,9 @@ $stmt = $conn->prepare("
            " . (is_pgsql() ? "(i.first_name || ' ' || i.last_name)" : "CONCAT(i.first_name, ' ', i.last_name)") . " as instructor_name,
            r.room_number,
            COALESCE(e_count.enrollment_count, 0) as enrollment_count,
-            {$time_format_expr} as end_time,
-            {$start_date_expr} as start_date,
-            {$end_date_expr} as end_date
+           " . ($has_end_time ? "s.end_time" : pgsql_time_format($end_expr)) . " as end_time,
+           {$start_date_expr} as start_date,
+           {$end_date_expr} as end_date
     FROM schedules s
     {$subjects_join}
     LEFT JOIN courses c ON (s.course_id IS NOT NULL AND s.course_id = c.id)
