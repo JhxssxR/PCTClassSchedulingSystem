@@ -8,12 +8,7 @@ require_role('instructor');
 require_once __DIR__ . '/notifications_data.php';
 
 function instructor_has_column(PDO $conn, string $table, string $column): bool {
-    try {
-        $stmt = $conn->query("SHOW COLUMNS FROM `$table` LIKE " . $conn->quote($column));
-        return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return false;
-    }
+    return has_column($conn, $table, $column);
 }
 
 function instructor_svg_sparkline_path(array $values, int $width = 78, int $height = 28, int $padding = 3): string {

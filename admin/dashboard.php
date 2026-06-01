@@ -11,12 +11,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role
 require_once __DIR__ . '/notifications_data.php';
 
 function admin_dashboard_has_column(PDO $conn, string $table, string $column): bool {
-    try {
-        $stmt = $conn->query("SHOW COLUMNS FROM `$table` LIKE " . $conn->quote($column));
-        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return false;
-    }
+    return has_column($conn, $table, $column);
 }
 
 function admin_dashboard_count_grouped_active_classes(PDO $conn): int {

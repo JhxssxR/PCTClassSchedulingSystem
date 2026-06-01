@@ -26,12 +26,7 @@ $instructors_trend = [];
 $active_classes_trend = [];
 
 function registrar_has_column(PDO $conn, string $table, string $column): bool {
-    try {
-        $stmt = $conn->query("SHOW COLUMNS FROM `$table` LIKE " . $conn->quote($column));
-        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return false;
-    }
+    return has_column($conn, $table, $column);
 }
 
 function registrar_count_grouped_active_classes(PDO $conn): int {

@@ -182,7 +182,7 @@ function table_exists($conn, $table_name) {
             $stmt = $conn->prepare($sql);
             $stmt->execute([$table_name]);
         }
-        return $stmt->rowCount() > 0;
+        return (bool) $stmt->fetchColumn();
     } catch (PDOException $e) {
         error_log("Error checking if table exists: " . $e->getMessage());
         return false;
@@ -213,6 +213,30 @@ function get_all_tables($conn) {
     } catch (PDOException $e) {
         error_log("Error getting tables: " . $e->getMessage());
         return [];
+    }
+}
+
+/**
+ * Cross-database column existence check.
+ * Replaces MySQL-only SHOW COLUMNS FROM queries.
+ */
+function has_column(PDO $conn, string $table, string $column): bool {
+    global $_db_engine;
+    try {
+        if ($_db_engine === 'pgsql') {
+            $stmt = $conn->prepare(
+                "SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = ? AND column_name = ? LIMIT 1"
+            );
+            $stmt->execute([$table, $column]);
+        } else {
+            $stmt = $conn->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
+            $stmt->execute([$column]);
+        }
+        return (bool) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        error_log("Error checking column {$table}.{$column}: " . $e->getMessage());
+        return false;
     }
 }
 ?>

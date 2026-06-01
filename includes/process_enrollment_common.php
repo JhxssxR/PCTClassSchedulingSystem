@@ -23,40 +23,32 @@ function enrollment_schedule_end_expr(array $schedule_cols, string $alias = ''):
 }
 
 function enrollment_status_map_common(PDO $conn): array {
+    $allowed = [];
     if (is_pgsql()) {
-        $stmt = $conn->prepare("
-            SELECT t.typname, e.enumlabel 
-            FROM pg_type t 
-            JOIN pg_enum e ON t.oid = e.enumtypid 
-            JOIN pg_attribute a ON a.atttypid = t.oid
-            JOIN pg_class c ON c.oid = a.attrelid
-            WHERE c.relname = 'enrollments' AND a.attname = 'status'
-        ");
-        $stmt->execute();
-        $allowed = [];
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $allowed[strtolower(trim($row['enumlabel']))] = true;
-        }
-        $type = 'enum';
+        // PostgreSQL uses CHECK constraints, not ENUM. Provide safe defaults.
+        $allowed = ['approved' => true, 'pending' => true, 'dropped' => true, 'rejected' => true];
     } else {
-        $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
-        $stmt->execute();
-        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        $type = (string)($row['Type'] ?? '');
-    }
-
-    if (!is_pgsql() && preg_match("/^enum\((.*)\)$/i", $type, $match)) {
-        $values = str_getcsv($match[1], ',', "'");
-        foreach ($values as $value) {
-            $allowed[strtolower(trim($value))] = true;
+        try {
+            $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $type = (string)($row['Type'] ?? '');
+            if (preg_match("/^enum\((.*)\)$/i", $type, $match)) {
+                $values = str_getcsv($match[1], ',', "'");
+                foreach ($values as $value) {
+                    $allowed[strtolower(trim($value))] = true;
+                }
+            }
+        } catch (Throwable $e) {
+            $allowed = ['approved' => true, 'pending' => true, 'dropped' => true, 'rejected' => true];
         }
     }
 
     $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
 
     return [
-        'active' => $active,
-        'allowed' => $allowed,
+        'active'           => $active,
+        'allowed'          => $allowed,
         'supports_pending' => empty($allowed) || isset($allowed['pending']),
         'supports_dropped' => empty($allowed) || isset($allowed['dropped']),
         'supports_rejected' => empty($allowed) || isset($allowed['rejected']),

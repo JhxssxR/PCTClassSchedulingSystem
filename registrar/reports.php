@@ -18,24 +18,11 @@ function reg_reports_table_columns(PDO $conn, string $table): array {
 }
 
 function reg_reports_enrollment_status_map(PDO $conn): array {
-    $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
-    $stmt->execute();
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    $type = (string)($row['Type'] ?? '');
-
-    $allowed = [];
-    if (preg_match("/^enum\((.*)\)$/i", $type, $m)) {
-        $vals = str_getcsv($m[1], ',', "'");
-        foreach ($vals as $v) {
-            $allowed[strtolower(trim($v))] = true;
-        }
-    }
-
-    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
+    // PostgreSQL uses CHECK constraints, not ENUM. Default to 'approved' as the active status.
     return [
-        'active' => $active,
-        'pending' => 'pending',
-        'dropped' => 'dropped',
+        'active'   => 'approved',
+        'pending'  => 'pending',
+        'dropped'  => 'dropped',
         'rejected' => 'rejected',
     ];
 }

@@ -43,31 +43,13 @@ function fmt_time_range(?string $start, ?string $end): string {
 }
 
 function enrollment_status_map(PDO $conn): array {
-    // Some schemas use 'approved' instead of 'enrolled'
-    $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
-    $stmt->execute();
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    $type = (string)($row['Type'] ?? '');
-
-    $allowed = [];
-    if (preg_match("/^enum\((.*)\)$/i", $type, $m)) {
-        $vals = str_getcsv($m[1], ',', "'");
-        foreach ($vals as $v) {
-            $allowed[strtolower(trim($v))] = true;
-        }
-    }
-
-    $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
-    $pending = isset($allowed['pending']) ? 'pending' : 'pending';
-    $rejected = isset($allowed['rejected']) ? 'rejected' : 'rejected';
-    $dropped = isset($allowed['dropped']) ? 'dropped' : 'dropped';
-
+    // PostgreSQL uses CHECK constraints, not ENUM. Use 'approved' as the active status.
     return [
-        'active' => $active,
-        'pending' => $pending,
-        'rejected' => $rejected,
-        'dropped' => $dropped,
-        'allowed' => $allowed,
+        'active'   => 'approved',
+        'pending'  => 'pending',
+        'rejected' => 'rejected',
+        'dropped'  => 'dropped',
+        'allowed'  => ['approved' => true, 'pending' => true, 'rejected' => true, 'dropped' => true],
     ];
 }
 

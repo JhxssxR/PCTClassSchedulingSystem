@@ -16,12 +16,7 @@ if (!isset($conn) || !($conn instanceof PDO)) {
 $user_id = (int)($_SESSION['user_id'] ?? 0);
 
 function student_notif_has_column(PDO $conn, string $table, string $column): bool {
-    try {
-        $stmt = $conn->query("SHOW COLUMNS FROM `" . $table . "` LIKE " . $conn->quote($column));
-        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return false;
-    }
+    return has_column($conn, $table, $column);
 }
 
 try {
