@@ -116,8 +116,8 @@ try {
         $select_end = isset($s_cols['end_time'])
             ? 's.end_time AS end_time'
             : (isset($s_cols['duration_minutes'])
-                ? 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60)) AS end_time'
-                : "ADDTIME(s.start_time, '02:00:00') AS end_time");
+                ? pgsql_addtime_expr('s.start_time', 's.duration_minutes') . ' AS end_time'
+                : pgsql_addtime_expr('s.start_time', '120') . ' AS end_time');
 
         $stmt = $conn->prepare("\n            SELECT\n                s.id,\n                s.{$schedule_ts_col} AS notif_ts,\n                s.day_of_week,\n                s.start_time,\n                {$select_end},\n                {$notif_course_code_expr} AS course_code,\n                {$notif_course_name_expr} AS course_name,\n                r.room_number\n            FROM schedules s\n            JOIN courses c ON c.id = s.course_id\n            {$subject_join_sql}\n            JOIN classrooms r ON r.id = s.classroom_id\n            WHERE s.instructor_id = :iid\n              AND s.{$schedule_ts_col} > :cutoff_at\n              AND s.{$schedule_ts_col} <= :now_ts\n            ORDER BY s.{$schedule_ts_col} DESC\n            LIMIT 5\n        ");
         $stmt->execute([
@@ -158,13 +158,65 @@ try {
         $upcoming_end = isset($s_cols['end_time'])
             ? 's.end_time'
             : (isset($s_cols['duration_minutes'])
-                ? 'ADDTIME(s.start_time, SEC_TO_TIME(s.duration_minutes * 60))'
-                : "ADDTIME(s.start_time, '02:00:00')");
+                ? pgsql_addtime_expr('s.start_time', 's.duration_minutes')
+                : pgsql_addtime_expr('s.start_time', '120'));
 
-        $stmt = $conn->prepare("\n            SELECT\n                s.id,\n                s.day_of_week,\n                s.start_time,\n                {$upcoming_end} AS end_time,\n                {$notif_course_code_expr} AS course_code,\n                {$notif_course_name_expr} AS course_name,\n                r.room_number,\n                d.class_date\n            FROM (\n                SELECT CURDATE() AS class_date\n                UNION ALL SELECT CURDATE() + INTERVAL 1 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 2 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 3 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 4 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 5 DAY\n                UNION ALL SELECT CURDATE() + INTERVAL 6 DAY\n            ) d\n            JOIN schedules s ON s.day_of_week = DAYNAME(d.class_date)\n            JOIN courses c ON c.id = s.course_id\n            {$subject_join_sql}\n            JOIN classrooms r ON r.id = s.classroom_id\n            WHERE s.instructor_id = :iid\n              AND s.status = 'active'\n              AND (\n                    d.class_date > CURDATE()\n                 OR (d.class_date = CURDATE() AND s.start_time >= CURTIME())\n              )\n            ORDER BY d.class_date ASC, s.start_time ASC\n            LIMIT 5\n        ");
+        // Generate the next 7 days in PHP for cross-db compatibility
+        $days_map = [];
+        $today = date('Y-m-d');
+        $now_time = date('H:i:s');
+        for ($i = 0; $i < 7; $i++) {
+            $d = date('Y-m-d', strtotime("+$i days"));
+            $day_name = date('l', strtotime($d));
+            if (!isset($days_map[$day_name])) {
+                $days_map[$day_name] = [];
+            }
+            $days_map[$day_name][] = $d;
+        }
+
+        $stmt = $conn->prepare("
+            SELECT
+                s.id,
+                s.day_of_week,
+                s.start_time,
+                {$upcoming_end} AS end_time,
+                {$notif_course_code_expr} AS course_code,
+                {$notif_course_name_expr} AS course_name,
+                r.room_number
+            FROM schedules s
+            JOIN courses c ON c.id = s.course_id
+            {$subject_join_sql}
+            JOIN classrooms r ON r.id = s.classroom_id
+            WHERE s.instructor_id = :iid
+              AND s.status = 'active'
+        ");
         $stmt->execute(['iid' => $instructor_id]);
-
+        
+        $upcoming_classes = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $day_of_week = $r['day_of_week'] ?? '';
+            $start_time = $r['start_time'] ?? '';
+            if (isset($days_map[$day_of_week])) {
+                foreach ($days_map[$day_of_week] as $class_date) {
+                    if ($class_date > $today || ($class_date === $today && $start_time >= $now_time)) {
+                        $row = $r;
+                        $row['class_date'] = $class_date;
+                        $upcoming_classes[] = $row;
+                    }
+                }
+            }
+        }
+        
+        usort($upcoming_classes, function($a, $b) {
+            if ($a['class_date'] === $b['class_date']) {
+                return $a['start_time'] <=> $b['start_time'];
+            }
+            return $a['class_date'] <=> $b['class_date'];
+        });
+        
+        $upcoming_classes = array_slice($upcoming_classes, 0, 5);
+
+        foreach ($upcoming_classes as $r) {
             $course = trim((string) ($r['course_code'] ?? '') . ' - ' . (string) ($r['course_name'] ?? ''));
             $start_label = !empty($r['start_time']) ? date('g:i A', strtotime((string) $r['start_time'])) : '';
             $end_label = !empty($r['end_time']) ? date('g:i A', strtotime((string) $r['end_time'])) : '';
