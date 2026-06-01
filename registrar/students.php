@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_s
 $stmt = $conn->prepare("
     SELECT u.*,
            COUNT(DISTINCT e.id) as enrollment_count,
-           GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') as enrolled_courses
+           " . (is_pgsql() ? "string_agg(DISTINCT c.course_code, ', ' ORDER BY c.course_code)" : "GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ')") . " as enrolled_courses
     FROM users u
     LEFT JOIN enrollments e ON u.id = e.student_id AND e.status IN ('enrolled', 'approved')
     LEFT JOIN schedules sch ON e.schedule_id = sch.id

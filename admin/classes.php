@@ -581,14 +581,23 @@ function status_badge_classes($status) {
                     </div>
 
                     <div class="overflow-x-auto">
-                        <table class="min-w-full table-fixed text-sm">
+                        <table class="min-w-[900px] w-full table-fixed text-sm">
+                            <colgroup>
+                                <col class="w-[24%]">
+                                <col class="w-[16%]">
+                                <col class="w-[8%]">
+                                <col class="w-[22%]">
+                                <col class="w-[10%]">
+                                <col class="w-[9%]">
+                                <col class="w-[11%]">
+                            </colgroup>
                             <thead class="text-xs uppercase tracking-wider text-slate-500 bg-slate-50">
                                 <tr>
                                     <th class="px-5 py-3 text-left font-semibold">Subject</th>
                                     <th class="px-5 py-3 text-left font-semibold">Instructor</th>
                                     <th class="px-5 py-3 text-left font-semibold">Room</th>
-                                    <th class="px-5 py-3 text-left font-semibold w-[38%]">Schedule</th>
-                                    <th class="px-5 py-3 text-left font-semibold w-[10%]">Enrollment</th>
+                                    <th class="px-5 py-3 text-left font-semibold">Schedule</th>
+                                    <th class="px-5 py-3 text-left font-semibold">Enrollment</th>
                                     <th class="px-5 py-3 text-left font-semibold">Status</th>
                                     <th class="px-5 py-3 text-right font-semibold">Actions</th>
                                 </tr>
@@ -621,7 +630,7 @@ function status_badge_classes($status) {
                                         }
                                     ?>
                                     <tr class="class-row border-t border-slate-100 hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars(strtolower(($display_name) . ' ' . ($display_code) . ' ' . ($class['instructor_name'] ?? '') . ' ' . ($class['room_number'] ?? '') . ' ' . ($class['combined_days_label'] ?? ''))); ?>">
-                                        <td class="px-5 py-4 w-[38%] align-top">
+                                        <td class="px-5 py-4 align-top">
                                             <div class="font-semibold text-slate-900"><?php echo htmlspecialchars($display_name); ?></div>
                                             <div class="text-xs text-slate-500"><?php echo htmlspecialchars($display_code); ?></div>
                                         </td>
@@ -638,7 +647,7 @@ function status_badge_classes($status) {
                                                 <div class="text-[11px] text-slate-400"><?php echo (int)$class['group_size']; ?> linked schedules</div>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="px-5 py-4 w-[10%]">
+                                        <td class="px-5 py-4">
                                             <div class="flex items-center gap-2.5">
                                                 <div class="min-w-[56px] text-sm text-slate-700">
                                                     <?php echo htmlspecialchars($enrolled . '/' . ($max > 0 ? $max : '—')); ?>

@@ -276,7 +276,7 @@ $stmt = $conn->prepare(
         {$status_expr} AS status,
         COUNT(DISTINCT s.id) AS class_count,
         COUNT(DISTINCT e.student_id) AS student_count,
-        GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') AS courses
+        " . (is_pgsql() ? "string_agg(DISTINCT c.course_code, ', ' ORDER BY c.course_code)" : "GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ')") . " AS courses
     FROM users u
     LEFT JOIN schedules s ON u.id = s.instructor_id AND s.status = 'active'
     LEFT JOIN courses c ON s.course_id = c.id

@@ -410,15 +410,15 @@ require_once __DIR__ . '/includes/layout_top.php';
     </div>
 
     <div class="overflow-x-auto">
-        <table class="min-w-full table-fixed text-sm">
+        <table class="min-w-[900px] w-full table-fixed text-sm">
             <colgroup>
-                <col class="w-[22%]">
+                <col class="w-[24%]">
                 <col class="w-[16%]">
                 <col class="w-[8%]">
-                <col class="w-[33%]">
-                <col class="w-[7%]">
-                <col class="w-[8%]">
-                <col class="w-[6%]">
+                <col class="w-[22%]">
+                <col class="w-[10%]">
+                <col class="w-[9%]">
+                <col class="w-[11%]">
             </colgroup>
             <thead class="text-xs uppercase tracking-wider text-slate-500 bg-slate-50">
                 <tr>
