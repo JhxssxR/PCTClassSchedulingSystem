@@ -58,7 +58,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
 $php_version = phpversion();
 $mysql_version = $conn->getAttribute(PDO::ATTR_SERVER_VERSION);
 $server_software = (string)($_SERVER['SERVER_SOFTWARE'] ?? '');
-$database_name = (string)($conn->query('SELECT DATABASE()')->fetchColumn() ?? '');
+$database_name = is_pgsql() ? get_current_database_pgsql($conn) : (string)($conn->query('SELECT DATABASE()')->fetchColumn() ?? '');
 $server_name = (string)($_SERVER['SERVER_NAME'] ?? '');
 $server_protocol = (string)($_SERVER['SERVER_PROTOCOL'] ?? '');
 ?>

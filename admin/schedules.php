@@ -29,19 +29,24 @@ if (isset($schedule_cols['end_time'])) {
 $start_date_expr = isset($schedule_cols['start_date'])
     ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
     : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
-$end_date_expr = isset($schedule_cols['end_date'])
-    ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
-    : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+// Subjects table may not exist on older DBs (use compatibility helper)
+$subjects_table_exists = table_exists($conn, 'subjects');
 
-// Detect if subjects table exists (avoid fatal errors on older DBs)
-$subjects_table_exists = false;
-try {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'subjects'");
-    $stmt->execute();
-    $subjects_table_exists = ((int)$stmt->fetchColumn() > 0);
-} catch (Throwable $e) {
-    $subjects_table_exists = false;
-}
+// Date expression - handle PostgreSQL vs MySQL INTERVAL syntax
+$interval_expr = is_pgsql()
+    ? "(s.created_at + INTERVAL '17 days')"
+    : "DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY)";
+$interval_expr_coalesce = is_pgsql()
+    ? "(COALESCE(s.start_date, DATE(s.created_at)) + INTERVAL '17 days')"
+    : "DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)";
+
+$end_date_expr = isset($schedule_cols['end_date'])
+    ? (is_pgsql() 
+        ? "COALESCE(s.end_date, $interval_expr_coalesce)::text"
+        : "DATE_FORMAT(COALESCE(s.end_date, $interval_expr_coalesce), '%Y-%m-%d')")
+    : (is_pgsql()
+        ? "$interval_expr::text"
+        : "DATE_FORMAT($interval_expr, '%Y-%m-%d')");
 
 // Get all schedules with their subject (preferred) / course (legacy) and instructor information
 $subject_code_expr = $subjects_table_exists

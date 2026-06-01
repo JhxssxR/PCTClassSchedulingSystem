@@ -44,7 +44,7 @@ function fmt_time_range(?string $start, ?string $end): string {
     return date('g:i A', strtotime($start)) . ' – ' . date('g:i A', strtotime($end));
 }
 
-function table_exists(PDO $conn, string $table): bool {
+function table_exists_local(PDO $conn, string $table): bool {
     $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
     $stmt->execute([$table]);
     return ((int)$stmt->fetchColumn()) > 0;
@@ -109,7 +109,7 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $end_expr_sched = schedule_end_expr($schedule_cols, 'sched');
 $end_expr_s = schedule_end_expr($schedule_cols, 's');
 
-$subjects_table_exists = isset($schedule_cols['subject_id']) && table_exists($conn, 'subjects');
+$subjects_table_exists = isset($schedule_cols['subject_id']) && table_exists_local($conn, 'subjects');
 $subjects_join_sched = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (sched.subject_id IS NOT NULL AND sched.subject_id = sub.id)' : '';
 $class_name_expr = $subjects_table_exists ? 'COALESCE(sub.subject_name, c.course_name)' : 'c.course_name';
 $subjects_join_s = $subjects_table_exists ? 'LEFT JOIN subjects sub_s ON (s.subject_id IS NOT NULL AND s.subject_id = sub_s.id)' : '';
@@ -323,7 +323,7 @@ if (!$has_schedule_options) {
     $courses_stmt->execute();
     $all_courses = $courses_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    if (table_exists($conn, 'subjects')) {
+    if (table_exists_local($conn, 'subjects')) {
         $subjects_stmt = $conn->prepare("SELECT id, subject_code, subject_name FROM subjects ORDER BY subject_name, subject_code");
         $subjects_stmt->execute();
         $all_subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
