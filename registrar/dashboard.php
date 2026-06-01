@@ -337,6 +337,24 @@ $trend_small_paths = [
     </div>
 <?php endif; ?>
 
+<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 soft-card shadow-sm">
+        <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-slate-100 object-contain">
+        <div class="leading-tight">
+            <div class="text-sm font-semibold text-slate-700">PCT Registrar</div>
+            <div class="text-xs text-slate-400">
+                <span id="registrarLiveDate"><?php echo date('D, M j, Y'); ?></span>
+                <span class="mx-1">&bull;</span>
+                <span id="registrarLiveTime" class="font-medium text-slate-500"><?php echo date('h:i A'); ?></span>
+            </div>
+        </div>
+    </div>
+    <div class="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+        <i class="bi bi-stars"></i>
+        <span>AY. 2025-2026 - 2nd Semester</span>
+    </div>
+</div>
+
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
     <!-- Total enrollments big card -->
     <section class="xl:col-span-2 rounded-3xl bg-emerald-950 text-white overflow-hidden border border-emerald-900">
@@ -664,6 +682,25 @@ $trend_small_paths = [
     monthBtn.addEventListener('click', function () {
         render('month');
     });
+
+    function updateLiveClock() {
+        const timeEl = document.getElementById('registrarLiveTime');
+        const dateEl = document.getElementById('registrarLiveDate');
+        if (!timeEl) return;
+        
+        const now = new Date();
+        const optsTime = { hour: 'numeric', minute: '2-digit', hour12: true };
+        const timeStr = now.toLocaleTimeString('en-US', optsTime);
+        timeEl.textContent = timeStr;
+        
+        if (dateEl) {
+            const optsDate = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+            dateEl.textContent = now.toLocaleDateString('en-US', optsDate);
+        }
+    }
+    
+    setInterval(updateLiveClock, 10000);
+    updateLiveClock();
 })();
 </script>
 

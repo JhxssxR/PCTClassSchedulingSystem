@@ -521,7 +521,11 @@ $mini_trend_points = [
                         <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-slate-100 object-contain">
                         <div class="leading-tight">
                             <div class="text-sm font-semibold text-slate-700">PCT Super Admin</div>
-                            <div class="text-xs text-slate-400"><?php echo htmlspecialchars($today_label); ?></div>
+                            <div class="text-xs text-slate-400">
+                                <span id="adminLiveDate"><?php echo htmlspecialchars($today_label); ?></span>
+                                <span class="mx-1">&bull;</span>
+                                <span id="adminLiveTime" class="font-medium text-slate-500"><?php echo date('h:i A'); ?></span>
+                            </div>
                         </div>
                     </div>
                     <div class="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
@@ -954,6 +958,26 @@ $mini_trend_points = [
             closeMenu();
         }
     });
+    function updateLiveClock() {
+        const timeEl = document.getElementById('adminLiveTime');
+        const dateEl = document.getElementById('adminLiveDate');
+        if (!timeEl) return;
+        
+        const now = new Date();
+        const optsTime = { hour: 'numeric', minute: '2-digit', hour12: true };
+        const timeStr = now.toLocaleTimeString('en-US', optsTime);
+        timeEl.textContent = timeStr;
+        
+        if (dateEl) {
+            const optsDate = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+            dateEl.textContent = now.toLocaleDateString('en-US', optsDate);
+        }
+    }
+    
+    // Update every minute (or 10 seconds to catch boundaries)
+    setInterval(updateLiveClock, 10000);
+    // Initial call
+    updateLiveClock();
 })();
 </script>
 </body>
