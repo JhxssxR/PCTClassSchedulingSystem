@@ -132,8 +132,8 @@ try {
             {$subject_code_expr} AS subject_code,
             {$subject_name_expr} AS subject_name,
             s.day_of_week AS schedule_day,
-            TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
-            TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,
+            " . pgsql_time_format('s.start_time') . " AS start_time,
+            " . pgsql_time_format($end_expr) . " AS end_time,
             {$units_expr} AS units,
             COALESCE(cr.room_number, 'TBA') AS room_number,
             TRIM(CONCAT(COALESCE(i.first_name, ''), ' ', COALESCE(i.last_name, ''))) AS instructor_name

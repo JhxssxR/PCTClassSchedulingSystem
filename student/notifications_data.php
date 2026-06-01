@@ -157,8 +157,8 @@ try {
                 e.status AS enrollment_status,
                 s.id AS schedule_id,
                 s.day_of_week,
-                TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
-                TIME_FORMAT({$schedule_end_expr}, '%H:%i:%s') AS end_time,
+                " . pgsql_time_format('s.start_time') . " AS start_time,
+                " . pgsql_time_format($schedule_end_expr) . " AS end_time,
                 {$subject_code_expr} AS subject_code,
                 {$subject_name_expr} AS subject_name,
                 COALESCE(cr.room_number, 'TBA') AS room_number,
@@ -246,8 +246,8 @@ try {
                 $schedule_ts_expr AS event_ts,
                 COALESCE(s.status, 'active') AS schedule_status,
                 s.day_of_week,
-                TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
-                TIME_FORMAT({$schedule_end_expr}, '%H:%i:%s') AS end_time,
+                " . pgsql_time_format('s.start_time') . " AS start_time,
+                " . pgsql_time_format($schedule_end_expr) . " AS end_time,
                 {$subject_code_expr} AS subject_code,
                 {$subject_name_expr} AS subject_name,
                 COALESCE(cr.room_number, 'TBA') AS room_number,
@@ -264,8 +264,8 @@ try {
                 AND {$subject_link_predicate}
                 AND COALESCE(s.instructor_id, 0) = COALESCE(se.instructor_id, 0)
                 AND COALESCE(s.classroom_id, 0) = COALESCE(se.classroom_id, 0)
-                AND TIME_FORMAT(s.start_time, '%H:%i:%s') = TIME_FORMAT(se.start_time, '%H:%i:%s')
-                AND TIME_FORMAT({$schedule_end_expr}, '%H:%i:%s') = TIME_FORMAT({$linked_schedule_end_expr}, '%H:%i:%s')
+                AND " . pgsql_time_format('s.start_time') . " = " . pgsql_time_format('se.start_time') . "
+                AND " . pgsql_time_format($schedule_end_expr) . " = " . pgsql_time_format($linked_schedule_end_expr) . "
                 AND {$semester_link_predicate}
                 AND {$academic_year_link_predicate}
                 AND {$year_level_link_predicate}

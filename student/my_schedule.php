@@ -216,12 +216,14 @@ try {
     $end_expr = student_schedule_end_expr($schedule_cols, 's');
     $linked_end_expr = student_schedule_end_expr($schedule_cols, 'se');
 
+    require_once __DIR__ . '/../config/database-compatibility.php';
+    
     $start_date_expr = isset($schedule_cols['start_date'])
-        ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
-        : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
+        ? pgsql_date_format_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))")
+        : pgsql_date_format_expr("CAST(s.created_at AS DATE)");
     $end_date_expr = isset($schedule_cols['end_date'])
-        ? "DATE_FORMAT(COALESCE(s.end_date, DATE_ADD(COALESCE(s.start_date, DATE(s.created_at)), INTERVAL 17 DAY)), '%Y-%m-%d')"
-        : "DATE_FORMAT(DATE_ADD(DATE(s.created_at), INTERVAL 17 DAY), '%Y-%m-%d')";
+        ? pgsql_date_format_expr("COALESCE(s.end_date, " . pgsql_date_add_days_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))", 17) . ")")
+        : pgsql_date_format_expr(pgsql_date_add_days_expr("CAST(s.created_at AS DATE)", 17));
 
     $subject_code_expr = $subjects_enabled
         ? "COALESCE(subj.subject_code, 'N/A')"
@@ -252,8 +254,8 @@ try {
             {$subject_code_expr} AS subject_code,
             {$subject_name_expr} AS subject_name,
             s.day_of_week AS schedule_day,
-            TIME_FORMAT(s.start_time, '%H:%i:%s') AS start_time,
-            TIME_FORMAT({$end_expr}, '%H:%i:%s') AS end_time,
+            " . pgsql_time_format('s.start_time') . " AS start_time,
+            " . pgsql_time_format($end_expr) . " AS end_time,
             {$start_date_expr} AS start_date,
             {$end_date_expr} AS end_date,
             COALESCE(cr.room_number, 'TBA') AS room_number,
@@ -272,8 +274,8 @@ try {
                         AND {$subject_link_predicate}
                         AND COALESCE(s.instructor_id, 0) = COALESCE(se.instructor_id, 0)
                         AND COALESCE(s.classroom_id, 0) = COALESCE(se.classroom_id, 0)
-                        AND TIME_FORMAT(s.start_time, '%H:%i:%s') = TIME_FORMAT(se.start_time, '%H:%i:%s')
-                        AND TIME_FORMAT({$end_expr}, '%H:%i:%s') = TIME_FORMAT({$linked_end_expr}, '%H:%i:%s')
+                        AND " . pgsql_time_format('s.start_time') . " = " . pgsql_time_format('se.start_time') . "
+                        AND " . pgsql_time_format($end_expr) . " = " . pgsql_time_format($linked_end_expr) . "
                     AND {$semester_link_predicate}
                     AND {$academic_year_link_predicate}
                         AND {$year_level_link_predicate}
@@ -281,9 +283,13 @@ try {
         {$subject_join_sql}
         LEFT JOIN classrooms cr ON s.classroom_id = cr.id
         LEFT JOIN users i ON s.instructor_id = i.id
-        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time
     ";
 
+    $order_by_day = is_pgsql() 
+        ? "CASE s.day_of_week WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 ELSE 8 END"
+        : "FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
+
+    $sql .= " ORDER BY {$order_by_day}, s.start_time";
     $stmt = $conn->prepare($sql);
     $stmt->execute(['student_id' => (int)$_SESSION['user_id']]);
     $schedule_rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
