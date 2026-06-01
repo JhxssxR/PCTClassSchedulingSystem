@@ -1,12 +1,11 @@
 <?php
 
 require_once __DIR__ . '/activity_log.php';
+require_once __DIR__ . '/../config/database-compatibility.php';
 
 function enrollment_table_columns(PDO $conn): array {
-    $stmt = $conn->prepare('DESCRIBE enrollments');
-    $stmt->execute();
     $cols = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach (describe_table($conn, 'enrollments') as $row) {
         $cols[$row['Field']] = true;
     }
     return $cols;
@@ -18,19 +17,35 @@ function enrollment_schedule_end_expr(array $schedule_cols, string $alias = ''):
         return $prefix . 'end_time';
     }
     if (isset($schedule_cols['duration_minutes'])) {
-        return "ADDTIME({$prefix}start_time, SEC_TO_TIME({$prefix}duration_minutes * 60))";
+        return pgsql_addtime_expr("{$prefix}start_time", "{$prefix}duration_minutes");
     }
-    return "ADDTIME({$prefix}start_time, SEC_TO_TIME(120 * 60))";
+    return pgsql_addtime_expr("{$prefix}start_time", "120");
 }
 
 function enrollment_status_map_common(PDO $conn): array {
-    $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
-    $stmt->execute();
-    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-    $type = (string)($row['Type'] ?? '');
+    if (is_pgsql()) {
+        $stmt = $conn->prepare("
+            SELECT t.typname, e.enumlabel 
+            FROM pg_type t 
+            JOIN pg_enum e ON t.oid = e.enumtypid 
+            JOIN pg_attribute a ON a.atttypid = t.oid
+            JOIN pg_class c ON c.oid = a.attrelid
+            WHERE c.relname = 'enrollments' AND a.attname = 'status'
+        ");
+        $stmt->execute();
+        $allowed = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $allowed[strtolower(trim($row['enumlabel']))] = true;
+        }
+        $type = 'enum';
+    } else {
+        $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $type = (string)($row['Type'] ?? '');
+    }
 
-    $allowed = [];
-    if (preg_match("/^enum\((.*)\)$/i", $type, $match)) {
+    if (!is_pgsql() && preg_match("/^enum\((.*)\)$/i", $type, $match)) {
         $values = str_getcsv($match[1], ',', "'");
         foreach ($values as $value) {
             $allowed[strtolower(trim($value))] = true;
@@ -83,10 +98,8 @@ function enrollment_process_request(PDO $conn, array $options): void {
         exit();
     }
 
-    $schedule_cols_stmt = $conn->prepare('DESCRIBE schedules');
-    $schedule_cols_stmt->execute();
     $schedule_cols = [];
-    foreach ($schedule_cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach (describe_table($conn, 'schedules') as $row) {
         $schedule_cols[$row['Field']] = true;
     }
 
