@@ -9,10 +9,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? null) !== 'super_admin
 }
 
 function table_columns(PDO $conn, string $table): array {
-    $stmt = $conn->prepare("DESCRIBE {$table}");
-    $stmt->execute();
     $cols = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach (describe_table($conn, $table) as $row) {
         $cols[$row['Field']] = true;
     }
     return $cols;
@@ -48,7 +46,9 @@ function add_minutes_to_time(string $start_time, int $minutes): string {
 
 function get_setting_int(PDO $conn, string $key, int $default): int {
     try {
-        $stmt = $conn->prepare('SELECT `value` FROM settings WHERE `key` = ? LIMIT 1');
+        $vcol = is_pgsql() ? '"value"' : '`value`';
+        $kcol = is_pgsql() ? '"key"' : '`key`';
+        $stmt = $conn->prepare("SELECT {$vcol} FROM settings WHERE {$kcol} = ? LIMIT 1");
         $stmt->execute([$key]);
         $v = $stmt->fetchColumn();
         if ($v === false || $v === null) return $default;
@@ -137,7 +137,8 @@ function find_linked_schedule_rows(PDO $conn, array $base_row, array $cols, bool
         }
     }
 
-    $where[] = "TIME_FORMAT(start_time, '%H:%i:%s') = ?";
+    $time_fmt = pgsql_time_format('start_time');
+    $where[] = "{$time_fmt} = ?";
     $params[] = normalize_time_his((string)($base_row['start_time'] ?? ''));
 
     $sql = 'SELECT * FROM schedules';
@@ -269,7 +270,7 @@ try {
     $allowed_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     $end_time_compare_expr = $has_end_time
         ? 'end_time'
-        : ($has_duration_minutes ? 'ADDTIME(start_time, SEC_TO_TIME(duration_minutes * 60))' : 'ADDTIME(start_time, SEC_TO_TIME(120 * 60))');
+        : ($has_duration_minutes ? pgsql_addtime_expr('start_time', 'duration_minutes') : pgsql_addtime_expr('start_time', '120'));
 
     switch ($action) {
         case 'add': {
@@ -658,7 +659,8 @@ try {
                     }
                 }
 
-                $fallback_where[] = "TIME_FORMAT(start_time, '%H:%i:%s') = ?";
+                $fallback_time_fmt = pgsql_time_format('start_time');
+                $fallback_where[] = "{$fallback_time_fmt} = ?";
                 $fallback_params[] = $current_start_time;
 
                 if (!empty($linked_ids)) {

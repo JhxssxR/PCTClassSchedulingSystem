@@ -40,6 +40,54 @@ function convert_sql_for_postgresql($sql) {
 }
 
 /**
+ * Cross-database replacement for MySQL's DESCRIBE <table>
+ * Returns rows with 'Field' key for both MySQL and PostgreSQL
+ */
+function describe_table(PDO $conn, string $table): array {
+    global $_db_engine;
+    try {
+        if ($_db_engine === 'pgsql') {
+            $stmt = $conn->prepare(
+                "SELECT column_name AS \"Field\", data_type AS \"Type\", is_nullable AS \"Null\", '' AS \"Key\", column_default AS \"Default\", '' AS \"Extra\"
+                 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = ?
+                 ORDER BY ordinal_position"
+            );
+            $stmt->execute([$table]);
+        } else {
+            $stmt = $conn->query("DESCRIBE `{$table}`");
+        }
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Error describing table {$table}: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Cross-database SQL fragment for comparing time overlap
+ * Returns an expression equivalent to ADDTIME(col, SEC_TO_TIME(minutes * 60))
+ */
+function pgsql_addtime_expr(string $col, string $minutes_expr): string {
+    global $_db_engine;
+    if ($_db_engine === 'pgsql') {
+        return "({$col} + ({$minutes_expr}) * INTERVAL '1 minute')";
+    }
+    return "ADDTIME({$col}, SEC_TO_TIME({$minutes_expr} * 60))";
+}
+
+/**
+ * Cross-database TIME_FORMAT equivalent
+ */
+function pgsql_time_format(string $col): string {
+    global $_db_engine;
+    if ($_db_engine === 'pgsql') {
+        return "TO_CHAR({$col}::time, 'HH24:MI:SS')";
+    }
+    return "TIME_FORMAT({$col}, '%H:%i:%s')";
+}
+
+/**
  * Execute a query with PostgreSQL/MySQL compatibility
  * Automatically converts MySQL-specific syntax
  */
