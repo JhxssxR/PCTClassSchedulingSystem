@@ -130,6 +130,10 @@ try {
         ? 'LEFT JOIN subjects subj ON subj.id = s.subject_id'
         : '';
 
+    $order_by_day = is_pgsql() 
+        ? "CASE s.day_of_week WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 ELSE 8 END"
+        : "FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
+
     $sql = "
         SELECT
             s.id AS schedule_id,
@@ -150,7 +154,7 @@ try {
         WHERE e.student_id = :student_id
           AND e.status IN ('approved', 'enrolled')
           AND s.status = 'active'
-        ORDER BY FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), s.start_time
+        ORDER BY {$order_by_day}, s.start_time
     ";
 
     $stmt = $conn->prepare($sql);
