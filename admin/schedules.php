@@ -58,7 +58,7 @@ $stmt = $conn->prepare("
            {$subject_name_expr} as subject_name,
            CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
            r.room_number,
-           COUNT(DISTINCT e.id) as enrollment_count,
+           COALESCE(e_count.enrollment_count, 0) as enrollment_count,
             TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time,
             {$start_date_expr} as start_date,
             {$end_date_expr} as end_date
@@ -67,8 +67,12 @@ $stmt = $conn->prepare("
     LEFT JOIN courses c ON (s.course_id IS NOT NULL AND s.course_id = c.id)
     JOIN users i ON s.instructor_id = i.id
     JOIN classrooms r ON s.classroom_id = r.id
-    LEFT JOIN enrollments e ON s.id = e.schedule_id AND e.status = 'enrolled'
-    GROUP BY s.id
+    LEFT JOIN (
+        SELECT schedule_id, COUNT(DISTINCT id) as enrollment_count 
+        FROM enrollments 
+        WHERE status = 'enrolled' 
+        GROUP BY schedule_id
+    ) e_count ON s.id = e_count.schedule_id
     ORDER BY s.day_of_week, s.start_time
 ");
 $stmt->execute();

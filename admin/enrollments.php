@@ -189,7 +189,7 @@ $enrollment_from_sql = "
 $enrollment_select_cols = "
     SELECT e.*,
            CONCAT(u.first_name, ' ', u.last_name) as student_name,
-           COALESCE(u.student_id, CONCAT('STU', LPAD(u.id, 6, '0'))) as student_number,
+           COALESCE(u.student_id, CONCAT('STU', LPAD(CAST(u.id AS CHAR(20)), 6, '0'))) as student_number,
            c.course_code, c.course_name,
            {$class_name_expr} as class_name,
            CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
