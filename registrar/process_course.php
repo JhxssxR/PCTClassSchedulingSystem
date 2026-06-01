@@ -146,7 +146,12 @@ try {
 
                 // Remove dependent rows first to satisfy foreign key constraints.
                 if (table_exists($conn, 'enrollments') && table_exists($conn, 'schedules')) {
-                    $stmt = $conn->prepare("\n                        DELETE e FROM enrollments e\n                        INNER JOIN schedules s ON s.id = e.schedule_id\n                        WHERE s.course_id = ?\n                    ");
+                    $stmt = $conn->prepare("
+                        DELETE FROM enrollments 
+                        WHERE schedule_id IN (
+                            SELECT id FROM schedules WHERE course_id = ?
+                        )
+                    ");
                     $stmt->execute([$course_id]);
                 }
 
