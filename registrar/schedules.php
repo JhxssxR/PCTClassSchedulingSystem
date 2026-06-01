@@ -59,11 +59,13 @@ $subject_name_expr = $subjects_table_exists
 $subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
 $has_end_time = isset($schedule_cols['end_time']);
 
+$concat_instructor = is_pgsql() ? "(i.first_name || ' ' || i.last_name)" : "CONCAT(i.first_name, ' ', i.last_name)";
+
 $stmt = $conn->prepare("
     SELECT s.*,
            {$subject_code_expr} as subject_code,
            {$subject_name_expr} as subject_name,
-           CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
+           {$concat_instructor} as instructor_name,
            r.room_number,
            COUNT(DISTINCT e.id) as enrollment_count,
            " . ($has_end_time ? "s.end_time" : pgsql_time_format($end_expr) . " as end_time") . ",
@@ -75,7 +77,7 @@ $stmt = $conn->prepare("
     JOIN users i ON s.instructor_id = i.id
     JOIN classrooms r ON s.classroom_id = r.id
     LEFT JOIN enrollments e ON s.id = e.schedule_id AND e.status = 'enrolled'
-    GROUP BY s.id
+    GROUP BY s.id, i.first_name, i.last_name, r.room_number, c.course_code, c.course_name" . ($subjects_table_exists ? ", sub.subject_code, sub.subject_name" : "") . "
     ORDER BY s.day_of_week, s.start_time
 ");
 $stmt->execute();

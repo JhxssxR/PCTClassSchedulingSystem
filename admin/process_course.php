@@ -34,18 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $course_cols[$col_name] = true;
                     }
                 }
-                $units_col = isset($course_cols['units']) ? 'units' : (isset($course_cols['credits']) ? 'credits' : 'units');
 
-                // Add new course
-                $stmt = $conn->prepare("
-                    INSERT INTO courses (course_code, course_name, {$units_col})
-                    VALUES (?, ?, ?)
-                ");
-                $stmt->execute([
-                    $_POST['course_code'],
-                    $_POST['course_name'],
-                    $_POST['units']
-                ]);
+                // Build dynamic insert – always supply both units AND credits if they exist
+                $fields = ['course_code' => $_POST['course_code'], 'course_name' => $_POST['course_name']];
+                if (isset($course_cols['units']))   $fields['units']   = (int)$_POST['units'];
+                if (isset($course_cols['credits'])) $fields['credits'] = (int)$_POST['units'];
+                if (isset($course_cols['created_at'])) $fields['created_at'] = date('Y-m-d H:i:s');
+
+                $col_names = array_keys($fields);
+                $placeholders = array_fill(0, count($fields), '?');
+                $sql = 'INSERT INTO courses (' . implode(', ', $col_names) . ') VALUES (' . implode(', ', $placeholders) . ')';
+                $stmt = $conn->prepare($sql);
+                $stmt->execute(array_values($fields));
 
                 $_SESSION['success'] = 'Course added successfully';
                 break;
@@ -74,20 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $course_cols[$col_name] = true;
                     }
                 }
-                $units_col = isset($course_cols['units']) ? 'units' : (isset($course_cols['credits']) ? 'credits' : 'units');
 
-                // Update course
-                $stmt = $conn->prepare("
-                    UPDATE courses 
-                    SET course_code = ?, course_name = ?, {$units_col} = ?
-                    WHERE id = ?
-                ");
-                $stmt->execute([
-                    $_POST['course_code'],
-                    $_POST['course_name'],
-                    $_POST['units'],
-                    $_POST['course_id']
-                ]);
+                // Update – always set both units AND credits if they exist
+                $set_parts = ['course_code = ?', 'course_name = ?'];
+                $params_u = [$_POST['course_code'], $_POST['course_name']];
+                if (isset($course_cols['units']))   { $set_parts[] = 'units = ?';   $params_u[] = (int)$_POST['units']; }
+                if (isset($course_cols['credits'])) { $set_parts[] = 'credits = ?'; $params_u[] = (int)$_POST['units']; }
+                $params_u[] = $_POST['course_id'];
+
+                $stmt = $conn->prepare('UPDATE courses SET ' . implode(', ', $set_parts) . ' WHERE id = ?');
+                $stmt->execute($params_u);
 
                 $_SESSION['success'] = 'Course updated successfully';
                 break;

@@ -52,8 +52,9 @@ try {
             $fields = [
                 'course_code' => $course_code,
                 'course_name' => $course_name,
-                $units_col => $units,
             ];
+            if (isset($cols['units']))   $fields['units']   = $units;
+            if (isset($cols['credits'])) $fields['credits'] = $units;
             if (isset($cols['created_by'])) {
                 $fields['created_by'] = (int)$_SESSION['user_id'];
             }
@@ -94,8 +95,9 @@ try {
             $set = [
                 'course_code' => $course_code,
                 'course_name' => $course_name,
-                $units_col => $units,
             ];
+            if (isset($cols['units']))   $set['units']   = $units;
+            if (isset($cols['credits'])) $set['credits'] = $units;
 
             $assignments = [];
             $values = [];
