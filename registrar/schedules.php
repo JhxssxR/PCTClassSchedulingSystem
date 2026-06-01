@@ -24,12 +24,12 @@ if (isset($schedule_cols['end_time'])) {
     $end_expr = pgsql_addtime_expr('s.start_time', '120');
 }
 
-$has_start_date = registrar_schedules_has_column($conn, 'schedules', 'start_date');
+$has_start_date = isset($schedule_cols['start_date']);
 $start_date_expr = $has_start_date
     ? pgsql_date_format_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))", '%Y-%m-%d')
     : pgsql_date_format_expr("CAST(s.created_at AS DATE)", '%Y-%m-%d');
 
-$has_end_date = registrar_schedules_has_column($conn, 'schedules', 'end_date');
+$has_end_date = isset($schedule_cols['end_date']);
 $interval_expr_coalesce = pgsql_date_add_days_expr("COALESCE(s.start_date, CAST(s.created_at AS DATE))", 17);
 $interval_expr = pgsql_date_add_days_expr("CAST(s.created_at AS DATE)", 17);
 
