@@ -52,12 +52,34 @@ function table_exists_local(PDO $conn, string $table): bool {
 
 function enrollment_status_map(PDO $conn): array {
     // Some schemas use 'approved' instead of 'enrolled'.
-    $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
-    $stmt->execute();
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    $type = (string)($row['Type'] ?? '');
+    // Get enum/column type in a database-agnostic way
+    $type = '';
+    try {
+        if (is_pgsql()) {
+            // PostgreSQL: get the data type
+            $stmt = $conn->prepare("
+                SELECT data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'enrollments' 
+                AND column_name = 'status'
+                AND table_schema = 'public'
+            ");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $type = $row['data_type'] ?? '';
+        } else {
+            // MySQL: use SHOW COLUMNS
+            $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $type = (string)($row['Type'] ?? '');
+        }
+    } catch (Exception $e) {
+        // Ignore query errors, use defaults below
+    }
 
     $allowed = [];
+    // Parse ENUM type from MySQL
     if (preg_match("/^enum\((.*)\)$/i", $type, $m)) {
         $vals = str_getcsv($m[1], ',', "'");
         foreach ($vals as $v) {

@@ -57,14 +57,18 @@ $subject_name_expr = $subjects_table_exists
     : "NULLIF(TRIM(c.course_name), '')";
 $subjects_join = $subjects_table_exists ? 'LEFT JOIN subjects sub ON (s.subject_id IS NOT NULL AND s.subject_id = sub.id)' : '';
 
+$time_format_expr = is_pgsql() 
+    ? "TO_CHAR({$end_expr}, 'HH24:MI:SS')" 
+    : "TIME_FORMAT({$end_expr}, '%H:%i:%s')";
+
 $stmt = $conn->prepare("
     SELECT s.*, 
            {$subject_code_expr} as subject_code,
            {$subject_name_expr} as subject_name,
-           CONCAT(i.first_name, ' ', i.last_name) as instructor_name,
+           " . (is_pgsql() ? "(i.first_name || ' ' || i.last_name)" : "CONCAT(i.first_name, ' ', i.last_name)") . " as instructor_name,
            r.room_number,
            COUNT(DISTINCT e.id) as enrollment_count,
-            TIME_FORMAT({$end_expr}, '%H:%i:%s') as end_time,
+            {$time_format_expr} as end_time,
             {$start_date_expr} as start_date,
             {$end_date_expr} as end_date
     FROM schedules s
