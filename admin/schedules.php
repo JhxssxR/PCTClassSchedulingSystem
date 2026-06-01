@@ -26,9 +26,18 @@ if (isset($schedule_cols['end_time'])) {
     $end_expr = 'ADDTIME(s.start_time, SEC_TO_TIME(120 * 60))';
 }
 
-$start_date_expr = isset($schedule_cols['start_date'])
-    ? "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')"
+// Format dates for display
+$date_format_expr_start = is_pgsql()
+    ? "TO_CHAR(COALESCE(s.start_date, DATE(s.created_at)), 'YYYY-MM-DD')"
+    : "DATE_FORMAT(COALESCE(s.start_date, DATE(s.created_at)), '%Y-%m-%d')";
+$date_format_expr_simple = is_pgsql()
+    ? "TO_CHAR(DATE(s.created_at), 'YYYY-MM-DD')"
     : "DATE_FORMAT(DATE(s.created_at), '%Y-%m-%d')";
+
+$start_date_expr = isset($schedule_cols['start_date'])
+    ? $date_format_expr_start
+    : $date_format_expr_simple;
+
 // Subjects table may not exist on older DBs (use compatibility helper)
 $subjects_table_exists = table_exists($conn, 'subjects');
 
@@ -42,10 +51,10 @@ $interval_expr_coalesce = is_pgsql()
 
 $end_date_expr = isset($schedule_cols['end_date'])
     ? (is_pgsql() 
-        ? "COALESCE(s.end_date, $interval_expr_coalesce)::text"
+        ? "TO_CHAR(COALESCE(s.end_date, $interval_expr_coalesce), 'YYYY-MM-DD')"
         : "DATE_FORMAT(COALESCE(s.end_date, $interval_expr_coalesce), '%Y-%m-%d')")
     : (is_pgsql()
-        ? "$interval_expr::text"
+        ? "TO_CHAR($interval_expr::date, 'YYYY-MM-DD')"
         : "DATE_FORMAT($interval_expr, '%Y-%m-%d')");
 
 // Get all schedules with their subject (preferred) / course (legacy) and instructor information
