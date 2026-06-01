@@ -273,7 +273,7 @@ try {
         FROM courses c
         LEFT JOIN schedules s ON c.id = s.course_id
         LEFT JOIN enrollments e ON s.id = e.schedule_id{$range_join_enrollment}
-        GROUP BY c.id
+        GROUP BY c.id, c.course_code
         ORDER BY total_students DESC, c.course_code ASC
         LIMIT 5";
     $stmt = $conn->prepare($program_sql);
@@ -305,6 +305,7 @@ try {
     $daily_stats = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
     $cap_expr = $has_capacity ? 'r.capacity' : '0';
+    $room_group_by = $has_capacity ? 'r.id, r.room_number, r.capacity' : 'r.id, r.room_number';
     $room_sql = "SELECT r.room_number,
         {$cap_expr} AS capacity,
         COUNT(DISTINCT s.id) AS total_classes,
@@ -312,7 +313,7 @@ try {
         FROM classrooms r
         LEFT JOIN schedules s ON r.id = s.classroom_id
         LEFT JOIN enrollments e ON s.id = e.schedule_id{$range_join_enrollment}
-        GROUP BY r.id
+        GROUP BY {$room_group_by}
         ORDER BY r.room_number ASC";
     $stmt = $conn->prepare($room_sql);
     $room_params = [];
@@ -333,7 +334,7 @@ try {
         LEFT JOIN schedules s ON u.id = s.instructor_id
         LEFT JOIN enrollments e ON s.id = e.schedule_id{$range_join_enrollment}
         WHERE u.role = 'instructor'
-        GROUP BY u.id
+        GROUP BY u.id, u.first_name, u.last_name
         ORDER BY total_classes DESC, total_students DESC, u.last_name ASC
         LIMIT 4";
     $stmt = $conn->prepare($instructor_sql);
