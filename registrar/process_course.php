@@ -17,11 +17,6 @@ function table_columns(PDO $conn, string $table): array {
     return $cols;
 }
 
-function table_exists(PDO $conn, string $table): bool {
-    $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
-    $stmt->execute([$table]);
-    return ((int)$stmt->fetchColumn()) > 0;
-}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: courses.php');

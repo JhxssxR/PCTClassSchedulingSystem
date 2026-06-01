@@ -82,11 +82,6 @@ function display_status(string $db_status, string $active_db): string {
     return $s;
 }
 
-function table_exists(PDO $conn, string $table): bool {
-    $stmt = $conn->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
-    $stmt->execute([$table]);
-    return ((int)$stmt->fetchColumn()) > 0;
-}
 
 function status_badge(string $status): array {
     $s = strtolower($status);
