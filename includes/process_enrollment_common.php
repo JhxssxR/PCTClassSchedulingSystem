@@ -26,7 +26,8 @@ function enrollment_status_map_common(PDO $conn): array {
     $allowed = [];
     if (is_pgsql()) {
         // PostgreSQL uses CHECK constraints, not ENUM. Provide safe defaults.
-        $allowed = ['approved' => true, 'pending' => true, 'dropped' => true, 'rejected' => true];
+        // Note: 'rejected' is excluded \u2014 the system uses 'dropped' exclusively.
+        $allowed = ['approved' => true, 'pending' => true, 'dropped' => true];
     } else {
         try {
             $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
@@ -40,18 +41,18 @@ function enrollment_status_map_common(PDO $conn): array {
                 }
             }
         } catch (Throwable $e) {
-            $allowed = ['approved' => true, 'pending' => true, 'dropped' => true, 'rejected' => true];
+            $allowed = ['approved' => true, 'pending' => true, 'dropped' => true];
         }
     }
 
     $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
 
     return [
-        'active'           => $active,
-        'allowed'          => $allowed,
-        'supports_pending' => empty($allowed) || isset($allowed['pending']),
-        'supports_dropped' => empty($allowed) || isset($allowed['dropped']),
-        'supports_rejected' => empty($allowed) || isset($allowed['rejected']),
+        'active'            => $active,
+        'allowed'           => $allowed,
+        'supports_pending'  => empty($allowed) || isset($allowed['pending']),
+        'supports_dropped'  => true, // always supported after auto-migration
+        'supports_rejected' => false, // Rejected replaced by Dropped
     ];
 }
 
@@ -64,7 +65,8 @@ function enrollment_normalize_status(PDO $conn, string $status): string {
         return $map['active'];
     }
 
-    if ($status === 'rejected' && !isset($allowed['rejected']) && isset($allowed['dropped'])) {
+    // 'rejected' is no longer a valid new status \u2014 always redirect to 'dropped'
+    if ($status === 'rejected') {
         return 'dropped';
     }
 

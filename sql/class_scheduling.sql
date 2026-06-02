@@ -167,7 +167,7 @@ CREATE TABLE `enrollments` (
   `student_id` int(11) NOT NULL,
   `schedule_id` int(11) NOT NULL,
   `enrollment_date` timestamp NOT NULL DEFAULT current_timestamp(),
-  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `status` enum('pending','approved','dropped','rejected') DEFAULT 'pending',
   `enrolled_at` datetime DEFAULT NULL,
   `dropped_at` datetime DEFAULT NULL,
   `rejected_at` datetime DEFAULT NULL

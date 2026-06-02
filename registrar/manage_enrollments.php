@@ -43,13 +43,38 @@ function fmt_time_range(?string $start, ?string $end): string {
 }
 
 function enrollment_status_map(PDO $conn): array {
-    // PostgreSQL uses CHECK constraints, not ENUM. Use 'approved' as the active status.
+    // Drop 'rejected' — the system uses 'dropped' exclusively for declined enrollments.
+    // Auto-migrate MySQL ENUM to include 'dropped' if it's missing.
+    $allowed = ['approved' => true, 'pending' => true, 'dropped' => true];
+
+    if (!is_pgsql()) {
+        try {
+            $stmt = $conn->prepare("SHOW COLUMNS FROM enrollments LIKE 'status'");
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $type = (string)($row['Type'] ?? '');
+            if (preg_match("/^enum\((.*)\)$/i", $type, $m)) {
+                $vals = str_getcsv($m[1], ',', "'");
+                $existing = [];
+                foreach ($vals as $v) { $existing[strtolower(trim($v))] = true; }
+                // Migrate: add 'dropped' to ENUM if missing
+                if (!isset($existing['dropped'])) {
+                    $new_vals = array_keys($existing);
+                    $new_vals[] = 'dropped';
+                    $enum_def = implode(',', array_map(fn($v) => "'$v'", $new_vals));
+                    $conn->exec("ALTER TABLE enrollments MODIFY COLUMN status ENUM($enum_def) DEFAULT 'pending'");
+                }
+            }
+        } catch (Throwable $e) {
+            // Continue gracefully if migration fails
+        }
+    }
+
     return [
         'active'   => 'approved',
         'pending'  => 'pending',
-        'rejected' => 'rejected',
         'dropped'  => 'dropped',
-        'allowed'  => ['approved' => true, 'pending' => true, 'rejected' => true, 'dropped' => true],
+        'allowed'  => $allowed,
     ];
 }
 
@@ -58,6 +83,7 @@ function display_status(string $db_status, string $active_db): string {
     if ($s === strtolower($active_db)) {
         return 'active';
     }
+    // Treat legacy 'rejected' records as 'dropped'
     if ($s === 'rejected') {
         return 'dropped';
     }
@@ -84,14 +110,15 @@ $active_db_status = $status_map['active'];
 $allowed_statuses = $status_map['allowed'];
 
 $supports_pending = empty($allowed_statuses) || isset($allowed_statuses['pending']);
-$supports_rejected = empty($allowed_statuses) || isset($allowed_statuses['rejected']);
-$supports_dropped = empty($allowed_statuses) || isset($allowed_statuses['dropped']);
-$drop_target_status = $supports_dropped ? 'dropped' : ($supports_rejected ? 'rejected' : 'pending');
+// 'dropped' is always supported — the ENUM is migrated above.
+$supports_dropped = true;
+$supports_rejected = false; // Rejected is replaced by Dropped in this system.
+$drop_target_status = 'dropped';
 
 $status_filter = strtolower(trim((string)($_GET['status'] ?? 'all')));
 $valid_filters = ['all', 'active'];
 if ($supports_pending) $valid_filters[] = 'pending';
-if ($supports_dropped || $supports_rejected) $valid_filters[] = 'dropped';
+$valid_filters[] = 'dropped';
 if (!in_array($status_filter, $valid_filters, true)) {
     $status_filter = 'all';
 }
@@ -117,17 +144,10 @@ if ($status_filter === 'active') {
     $where[] = 'e.status = ?';
     $params[] = $active_db_status;
 } elseif ($status_filter === 'dropped') {
-    if ($supports_dropped && $supports_rejected) {
-        $where[] = '(e.status = ? OR e.status = ?)';
-        $params[] = 'dropped';
-        $params[] = 'rejected';
-    } elseif ($supports_dropped) {
-        $where[] = 'e.status = ?';
-        $params[] = 'dropped';
-    } else {
-        $where[] = 'e.status = ?';
-        $params[] = 'rejected';
-    }
+    // Show both 'dropped' and legacy 'rejected' records under the Dropped tab
+    $where[] = '(e.status = ? OR e.status = ?)';
+    $params[] = 'dropped';
+    $params[] = 'rejected';
 } elseif ($status_filter !== 'all') {
     $where[] = 'e.status = ?';
     $params[] = $status_filter;
@@ -431,7 +451,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 <?php
                     $chips = ['all' => 'All', 'active' => 'Active'];
                     if ($supports_pending) $chips['pending'] = 'Pending';
-                    if ($supports_dropped || $supports_rejected) $chips['dropped'] = 'Dropped';
+                    $chips['dropped'] = 'Dropped'; // Always show Dropped tab
                 ?>
                 <?php foreach ($chips as $k => $label): ?>
                     <?php
@@ -562,8 +582,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                     <select id="edit_status_value" name="status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         <option value="<?php echo htmlspecialchars($active_db_status); ?>">Active</option>
                         <?php if ($supports_pending): ?><option value="pending">Pending</option><?php endif; ?>
-                        <?php if ($supports_dropped): ?><option value="dropped">Dropped</option><?php endif; ?>
-                        <?php if ($supports_rejected): ?><option value="rejected">Rejected</option><?php endif; ?>
+                        <option value="dropped">Dropped</option>
                     </select>
                 </div>
 

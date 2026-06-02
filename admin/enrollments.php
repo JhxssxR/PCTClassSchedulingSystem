@@ -91,6 +91,23 @@ function enrollment_status_map(PDO $conn): array {
         }
     }
 
+    // Auto-migrate: ensure 'dropped' is in the ENUM so drop actions work.
+    // This runs once and is safe to call repeatedly.
+    if (!empty($allowed) && !isset($allowed['dropped']) && !is_pgsql()) {
+        try {
+            // Build new ENUM that includes all existing values plus 'dropped'
+            $new_vals = array_keys($allowed);
+            if (!in_array('dropped', $new_vals, true)) {
+                $new_vals[] = 'dropped';
+            }
+            $enum_def = implode(',', array_map(fn($v) => "'$v'", $new_vals));
+            $conn->exec("ALTER TABLE enrollments MODIFY COLUMN status ENUM($enum_def) DEFAULT 'pending'");
+            $allowed['dropped'] = true;
+        } catch (Throwable $e) {
+            // If migration fails (permissions etc.), continue gracefully
+        }
+    }
+
     $active = isset($allowed['enrolled']) ? 'enrolled' : (isset($allowed['approved']) ? 'approved' : 'approved');
 
     return [
@@ -116,14 +133,16 @@ $active_db_status = $status_map['active'];
 $allowed_statuses = $status_map['allowed'];
 
 $supports_pending = empty($allowed_statuses) || isset($allowed_statuses['pending']);
-$supports_dropped = empty($allowed_statuses) || isset($allowed_statuses['dropped']);
-$supports_rejected = empty($allowed_statuses) || isset($allowed_statuses['rejected']);
-$drop_target_status = $supports_dropped ? 'dropped' : ($supports_rejected ? 'rejected' : 'pending');
+// Always treat 'dropped' as supported — we auto-migrate the ENUM above, and
+// for PostgreSQL the column is a varchar so any value is accepted.
+$supports_dropped = true;
+$supports_rejected = false; // Reject is replaced by Drop in this system.
+$drop_target_status = 'dropped';
 
 $status_filter = strtolower(trim((string)($_GET['status'] ?? 'all')));
 $valid_filters = ['all', 'active'];
 if ($supports_pending) $valid_filters[] = 'pending';
-if ($supports_dropped || $supports_rejected) $valid_filters[] = 'dropped';
+$valid_filters[] = 'dropped'; // Always include dropped filter
 if (!in_array($status_filter, $valid_filters, true)) {
     $status_filter = 'all';
 }
@@ -149,17 +168,10 @@ if ($status_filter === 'active') {
     $where[] = 'e.status = ?';
     $params[] = $active_db_status;
 } elseif ($status_filter === 'dropped') {
-    if ($supports_dropped && $supports_rejected) {
-        $where[] = '(e.status = ? OR e.status = ?)';
-        $params[] = 'dropped';
-        $params[] = 'rejected';
-    } elseif ($supports_dropped) {
-        $where[] = 'e.status = ?';
-        $params[] = 'dropped';
-    } else {
-        $where[] = 'e.status = ?';
-        $params[] = 'rejected';
-    }
+    // Show both 'dropped' and legacy 'rejected' records under the Dropped tab
+    $where[] = '(e.status = ? OR e.status = ?)';
+    $params[] = 'dropped';
+    $params[] = 'rejected';
 } elseif ($status_filter !== 'all') {
     $where[] = 'e.status = ?';
     $params[] = $status_filter;
@@ -616,7 +628,7 @@ function status_badge(string $status): array {
                             <?php
                                 $chips = ['all' => 'All', 'active' => 'Active'];
                                 if ($supports_pending) $chips['pending'] = 'Pending';
-                                if ($supports_dropped || $supports_rejected) $chips['dropped'] = 'Dropped';
+                                $chips['dropped'] = 'Dropped'; // Always show Dropped tab
                             ?>
                             <?php foreach ($chips as $k => $label): ?>
                                 <?php
@@ -750,8 +762,7 @@ function status_badge(string $status): array {
                     <select id="edit_status_value" name="status" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" required>
                         <option value="<?php echo htmlspecialchars($active_db_status); ?>">Active</option>
                         <?php if ($supports_pending): ?><option value="pending">Pending</option><?php endif; ?>
-                        <?php if ($supports_dropped): ?><option value="dropped">Dropped</option><?php endif; ?>
-                        <?php if ($supports_rejected): ?><option value="rejected">Rejected</option><?php endif; ?>
+                        <option value="dropped">Dropped</option>
                     </select>
                 </div>
 
