@@ -124,13 +124,13 @@ function find_linked_schedule_rows(PDO $conn, array $base_row, array $cols, bool
     $where = [];
     $params = [];
 
-    foreach (['course_id', 'subject_id', 'instructor_id', 'classroom_id', 'max_students'] as $f) {
+    foreach (['course_id', 'subject_id', 'instructor_id', 'classroom_id', 'max_students', 'year_level'] as $f) {
         if (isset($cols[$f])) {
             $where[] = "COALESCE($f, 0) = ?";
             $params[] = (int)($base_row[$f] ?? 0);
         }
     }
-    foreach (['status', 'semester', 'academic_year', 'year_level'] as $f) {
+    foreach (['status', 'semester', 'academic_year'] as $f) {
         if (isset($cols[$f])) {
             $where[] = "COALESCE($f, '') = ?";
             $params[] = (string)($base_row[$f] ?? '');

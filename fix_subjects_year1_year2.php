@@ -28,20 +28,32 @@ function normalize_code(string $code): string {
 try {
     ensure_year_level_column($conn);
 
-    // Ensure subject_code is unique-ish for safe upsert.
-    // If the index can't be created (because of duplicates), we fall back to insert-ignore.
+    // Migrate unique constraints for existing installations
+    try {
+        try {
+            $conn->exec("ALTER TABLE subjects DROP INDEX uq_subject_code");
+        } catch (Throwable $e) {}
+        try {
+            $conn->exec("ALTER TABLE subjects DROP INDEX subject_code");
+        } catch (Throwable $e) {}
+    } catch (Throwable $e) {}
+
+    // Ensure composite unique key is present
+    try {
+        $conn->exec("ALTER TABLE subjects ADD CONSTRAINT uq_subject_code_dept UNIQUE (subject_code, department)");
+    } catch (Throwable $e) {}
+
+    // Ensure subject_code + department is unique-ish for safe upsert.
     $upsert_supported = true;
     try {
-        $conn->exec("ALTER TABLE subjects ADD UNIQUE KEY uq_subject_code (subject_code)");
-    } catch (Throwable $e) {
-        // Index may already exist OR duplicates prevent adding.
-        // We'll detect whether it exists; otherwise, degrade gracefully.
-        $idx_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'subjects' AND index_name = 'uq_subject_code'");
+        $idx_stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'subjects' AND index_name = 'uq_subject_code_dept'");
         $idx_stmt->execute();
         $has_idx = ((int)$idx_stmt->fetchColumn() > 0);
         if (!$has_idx) {
             $upsert_supported = false;
         }
+    } catch (Throwable $e) {
+        $upsert_supported = false;
     }
 
     $subjects = [

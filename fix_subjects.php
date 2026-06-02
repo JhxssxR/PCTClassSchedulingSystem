@@ -76,9 +76,11 @@ try {
 
     $conn->exec("CREATE TABLE IF NOT EXISTS subjects (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        subject_code VARCHAR(50) NOT NULL UNIQUE,
+        subject_code VARCHAR(50) NOT NULL,
         subject_name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        department VARCHAR(120) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_subject_code_dept UNIQUE (subject_code, department)
     )");
 
     $stmt = $conn->prepare('INSERT IGNORE INTO subjects (subject_code, subject_name) VALUES (?, ?)');

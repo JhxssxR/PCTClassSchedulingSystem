@@ -149,8 +149,8 @@ function find_linked_schedule_rows(PDO $conn, array $base_row, array $cols, bool
         $params[] = (string)($base_row['academic_year'] ?? '');
     }
     if (isset($cols['year_level'])) {
-        $where[] = "COALESCE(year_level, '') = ?";
-        $params[] = (string)($base_row['year_level'] ?? '');
+        $where[] = "COALESCE(year_level, 0) = ?";
+        $params[] = (int)($base_row['year_level'] ?? 0);
     }
 
     $sql = 'SELECT * FROM schedules';

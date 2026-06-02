@@ -10,6 +10,9 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
 
 require_once __DIR__ . '/notifications_data.php';
 
+// Fix PostgreSQL sequence if out of sync
+pgsql_fix_serial_sequence($conn, 'courses');
+
 // Pagination (6 per page)
 $per_page = 6;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;

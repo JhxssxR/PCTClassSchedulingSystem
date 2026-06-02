@@ -521,8 +521,7 @@ ALTER TABLE `settings`
 --
 ALTER TABLE `subjects`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `subject_code` (`subject_code`),
-  ADD UNIQUE KEY `uq_subject_code` (`subject_code`);
+  ADD UNIQUE KEY `uq_subject_code_dept` (`subject_code`,`department`);
 
 --
 -- Indexes for table `users`

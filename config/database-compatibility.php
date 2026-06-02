@@ -239,4 +239,19 @@ function has_column(PDO $conn, string $table, string $column): bool {
         return false;
     }
 }
+/**
+ * Reset a PostgreSQL SERIAL sequence to match the current max id.
+ * No-op on MySQL. Safe to call repeatedly.
+ */
+function pgsql_fix_serial_sequence(PDO $conn, string $table, string $column = 'id'): void {
+    global $_db_engine;
+    if ($_db_engine !== 'pgsql') {
+        return;
+    }
+    try {
+        $conn->exec("SELECT setval(pg_get_serial_sequence('{$table}', '{$column}'), COALESCE((SELECT MAX({$column}) FROM {$table}), 1), true)");
+    } catch (Throwable $e) {
+        error_log("Sequence reset warning ({$table}.{$column}): " . $e->getMessage());
+    }
+}
 ?>

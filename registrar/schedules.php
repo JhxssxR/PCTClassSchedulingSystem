@@ -9,6 +9,8 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'regi
 }
 
 // Schedules schema compatibility (some DB versions don't store end_time)
+pgsql_fix_serial_sequence($conn, 'schedules');
+
 $schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
 foreach ($schedule_cols_result as $r) {

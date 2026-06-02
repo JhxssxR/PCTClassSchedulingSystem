@@ -183,11 +183,15 @@ foreach ($subject_sections as $section_seed) {
 try {
     $conn->exec("CREATE TABLE IF NOT EXISTS subjects (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        subject_code VARCHAR(50) NOT NULL UNIQUE,
+        subject_code VARCHAR(50) NOT NULL,
         subject_name VARCHAR(255) NOT NULL,
         year_level TINYINT NULL,
+        semester VARCHAR(30) NULL,
+        subject_type VARCHAR(30) NULL,
+        department VARCHAR(120) NULL,
         units INT NOT NULL DEFAULT 3,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_subject_code_dept UNIQUE (subject_code, department)
     )");
 } catch (Throwable $e) {
     error_log('Could not ensure subjects table (admin subjects): ' . $e->getMessage());
@@ -219,6 +223,38 @@ try {
 } catch (Throwable $e) {
     // ignore if column already exists
 }
+
+// Migrate unique constraints for existing installations
+try {
+    if (is_pgsql()) {
+        // Drop unique constraints for PostgreSQL if they exist
+        try {
+            $conn->exec("ALTER TABLE subjects DROP CONSTRAINT IF EXISTS uq_subject_code");
+        } catch (Throwable $e) {}
+        try {
+            $conn->exec("ALTER TABLE subjects DROP CONSTRAINT IF EXISTS subjects_subject_code_key");
+        } catch (Throwable $e) {}
+    } else {
+        // Drop unique indexes for MySQL/MariaDB if they exist
+        try {
+            $conn->exec("ALTER TABLE subjects DROP INDEX uq_subject_code");
+        } catch (Throwable $e) {}
+        try {
+            $conn->exec("ALTER TABLE subjects DROP INDEX subject_code");
+        } catch (Throwable $e) {}
+    }
+} catch (Throwable $e) {
+    error_log('Could not drop old unique constraints on subjects: ' . $e->getMessage());
+}
+
+try {
+    $conn->exec("ALTER TABLE subjects ADD CONSTRAINT uq_subject_code_dept UNIQUE (subject_code, department)");
+} catch (Throwable $e) {
+    // ignore if constraint already exists
+}
+
+// Fix PostgreSQL sequence if it fell behind the actual max id.
+pgsql_fix_serial_sequence($conn, 'subjects');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'add_subject') {
     try {

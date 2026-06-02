@@ -11,6 +11,9 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'super_admin') {
 
 require_once __DIR__ . '/notifications_data.php';
 
+// Fix PostgreSQL sequence if out of sync
+pgsql_fix_serial_sequence($conn, 'users');
+
 function normalize_year_level_value($value): ?int {
     $y = (int)$value;
     return ($y >= 1 && $y <= 4) ? $y : null;

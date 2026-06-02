@@ -10,6 +10,9 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 
 require_once __DIR__ . '/notifications_data.php';
 
+// Fix PostgreSQL sequence for schedules if out of sync
+pgsql_fix_serial_sequence($conn, 'schedules');
+
 // Schedules schema compatibility (some DB versions don't store end_time)
 $schedule_cols_result = get_table_columns($conn, 'schedules');
 $schedule_cols = [];
