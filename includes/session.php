@@ -161,4 +161,3 @@ function set_session_vars($user) {
 if (is_logged_in()) {
     check_session_timeout();
 }
-?> 

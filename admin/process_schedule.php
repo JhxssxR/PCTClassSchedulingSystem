@@ -231,9 +231,13 @@ function schedule_date_overlap_sql(bool $has_start_date, bool $has_end_date): st
         return '';
     }
 
+    $end_date_coalesce = is_pgsql() 
+        ? "COALESCE(end_date, start_date, '9999-12-31')" 
+        : "COALESCE(NULLIF(end_date, '0000-00-00'), start_date, '9999-12-31')";
+
     return "
                           AND COALESCE(start_date, '1970-01-01') <= ?
-                          AND COALESCE(NULLIF(end_date, '0000-00-00'), start_date, '9999-12-31') >= ?
+                          AND {$end_date_coalesce} >= ?
     ";
 }
 
