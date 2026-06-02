@@ -68,6 +68,18 @@ function enrollment_status_map(PDO $conn): array {
         } catch (Throwable $e) {
             // Continue gracefully if migration fails
         }
+    } else {
+        try {
+            $stmt = $conn->query("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'enrollments_status_check'");
+            if ($stmt) {
+                $def = $stmt->fetchColumn();
+                // If constraint exists but doesn't have 'dropped', recreate it
+                if ($def !== false && stripos($def, 'dropped') === false) {
+                    $conn->exec("ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS enrollments_status_check");
+                    $conn->exec("ALTER TABLE enrollments ADD CONSTRAINT enrollments_status_check CHECK (status::text = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'dropped'::text]))");
+                }
+            }
+        } catch (Throwable $e) {}
     }
 
     return [

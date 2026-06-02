@@ -91,9 +91,21 @@ function enrollment_status_map(PDO $conn): array {
         }
     }
 
-    // Auto-migrate: ensure 'dropped' is in the ENUM so drop actions work.
+    // Auto-migrate: ensure 'dropped' is in the ENUM/CHECK so drop actions work.
     // This runs once and is safe to call repeatedly.
-    if (!empty($allowed) && !isset($allowed['dropped']) && !is_pgsql()) {
+    if (is_pgsql()) {
+        try {
+            $stmt = $conn->query("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'enrollments_status_check'");
+            if ($stmt) {
+                $def = $stmt->fetchColumn();
+                // If constraint exists but doesn't have 'dropped', recreate it
+                if ($def !== false && stripos($def, 'dropped') === false) {
+                    $conn->exec("ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS enrollments_status_check");
+                    $conn->exec("ALTER TABLE enrollments ADD CONSTRAINT enrollments_status_check CHECK (status::text = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'dropped'::text]))");
+                }
+            }
+        } catch (Throwable $e) {}
+    } elseif (!empty($allowed) && !isset($allowed['dropped'])) {
         try {
             // Build new ENUM that includes all existing values plus 'dropped'
             $new_vals = array_keys($allowed);

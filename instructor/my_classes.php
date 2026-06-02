@@ -103,6 +103,10 @@ $order_by_day = is_pgsql()
     ? "ARRAY_POSITION(ARRAY['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], s.day_of_week::text)" 
     : "FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
 
+$group_by_sql = $subjects_enabled
+    ? 'GROUP BY s.id, c.course_code, c.course_name, cl.room_number, subj.subject_code, subj.subject_name'
+    : 'GROUP BY s.id, c.course_code, c.course_name, cl.room_number';
+
 $stmt = $conn->prepare("
     SELECT
         s.id,
@@ -127,7 +131,7 @@ $stmt = $conn->prepare("
     LEFT JOIN enrollments e ON s.id = e.schedule_id
     WHERE s.instructor_id = :instructor_id
       AND s.status = 'active'
-    GROUP BY s.id, c.course_code, c.course_name, cl.room_number
+    {$group_by_sql}
     ORDER BY course_code, {$order_by_day}, s.start_time
 ");
 $stmt->execute(['instructor_id' => $instructor_id]);

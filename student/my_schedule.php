@@ -284,10 +284,10 @@ try {
     ";
 
     $order_by_day = is_pgsql() 
-        ? "CASE s.day_of_week WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 ELSE 8 END"
-        : "FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
+        ? "CASE schedule_day WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 ELSE 8 END"
+        : "FIELD(schedule_day, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
 
-    $sql .= " ORDER BY {$order_by_day}, s.start_time";
+    $sql .= " ORDER BY {$order_by_day}, start_time";
     $stmt = $conn->prepare($sql);
     $stmt->execute(['student_id' => (int)$_SESSION['user_id']]);
     $schedule_rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];

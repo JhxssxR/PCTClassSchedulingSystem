@@ -613,14 +613,14 @@ try {
                 if ($has_start_date) {
                     $current_start_date = trim((string)($current['start_date'] ?? ''));
                     if ($current_start_date !== '') {
-                        $fallback_where[] = "(COALESCE(start_date, '') = ? OR COALESCE(start_date, '') = '')";
+                        $fallback_where[] = "(start_date = ? OR start_date IS NULL)";
                         $fallback_params[] = $current_start_date;
                     }
                 }
                 if ($has_end_date) {
                     $current_end_date = trim((string)($current['end_date'] ?? ''));
                     if ($current_end_date !== '') {
-                        $fallback_where[] = "(COALESCE(end_date, '') = ? OR COALESCE(end_date, '') = '')";
+                        $fallback_where[] = "(end_date = ? OR end_date IS NULL)";
                         $fallback_params[] = $current_end_date;
                     }
                 }
