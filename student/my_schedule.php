@@ -247,7 +247,7 @@ try {
         : '1=1';
 
     $sql = "
-        SELECT DISTINCT
+        SELECT
             s.id AS schedule_id,
             {$subject_code_expr} AS subject_code,
             {$subject_name_expr} AS subject_name,
@@ -258,36 +258,36 @@ try {
             {$end_date_expr} AS end_date,
             COALESCE(cr.room_number, 'TBA') AS room_number,
             TRIM(CONCAT(COALESCE(i.first_name, ''), ' ', COALESCE(i.last_name, ''))) AS instructor_name
-                FROM (
-                        SELECT DISTINCT e.schedule_id
-                        FROM enrollments e
-                        JOIN schedules es ON es.id = e.schedule_id
-                        WHERE e.student_id = :student_id
-                            AND e.status IN ('approved', 'enrolled')
-                            AND es.status = 'active'
-                ) enrolled
-                JOIN schedules se ON se.id = enrolled.schedule_id
-                JOIN schedules s ON s.status = 'active'
-                        AND COALESCE(s.course_id, 0) = COALESCE(se.course_id, 0)
-                        AND {$subject_link_predicate}
-                        AND COALESCE(s.instructor_id, 0) = COALESCE(se.instructor_id, 0)
-                        AND COALESCE(s.classroom_id, 0) = COALESCE(se.classroom_id, 0)
-                        AND " . pgsql_time_format('s.start_time') . " = " . pgsql_time_format('se.start_time') . "
-                        AND " . pgsql_time_format($end_expr) . " = " . pgsql_time_format($linked_end_expr) . "
-                    AND {$semester_link_predicate}
-                    AND {$academic_year_link_predicate}
-                        AND {$year_level_link_predicate}
+        FROM schedules s
         LEFT JOIN courses c ON s.course_id = c.id
         {$subject_join_sql}
         LEFT JOIN classrooms cr ON s.classroom_id = cr.id
         LEFT JOIN users i ON s.instructor_id = i.id
+        WHERE s.status = 'active'
+          AND EXISTS (
+              SELECT 1
+              FROM enrollments e
+              JOIN schedules se ON se.id = e.schedule_id
+              WHERE e.student_id = :student_id
+                AND e.status IN ('approved', 'enrolled', 'active')
+                AND se.status = 'active'
+                AND COALESCE(s.course_id, 0) = COALESCE(se.course_id, 0)
+                AND {$subject_link_predicate}
+                AND COALESCE(s.instructor_id, 0) = COALESCE(se.instructor_id, 0)
+                AND COALESCE(s.classroom_id, 0) = COALESCE(se.classroom_id, 0)
+                AND " . pgsql_time_format('s.start_time') . " = " . pgsql_time_format('se.start_time') . "
+                AND " . pgsql_time_format($end_expr) . " = " . pgsql_time_format($linked_end_expr) . "
+                AND {$semester_link_predicate}
+                AND {$academic_year_link_predicate}
+                AND {$year_level_link_predicate}
+          )
     ";
 
     $order_by_day = is_pgsql() 
-        ? "CASE schedule_day WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 ELSE 8 END"
-        : "FIELD(schedule_day, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
+        ? "CASE s.day_of_week WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 ELSE 8 END"
+        : "FIELD(s.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')";
 
-    $sql .= " ORDER BY {$order_by_day}, start_time";
+    $sql .= " ORDER BY {$order_by_day}, s.start_time";
     $stmt = $conn->prepare($sql);
     $stmt->execute(['student_id' => (int)$_SESSION['user_id']]);
     $schedule_rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
