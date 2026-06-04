@@ -10,6 +10,7 @@
 /* Keep current visual style while standardizing fallbacks across pages. */
 body {
     font-family: var(--pct-font-family);
+    color: #000000;
 }
 
 .sidebar-shell,

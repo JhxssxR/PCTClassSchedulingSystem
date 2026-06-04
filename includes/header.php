@@ -33,7 +33,7 @@ if (!isset($_SESSION['user_id'])) {
         }
         
         .sidebar .nav-link {
-            color: #333;
+            color: #000000;
             padding: 0.5rem 1rem;
             margin-bottom: 0.25rem;
             border-radius: 0.25rem;
