@@ -719,7 +719,7 @@ require_once __DIR__ . '/includes/layout_top.php';
             <button type="button" data-category-chip="<?php echo htmlspecialchars(strtolower($cat)); ?>" data-chip-active-class="<?php echo htmlspecialchars((string)($meta['chip_active'] ?? '')); ?>" class="subject-chip inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-500 hover:border-slate-300">
                 <span class="h-2.5 w-2.5 rounded-full <?php echo htmlspecialchars($meta['dot']); ?>"></span>
                 <span><?php echo htmlspecialchars($cat); ?></span>
-                <span data-category-count class="text-slate-400">(<?php echo (int)($category_counts[$cat] ?? 0); ?>)</span>
+                <span data-category-count class="<?php echo htmlspecialchars(str_replace('bg-', 'text-', $meta['dot'])); ?>">(<?php echo (int)($category_counts[$cat] ?? 0); ?>)</span>
             </button>
         <?php endforeach; ?>
         <button type="button" id="clearFiltersBtn" class="hidden inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-500 hover:bg-slate-100">
