@@ -680,7 +680,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><i class="bi bi-book"></i></span>
                 <div>
                     <div class="text-4xl leading-none font-semibold text-slate-800"><?php echo (int)$total_subjects; ?></div>
-                    <div class="text-sm text-slate-400">Total Subjects</div>
+                    <div class="text-sm text-emerald-500">Total Subjects</div>
                 </div>
             </div>
         </div>
@@ -689,7 +689,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-blue-600"><i class="bi bi-mortarboard"></i></span>
                 <div>
                     <div class="text-4xl leading-none font-semibold text-slate-800"><?php echo (int)$total_units; ?></div>
-                    <div class="text-sm text-slate-400">Total Units</div>
+                    <div class="text-sm text-blue-500">Total Units</div>
                 </div>
             </div>
         </div>
@@ -698,7 +698,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-violet-100 text-violet-600"><i class="bi bi-journal-bookmark"></i></span>
                 <div>
                     <div class="text-4xl leading-none font-semibold text-slate-800"><?php echo (int)$core_subjects; ?></div>
-                    <div class="text-sm text-slate-400">Core Subjects</div>
+                    <div class="text-sm text-violet-500">Core Subjects</div>
                 </div>
             </div>
         </div>
@@ -707,7 +707,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                 <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-600"><i class="bi bi-book-half"></i></span>
                 <div>
                     <div class="text-4xl leading-none font-semibold text-slate-800"><?php echo (int)$ge_subjects; ?></div>
-                    <div class="text-sm text-slate-400">GE Subjects</div>
+                    <div class="text-sm text-amber-500">GE Subjects</div>
                 </div>
             </div>
         </div>

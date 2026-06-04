@@ -341,11 +341,11 @@ $trend_small_paths = [
     <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 soft-card shadow-sm">
         <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-slate-100 object-contain">
         <div class="leading-tight">
-            <div class="text-sm font-semibold text-slate-700">PCT Registrar</div>
-            <div class="text-xs text-slate-400">
+            <div class="text-sm font-semibold text-black">PCT Registrar</div>
+            <div class="text-xs text-black">
                 <span id="registrarLiveDate"><?php echo date('D, M j, Y'); ?></span>
                 <span class="mx-1">&bull;</span>
-                <span id="registrarLiveTime" class="font-medium text-slate-500"><?php echo date('h:i A'); ?></span>
+                <span id="registrarLiveTime" class="font-medium"><?php echo date('h:i A'); ?></span>
             </div>
         </div>
     </div>

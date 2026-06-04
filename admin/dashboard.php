@@ -520,11 +520,11 @@ $mini_trend_points = [
                     <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 soft-card">
                         <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-slate-100 object-contain">
                         <div class="leading-tight">
-                            <div class="text-sm font-semibold text-slate-700">PCT Super Admin</div>
-                            <div class="text-xs text-slate-400">
+                            <div class="text-sm font-semibold text-black">PCT Super Admin</div>
+                            <div class="text-xs text-black">
                                 <span id="adminLiveDate"><?php echo htmlspecialchars($today_label); ?></span>
                                 <span class="mx-1">&bull;</span>
-                                <span id="adminLiveTime" class="font-medium text-slate-500"><?php echo date('h:i A'); ?></span>
+                                <span id="adminLiveTime" class="font-medium"><?php echo date('h:i A'); ?></span>
                             </div>
                         </div>
                     </div>
