@@ -374,7 +374,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 
 <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
     <div>
-        <h1 class="text-2xl font-semibold text-slate-900">Classes</h1>
+        <h1 class="text-4xl font-bold tracking-tight text-slate-800">Classes</h1>
         <p class="text-sm text-slate-500"><?php echo (int)$active_count; ?> classes currently active</p>
     </div>
 

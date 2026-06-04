@@ -376,7 +376,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
                 <?php endif; ?>
             <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold text-slate-900">Schedules</h1>
+                    <h1 class="text-4xl font-bold tracking-tight text-slate-800">Schedules</h1>
                     <p class="text-sm text-slate-500"><?php echo (int)$active_count; ?> active class schedules</p>
                 </div>
 

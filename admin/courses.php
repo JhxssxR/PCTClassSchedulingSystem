@@ -244,7 +244,7 @@ $card_colors = [
             <main class="px-4 sm:px-6 py-6">
                 <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div>
-                        <h1 class="text-2xl font-semibold text-slate-900">Courses</h1>
+                        <h1 class="text-4xl font-bold tracking-tight text-slate-800">Courses</h1>
                         <p class="text-sm text-slate-500"><?php echo (int)$total_courses; ?> courses</p>
                     </div>
 

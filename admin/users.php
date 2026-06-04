@@ -818,7 +818,7 @@ function role_pill_classes(string $pill_role, string $active_role): string {
 
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 class="text-xl font-semibold text-slate-900">All Users</h1>
+                        <h1 class="text-4xl font-bold tracking-tight text-slate-800">All Users</h1>
                         <p class="text-sm text-slate-600">Search, filter, and manage system accounts.</p>
                     </div>
                     <button id="addUserBtn" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">

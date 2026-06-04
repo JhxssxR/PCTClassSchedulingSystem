@@ -81,7 +81,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 
 <div class="flex items-start justify-between gap-4">
     <div>
-        <h1 class="text-2xl font-semibold text-slate-900">Manage Account</h1>
+        <h1 class="text-4xl font-bold tracking-tight text-slate-800">Manage Account</h1>
         <p class="text-sm text-slate-500">Manage your profile and password</p>
     </div>
 

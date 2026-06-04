@@ -301,7 +301,7 @@ function student_public_id($id) {
             <main class="px-4 sm:px-6 py-6">
                 <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div>
-                        <h1 class="text-2xl font-semibold text-slate-900">Students</h1>
+                        <h1 class="text-4xl font-bold tracking-tight text-slate-800">Students</h1>
                         <p class="text-sm text-slate-600"><?php echo (int)$total_students; ?> students enrolled</p>
                     </div>
                     <div class="flex items-center gap-2">

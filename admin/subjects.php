@@ -838,7 +838,7 @@ if (!empty($_SESSION['first_name']) || !empty($_SESSION['last_name'])) {
 
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <h1 class="text-[2.05rem] leading-tight font-semibold text-slate-900">Subjects</h1>
+                            <h1 class="text-4xl font-bold tracking-tight text-slate-800">Subjects</h1>
                             <p class="text-base text-slate-500">Reference list of curriculum subjects.</p>
                         </div>
                         <div class="flex items-center gap-2">
