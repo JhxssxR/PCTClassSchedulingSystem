@@ -308,7 +308,7 @@ require_once __DIR__ . '/includes/layout_top.php';
     <?php endif; ?>
     <div>
         <h1 class="text-4xl font-bold tracking-tight text-slate-800">Schedules</h1>
-        <p class="text-sm text-slate-500"><?php echo (int)$active_count; ?> active class schedules</p>
+        <p class="text-lg text-slate-500"><?php echo (int)$active_count; ?> active class schedules</p>
     </div>
 
     <div class="flex items-center gap-3">

@@ -582,7 +582,7 @@ function status_badge(string $status): array {
             <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                 <div>
                     <h1 class="text-4xl font-bold tracking-tight text-slate-800">Enrollments</h1>
-                    <p class="mt-1 text-sm text-slate-500"><?php echo (int)$total_count; ?> total enrollment records</p>
+                    <p class="mt-1 text-lg text-slate-500"><?php echo (int)$total_count; ?> total enrollment records</p>
                 </div>
 
                 <div class="flex items-center gap-3">

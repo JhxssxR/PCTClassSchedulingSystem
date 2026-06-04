@@ -641,7 +641,7 @@ require_once __DIR__ . '/includes/layout_top.php';
                     <span>Analytics</span>
                 </div>
                 <h1 class="mt-3 text-4xl font-bold tracking-tight text-slate-800">Reports</h1>
-                <p class="mt-1 text-sm text-emerald-100/85"><?php echo htmlspecialchars($academic_label); ?></p>
+                <p class="mt-1 text-lg text-emerald-100/85"><?php echo htmlspecialchars($academic_label); ?></p>
             </div>
 
             <div class="flex flex-wrap items-center gap-2 lg:justify-end">

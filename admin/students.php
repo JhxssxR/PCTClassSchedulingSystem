@@ -302,7 +302,7 @@ function student_public_id($id) {
                 <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div>
                         <h1 class="text-4xl font-bold tracking-tight text-slate-800">Students</h1>
-                        <p class="text-sm text-slate-600"><?php echo (int)$total_students; ?> students enrolled</p>
+                        <p class="text-lg text-slate-600"><?php echo (int)$total_students; ?> students enrolled</p>
                     </div>
                     <div class="flex items-center gap-2">
                         <a href="students.php?export=1" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">

@@ -66,7 +66,7 @@ require_once __DIR__ . '/includes/layout_top.php';
 <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
     <div>
         <h1 class="text-4xl font-bold tracking-tight text-slate-800">Courses</h1>
-        <p class="text-sm text-slate-500"><?php echo (int)$total_courses; ?> courses</p>
+        <p class="text-lg text-slate-500"><?php echo (int)$total_courses; ?> courses</p>
     </div>
 
     <button id="addCourseBtn" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
