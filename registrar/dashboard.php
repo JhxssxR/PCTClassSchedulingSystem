@@ -338,14 +338,14 @@ $trend_small_paths = [
 <?php endif; ?>
 
 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-    <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 soft-card shadow-sm">
-        <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-slate-100 object-contain">
+    <div class="inline-flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 soft-card shadow-sm">
+        <img src="../pctlogo.png" alt="PCT Logo" class="h-14 w-14 rounded-full bg-slate-100 object-contain">
         <div class="leading-tight">
-            <div class="text-sm font-semibold text-black">PCT Registrar</div>
-            <div class="text-xs text-black">
+            <div class="text-2xl font-bold text-black">PCT Registrar</div>
+            <div class="text-base text-black">
                 <span id="registrarLiveDate"><?php echo date('D, M j, Y'); ?></span>
                 <span class="mx-1">&bull;</span>
-                <span id="registrarLiveTime" class="font-medium"><?php echo date('h:i A'); ?></span>
+                <span id="registrarLiveTime" class="font-semibold"><?php echo date('h:i A'); ?></span>
             </div>
         </div>
     </div>

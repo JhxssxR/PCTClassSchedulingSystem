@@ -517,14 +517,14 @@ $mini_trend_points = [
         <main class="p-4 sm:p-6">
             <div class="mx-auto max-w-[1220px] space-y-5">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 soft-card">
-                        <img src="../pctlogo.png" alt="PCT Logo" class="h-9 w-9 rounded-full bg-slate-100 object-contain">
+                    <div class="inline-flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 soft-card">
+                        <img src="../pctlogo.png" alt="PCT Logo" class="h-14 w-14 rounded-full bg-slate-100 object-contain">
                         <div class="leading-tight">
-                            <div class="text-sm font-semibold text-black">PCT Super Admin</div>
-                            <div class="text-xs text-black">
+                            <div class="text-2xl font-bold text-black">PCT Super Admin</div>
+                            <div class="text-base text-black">
                                 <span id="adminLiveDate"><?php echo htmlspecialchars($today_label); ?></span>
                                 <span class="mx-1">&bull;</span>
-                                <span id="adminLiveTime" class="font-medium"><?php echo date('h:i A'); ?></span>
+                                <span id="adminLiveTime" class="font-semibold"><?php echo date('h:i A'); ?></span>
                             </div>
                         </div>
                     </div>
