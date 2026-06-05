@@ -467,6 +467,18 @@ try {
     error_log("Role repair warning: " . $e->getMessage());
 }
 
+// Best-effort schema repair: Add created_by column if missing
+$tables_with_created_by = ['courses', 'classrooms', 'schedules', 'enrollments'];
+foreach ($tables_with_created_by as $tbl) {
+    try {
+        $conn->exec("ALTER TABLE {$tbl} ADD COLUMN created_by INT");
+        // We'll skip adding the foreign key constraint to avoid potential conflicts with existing data
+        // or naming collisions, the INT column is enough to resolve the "Undefined column" error.
+    } catch (PDOException $e) {
+        error_log("Schema repair warning ({$tbl}.created_by): " . $e->getMessage());
+    }
+}
+
 // Check if default users exist, if not create them
 $default_users = [
     [

@@ -36,7 +36,7 @@ try {
         JOIN courses c ON s.course_id = c.id
         JOIN users i ON s.instructor_id = i.id
         JOIN classrooms cr ON s.classroom_id = cr.id
-        JOIN users u ON s.created_by = u.id
+        LEFT JOIN users u ON s.created_by = u.id
         WHERE s.id = ?
     ");
     $stmt->execute([$class_id]);
@@ -250,9 +250,9 @@ try {
                     <div class="card">
                         <div class="card-body">
                             <h5 class="card-title">Class Information</h5>
-                            <p><strong>Created By:</strong> <?php echo htmlspecialchars($class['created_by_name']); ?></p>
+                            <p><strong>Created By:</strong> <?php echo htmlspecialchars($class['created_by_name'] ?? 'System / Unknown'); ?></p>
                             <p><strong>Created On:</strong> <?php echo date('M d, Y', strtotime($class['created_at'])); ?></p>
-                            <?php if ($class['updated_at']): ?>
+                            <?php if (!empty($class['updated_at'])): ?>
                                 <p><strong>Last Updated:</strong> <?php echo date('M d, Y', strtotime($class['updated_at'])); ?></p>
                             <?php endif; ?>
                         </div>
