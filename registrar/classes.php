@@ -493,9 +493,9 @@ require_once __DIR__ . '/includes/layout_top.php';
                         </td>
                         <td class="px-5 py-4">
                             <div class="flex items-center justify-end gap-2 text-slate-500">
-                                <a class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" href="../admin/view_class.php?id=<?php echo (int)$class['id']; ?>" title="View">
+                                <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" onclick="viewClassModal(<?php echo (int)$class['id']; ?>)" title="View">
                                     <i class="bi bi-eye"></i>
-                                </a>
+                                </button>
                                 <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" onclick='editClass(<?php echo json_encode($class, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>)' title="Edit">
                                     <i class="bi bi-pencil"></i>
                                 </button>
@@ -799,6 +799,132 @@ require_once __DIR__ . '/includes/layout_top.php';
     </div>
 </div>
 
+<!-- View Class Modal -->
+<div id="viewClassModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-slate-900/50" data-modal-close="viewClassModal"></div>
+    <div class="relative mx-auto my-6 w-[92%] max-w-4xl">
+        <div class="rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden max-h-[86vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div class="text-base font-semibold text-slate-900">Class Details</div>
+                <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl hover:bg-slate-100" data-modal-close="viewClassModal" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-5 overflow-y-auto max-h-[calc(86vh-64px)] space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-2 space-y-6">
+                        <!-- Course Info -->
+                        <div class="rounded-xl border border-slate-200 p-4">
+                            <h5 class="font-semibold text-slate-900 mb-3">Course Information</h5>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <p class="text-slate-500 mb-1">Course Code</p>
+                                    <p class="font-medium text-slate-900" id="vc_course_code"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Semester</p>
+                                    <p class="font-medium text-slate-900" id="vc_semester"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Course Name</p>
+                                    <p class="font-medium text-slate-900" id="vc_course_name"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Academic Year</p>
+                                    <p class="font-medium text-slate-900" id="vc_academic_year"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Credits</p>
+                                    <p class="font-medium text-slate-900" id="vc_credits"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Status</p>
+                                    <span id="vc_status" class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Schedule Info -->
+                        <div class="rounded-xl border border-slate-200 p-4">
+                            <h5 class="font-semibold text-slate-900 mb-3">Schedule Information</h5>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <p class="text-slate-500 mb-1">Day</p>
+                                    <p class="font-medium text-slate-900" id="vc_day"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Location</p>
+                                    <p class="font-medium text-slate-900" id="vc_location"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Time</p>
+                                    <p class="font-medium text-slate-900" id="vc_time"></p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 mb-1">Capacity</p>
+                                    <p class="font-medium text-slate-900" id="vc_capacity"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Enrolled Students -->
+                        <div class="rounded-xl border border-slate-200 p-4">
+                            <h5 class="font-semibold text-slate-900 mb-3">Enrolled Students</h5>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="text-xs text-slate-500 bg-slate-50">
+                                        <tr>
+                                            <th class="px-4 py-2 font-semibold">Student ID</th>
+                                            <th class="px-4 py-2 font-semibold">Name</th>
+                                            <th class="px-4 py-2 font-semibold">Email</th>
+                                            <th class="px-4 py-2 font-semibold">Enrollment Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vc_students_body" class="divide-y divide-slate-100">
+                                        <!-- Rows populated via JS -->
+                                    </tbody>
+                                </table>
+                                <div id="vc_students_empty" class="hidden text-center text-slate-500 py-4 text-sm">
+                                    No students enrolled in this class.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <!-- Instructor Info -->
+                        <div class="rounded-xl border border-slate-200 p-4">
+                            <h5 class="font-semibold text-slate-900 mb-3">Instructor Information</h5>
+                            <div class="text-sm">
+                                <p class="text-slate-500 mb-1">Name</p>
+                                <p class="font-medium text-slate-900 mb-3" id="vc_instructor_name"></p>
+                                <p class="text-slate-500 mb-1">Email</p>
+                                <p class="font-medium text-slate-900" id="vc_instructor_email"></p>
+                            </div>
+                        </div>
+
+                        <!-- Class Meta -->
+                        <div class="rounded-xl border border-slate-200 p-4">
+                            <h5 class="font-semibold text-slate-900 mb-3">Class Metadata</h5>
+                            <div class="text-sm">
+                                <p class="text-slate-500 mb-1">Created By</p>
+                                <p class="font-medium text-slate-900 mb-3" id="vc_created_by"></p>
+                                <p class="text-slate-500 mb-1">Created On</p>
+                                <p class="font-medium text-slate-900 mb-3" id="vc_created_on"></p>
+                                <div id="vc_updated_on_wrap" class="hidden">
+                                    <p class="text-slate-500 mb-1">Last Updated</p>
+                                    <p class="font-medium text-slate-900" id="vc_updated_on"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     (function () {
         function openModal(id) {
@@ -974,6 +1100,107 @@ require_once __DIR__ . '/includes/layout_top.php';
                 form.submit();
             }
         }
+
+        // Format time helper for JS
+        function formatTime(timeStr) {
+            if (!timeStr) return '';
+            const [hours, minutes] = timeStr.split(':');
+            const h = parseInt(hours, 10);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            return `${h12}:${minutes} ${ampm}`;
+        }
+        
+        // Format date helper for JS
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            if (isNaN(d)) return dateStr;
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        window.viewClassModal = async function(id) {
+            try {
+                // Show loading indicator or directly fetch
+                const res = await fetch(`../admin/ajax_get_class_details.php?id=${id}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                const cls = data.class;
+                const students = data.students;
+
+                // Populate Class Info
+                document.getElementById('vc_course_code').textContent = cls.course_code || 'N/A';
+                document.getElementById('vc_course_name').textContent = cls.course_name || 'N/A';
+                document.getElementById('vc_credits').textContent = cls.credits || '0';
+                document.getElementById('vc_semester').textContent = cls.semester || 'N/A';
+                document.getElementById('vc_academic_year').textContent = cls.academic_year || 'N/A';
+
+                const statusEl = document.getElementById('vc_status');
+                statusEl.textContent = cls.status ? (cls.status.charAt(0).toUpperCase() + cls.status.slice(1)) : 'Unknown';
+                statusEl.className = 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold';
+                if (cls.status === 'active') {
+                    statusEl.classList.add('bg-emerald-50', 'text-emerald-700');
+                } else if (cls.status === 'cancelled') {
+                    statusEl.classList.add('bg-rose-50', 'text-rose-700');
+                } else {
+                    statusEl.classList.add('bg-slate-100', 'text-slate-700');
+                }
+
+                // Schedule
+                document.getElementById('vc_day').textContent = cls.day_of_week || 'N/A';
+                document.getElementById('vc_time').textContent = formatTime(cls.start_time) + ' - ' + formatTime(cls.end_time);
+                document.getElementById('vc_location').textContent = (cls.building || '') + ' - Room ' + (cls.room_number || '');
+                document.getElementById('vc_capacity').textContent = (cls.enrolled_students || 0) + ' / ' + (cls.max_students || 0) + ' students';
+
+                // Instructor
+                document.getElementById('vc_instructor_name').textContent = cls.instructor_name || 'N/A';
+                document.getElementById('vc_instructor_email').textContent = cls.instructor_email || 'N/A';
+
+                // Meta
+                document.getElementById('vc_created_by').textContent = cls.created_by_name || 'System / Unknown';
+                document.getElementById('vc_created_on').textContent = formatDate(cls.created_at);
+                if (cls.updated_at) {
+                    document.getElementById('vc_updated_on_wrap').classList.remove('hidden');
+                    document.getElementById('vc_updated_on').textContent = formatDate(cls.updated_at);
+                } else {
+                    document.getElementById('vc_updated_on_wrap').classList.add('hidden');
+                }
+
+                // Students
+                const tbody = document.getElementById('vc_students_body');
+                const emptyMsg = document.getElementById('vc_students_empty');
+                tbody.innerHTML = '';
+                
+                if (students && students.length > 0) {
+                    emptyMsg.classList.add('hidden');
+                    students.forEach(st => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-slate-50';
+                        tr.innerHTML = `
+                            <td class="px-4 py-3 text-slate-900">${st.student_id || 'N/A'}</td>
+                            <td class="px-4 py-3 text-slate-900 font-medium">${st.student_name || 'N/A'}</td>
+                            <td class="px-4 py-3 text-slate-500">${st.student_email || 'N/A'}</td>
+                            <td class="px-4 py-3 text-slate-500">${formatDate(st.created_at)}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    emptyMsg.classList.remove('hidden');
+                }
+
+                // Show modal
+                document.getElementById('viewClassModal').classList.remove('hidden');
+
+            } catch (err) {
+                alert('An error occurred while loading class details.');
+                console.error(err);
+            }
+        };
 
         window.forceDeleteClass = function (scheduleId) {
             if (!confirm('Force delete will remove ALL enrollments for this class, then delete it. Continue?')) {
