@@ -1402,7 +1402,7 @@ function status_badge_classes($status) {
             return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
-        async function viewClassModal(id) {
+        window.viewClassModal = async function(id) {
             try {
                 // Show loading indicator or directly fetch
                 const res = await fetch(`ajax_get_class_details.php?id=${id}`);
@@ -1483,7 +1483,7 @@ function status_badge_classes($status) {
                 alert('An error occurred while loading class details.');
                 console.error(err);
             }
-        }
+        };
 
             const searchInput = document.getElementById('classSearch');
             const rows = Array.from(document.querySelectorAll('.class-row'));
